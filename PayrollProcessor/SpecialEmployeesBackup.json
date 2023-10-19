@@ -1,0 +1,117 @@
+{
+  "JsonInstructions": "Note: When editing this document, pay attention to the format, any change in format can cause the program to fail. It may be wise to make a copy of the previous version before editing. The 'Name' and 'Notes' fields are only there for the user, they do not matter to the program itself.",
+  "WeeklyMgExceptions" : [
+    {
+      "Name":"Ray Johnson",
+      "IdNumber": 739,
+      "Hours": 30,
+      "Notes":""
+    },
+    {
+      "Name":"Ali Ahmed",
+      "IdNumber": 1448,
+      "Hours": 35,
+      "Notes":""
+    }
+  ],
+  "DailyMgExceptions" : [
+    {
+      "Name":"Abdala Mohamed",
+      "IdNumber": 1030,
+      "Hours": 6,
+      "Notes":""
+    }
+  ],
+  "ShiftMgExceptionsInDollars" : [
+    {
+      "Name":"Roger Peterson",
+      "IdNumber": 748,
+      "Dollars": 50,
+      "Notes":"Minimum Guarantee is adjusted based on employee's current rate of pay so that the employee will at least earn the specified dollar amount."
+    },
+    {
+      "Name":"Larysa Hertsun",
+      "IdNumber": 1185,
+      "Dollars": 50,
+      "Notes":"Minimum Guarantee is adjusted based on employee's current rate of pay so that the employee will at least earn the specified dollar amount."
+    }
+  ],
+  "ShiftMgExceptions" : [
+    {
+      "Name":"",
+      "IdNumber": 1013,
+      "Hours": 2,
+      "Notes":""
+    },
+    {
+      "Name":"",
+      "IdNumber": 1266,
+      "Hours": 2,
+      "Notes":""
+    },
+    {
+      "Name":"",
+      "IdNumber": 1327,
+      "Hours": 2,
+      "Notes":""
+    },
+    {
+      "Name":"",
+      "IdNumber": 1253,
+      "Hours": 2,
+      "Notes":""
+    },
+    {
+      "Name":"",
+      "IdNumber": 739,
+      "Hours": 2,
+      "Notes":""
+    },
+    {
+      "Name":"",
+      "IdNumber": 1494,
+      "Hours": 2,
+      "Notes":""
+    },
+    {
+      "Name":"",
+      "IdNumber": 941,
+      "Hours": 2,
+      "Notes":""
+    }
+  ],
+  "SmallMgExceptions" : [
+    {
+      "Name":"Roger Quinn",
+      "IdNumber": 2004,
+      "Hours": 1,
+      "BusNumber": 318,
+      "Notes":"Roger only gets a 1 hour MG when in bus 318"
+    }
+  ],
+  "SpecificShiftMgExceptions" : [
+    {
+      "Name":"Eric Buringrud",
+      "IdNumber": 872,
+      "Hours": 4.5,
+      "ShiftNumber": 2,
+      "Notes":"(ShiftNumber: 0-morning, 1-noon, 2-afternoon). Eric gets a 4.5 hour mg in the afternoon."
+    }
+  ],
+  "PayRateExceptions" : [
+    {
+      "Name":"Kenny Biffert",
+      "IdNumber": 1224,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Kenny clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Mari Estes",
+      "IdNumber": 2006,
+      "OverriddenJobType": 13,
+      "OverridingJobType": 1,
+      "Notes":"When Mari clocks in as Admin, her rate is switched to her driver rate."
+    }
+  ]
+}
