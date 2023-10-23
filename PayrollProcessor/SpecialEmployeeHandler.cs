@@ -51,6 +51,10 @@ namespace PayrollProcessor
             {
                 Log("Error loading special exceptions Json. Either the file format is incorrect or the file was not found. If you have moved this program, please make sure that the folder structure has stayed intact beginning with the folder 'Payroll'. This should not be ignored.", true);
             }
+            if (SpecialEmployees.ShiftMgExceptions.Count == 0 && SpecialEmployees.PayRateExceptions.Count == 0)
+            {
+                Log("Error loading special exceptions Json. Please make sure the file's json format has not been comprimised. Employee exceptions will not be active unless this is fixed.", true);
+            }
         }
 
         public static SpecialEmployeeHandler GetInstance()
