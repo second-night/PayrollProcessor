@@ -11,9 +11,9 @@ namespace PayrollProcessor
     public static class Program
     {
         public static Dictionary<int, Employee> EmployeeDictionary = new();
-        public const float T_AND_J_RATE = 18f;
+        public const float OUT_OF_TOWN_CHARTER_RATE = 18f;
         public const float OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
-        public const float TJ_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 50f;
+        public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 50f;
         public const float TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 40f;
         public const float DRIVER_CHARTER_RATE = 17.5f;
         public const float TRAINING_RATE= 12f;
@@ -29,7 +29,7 @@ namespace PayrollProcessor
         {
             {Jobs.DRIVER_SCHOOL, 20f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
-            {Jobs.COACH_PUBLIC_DRIVING, T_AND_J_RATE },
+            {Jobs.COACH_PUBLIC_DRIVING, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 17.5f },
             {Jobs.AIDE_CHARTER, 16f },
             {Jobs.NON_CDL_DRIVER, 17.5f },
@@ -700,6 +700,6 @@ namespace PayrollProcessor
 
     public enum Jobs
     {
-        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, VACATION = 16, COACH_PUBLIC_DRIVING = 19/*t&j*/, AIDE_CHARTER = 24, AIDE_SCHOOL = 25, DRIVER_COACH, OUT_OF_TOWN_CHARTER, NON_CDL_DRIVER
+        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, AIDE_SCHOOL = 25, DRIVER_COACH, OUT_OF_TOWN_CHARTER, NON_CDL_DRIVER
     }
 }

@@ -196,7 +196,7 @@ namespace PayrollProcessor
                     else if (Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
                     {
                         sourceOfMg = BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS ? MgSource.T_AND_J_CHARTER : MgSource.WEEKEND_CHARTER;
-                        float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : TJ_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
+                        float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
                         return weekendMinimum / CalculateCharterRate(employee);
                     }
                     else
@@ -208,6 +208,7 @@ namespace PayrollProcessor
             return 0f;
         }
 
+        static bool TAndJMessageWasDisplayed = false;
         private float CalculateCharterRate(Employee employee)
         {
             if (JobType == Jobs.AIDE_CHARTER)
@@ -215,9 +216,15 @@ namespace PayrollProcessor
                 return employee.IsGrandForksEmployee || IsAGrandForksShift ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
             }
 
+            if (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS && !TAndJMessageWasDisplayed)
+            {
+                Log("Attention: There is a shift in a T&J bus. I thought all T&J was supposed to make $19.00/hr (aka Sarah would be putting their shifts on the coaches sheet and they wouldn't be clocking-in).", true);
+                TAndJMessageWasDisplayed = true;
+            }
+
             if ((null != Notes && StringSearch(Notes, "private")) || JobType == Jobs.COACH_PUBLIC_DRIVING || Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
             {
-                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), T_AND_J_RATE);
+                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), OUT_OF_TOWN_CHARTER_RATE);
             }
 
             return employee.PayRates.GetValueOrDefault(JobType, 0f);

@@ -1522,13 +1522,11 @@ namespace PayrollProcessor
             DateTime firstDay = new DateTime(year[0], month[0], day[0]);
             dates.Add(firstDay);
             DateTime lastDay = new DateTime(year[1], month[1], day[1]);
-            bool bLastDayWasReached = false;
             for (int i = 1; i < 14; ++i)
             {
                 DateTime nextDay = firstDay.AddDays(i);
                 if (nextDay.CompareTo(lastDay) > 0)
                 {
-                    bLastDayWasReached = true;
                     break;
                 }
                 else
