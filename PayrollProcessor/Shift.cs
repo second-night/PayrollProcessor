@@ -319,7 +319,8 @@ namespace PayrollProcessor
             {
                 if (!PayrateMessages.ContainsKey(emp) || !PayrateMessages[emp].Contains(JobType))
                 {
-                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?");
+                    string specialString = JobType == Jobs.WASH_BAY && emp.IsGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
+                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?" + specialString);
                     if (newRate > 0)
                     {
                         GiveRaiseToEmployee(emp, JobType, newRate);
@@ -333,7 +334,7 @@ namespace PayrollProcessor
                         PayrateMessages[emp].Add(JobType);
                     }
                 }
-                DelayedLog("Warninig: Employee " + emp.Name + " doesn't have a payrate for " + JobType.ToString());
+                DelayedLog("Warninig: Employee " + emp.Name + " ( " + emp.IdNumber + " ) doesn't have a payrate for " + JobType.ToString());
             }
 
             switch (JobType)

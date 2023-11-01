@@ -334,7 +334,7 @@ namespace PayrollProcessor
                                         importedEmployee.ImportFields["LastName"] = cellString;
                                         break;
                                     case "Email":
-                                        importedEmployee.ImportFields["SelfServiceEnabled"] = bEmpWasAlreadyInPayroll ? "N" : "Y";
+                                        importedEmployee.ImportFields["SelfServiceEnabled"] = /*bEmpWasAlreadyInPayroll ? "N" : */"Y";
                                         importedEmployee.ImportFields["SelfServiceEmail"] = cellString;
                                         break;
                                     case "Street":
@@ -1584,6 +1584,9 @@ namespace PayrollProcessor
                 "Rate_DrvrDlySchool",
                 "Rate_DrvrSchoolChrtr",
                 "Rate_AidDlyChrter",
+                "Rate_Admin",
+                "Rate_Wash Bay",
+                "Rate_Body Shop",
                 "OrganizationValue2"
             };
         public Dictionary<string, object> ImportFields = new();

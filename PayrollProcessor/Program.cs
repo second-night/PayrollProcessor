@@ -554,6 +554,9 @@ namespace PayrollProcessor
                 case Jobs.WASH_BAY:
                     ExcelWorker.ImportEmployees[employee.IdNumber].ImportFields["Rate_Wash Bay"] = rate.ToString();
                     break;
+                case Jobs.BODY_SHOP:
+                    ExcelWorker.ImportEmployees[employee.IdNumber].ImportFields["Rate_Body Shop"] = rate.ToString();
+                    break;
                 default:
                     Log("Warning: Trying to import raise for " + job.ToString() + " but can't determine import header.");
                     break;
