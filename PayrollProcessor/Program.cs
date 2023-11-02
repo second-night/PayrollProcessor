@@ -12,6 +12,7 @@ namespace PayrollProcessor
     {
         public static Dictionary<int, Employee> EmployeeDictionary = new();
         public const float OUT_OF_TOWN_CHARTER_RATE = 18f;
+        public const float T_AND_J_CHARTER_RATE = 19f;
         public const float OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 50f;
         public const float TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 40f;

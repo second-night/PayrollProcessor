@@ -222,7 +222,12 @@ namespace PayrollProcessor
                 TAndJMessageWasDisplayed = true;
             }
 
-            if ((null != Notes && StringSearch(Notes, "private")) || JobType == Jobs.COACH_PUBLIC_DRIVING || Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
+            if ((null != Notes && StringSearch(Notes, "private")) || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
+            {
+                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), T_AND_J_CHARTER_RATE);
+            }
+
+            if (JobType == Jobs.COACH_PUBLIC_DRIVING || Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday)
             {
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), OUT_OF_TOWN_CHARTER_RATE);
             }
