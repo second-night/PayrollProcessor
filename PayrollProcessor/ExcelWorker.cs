@@ -859,9 +859,9 @@ namespace PayrollProcessor
                                     WeekNumber = date.CompareTo(FirstDayWeek2) < 0 ? 1 : 2,
                                     JobType = Jobs.DRIVER_COACH,
                                     DollarAmount = dollars / dates.Count,
-                                    BonusDollars = bonus / dates.Count,
-                                    PerDiem = perDiem,
-                                    ShiftTime = hours,
+                                    BonusDollars = date.Equals(dates[0]) ? bonus : 0,
+                                    PerDiem = date.Equals(dates[0]) ? perDiem : 0,
+                                    ShiftTime = hours / dates.Count,
                                     BusNumber = busNumber
                                 };
                                 return shift;
