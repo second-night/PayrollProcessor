@@ -185,7 +185,7 @@ namespace PayrollProcessor
 
     public class SpecialShiftEntry : SpecialHoursEntry
     {
-        public int ShiftNumber { get; set; } 
+        public int ShiftNumber { get; set; }
     }
 
     public class SpecialPayRateEntry : SpecialEntry

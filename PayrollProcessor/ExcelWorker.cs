@@ -755,6 +755,18 @@ namespace PayrollProcessor
                                 }
                             }
 
+                            if (StringSearch(shift.Notes, "hockey"))
+                            {
+                                if (StringSearch(shift.Notes, "Band"))
+                                {
+                                    shift.DollarAmount = GF_HOCKEY_BAND_PAY;
+                                }
+                                else
+                                {
+                                    shift.DollarAmount = GF_HOCKEY_PAY;
+                                }
+                            }
+
                             employee.Shifts.Add(shift);
                         }
                     }

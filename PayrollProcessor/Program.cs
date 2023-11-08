@@ -20,6 +20,8 @@ namespace PayrollProcessor
         public const float TRAINING_RATE= 12.5f;
         public const float STARTING_WASH_BAY_RATE = 16f;
         public const float COACH_HOURLY_RATE_ESTIMATE = 19f;
+        public const float GF_HOCKEY_PAY = 19f;
+        public const float GF_HOCKEY_BAND_PAY = 19f;
         public static string LogString = "";
         private static ExcelWorker ExcelWorker;
         private static Dictionary<MgSource, float> MgSourceTotals = new();
