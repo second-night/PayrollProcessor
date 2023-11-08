@@ -157,6 +157,8 @@ namespace PayrollProcessor
         public List<SpecialShiftEntry> SpecificShiftMgExceptions { get; set; } = new();
 
         public List<SpecialPayRateEntry> PayRateExceptions { get; set; } = new();
+
+        public List<StartingRateEntry> StartingRateExceptions { get; set; } = new();
     }
 
     public class SpecialEntry
@@ -190,5 +192,11 @@ namespace PayrollProcessor
     {
         public int OverriddenJobType { get; set; }
         public int OverridingJobType { get; set; }
+    }
+
+    public class StartingRateEntry : SpecialEntry
+    {
+        public int JobType { get; set; }
+        public float Rate { get; set; }
     }
 }

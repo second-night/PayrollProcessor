@@ -478,7 +478,7 @@ namespace PayrollProcessor
                     Jobs job = (Jobs)jobOrdinal;
                     if (employee.PayRates.ContainsKey(job) && employee.PayRates[job] > 0)
                     {
-                        float rate = GetBasePayRateForEmployee(job, employee.IsGrandForksEmployee);
+                        float rate = GetBasePayRateForEmployee(job, employee);
                         float currentRate = employee.PayRates[job];
                         if (rate > 0)
                         {
@@ -564,13 +564,20 @@ namespace PayrollProcessor
             }
         }
 
-        public static float GetBasePayRateForEmployee(Jobs jobType, bool employeeIsAGrandForksEmployee)
+        public static float GetBasePayRateForEmployee(Jobs jobType, Employee employee)
         {
-            if (employeeIsAGrandForksEmployee && GrandForksDefaultRates.ContainsKey(jobType))
+            foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.StartingRateExceptions)
+            {
+                if (entry.IdNumber == employee.IdNumber && (Jobs)entry.JobType == jobType)
+                {
+                    return entry.Rate;
+                }
+            }
+            if (employee.IsGrandForksEmployee && GrandForksDefaultRates.ContainsKey(jobType))
             {
                 return GrandForksDefaultRates[jobType];
             }
-            else if (!employeeIsAGrandForksEmployee && FargoDefaultRates.ContainsKey(jobType))
+            else if (!employee.IsGrandForksEmployee && FargoDefaultRates.ContainsKey(jobType))
             {
                 return FargoDefaultRates[jobType];
             }
