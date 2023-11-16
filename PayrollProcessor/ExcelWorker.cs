@@ -109,6 +109,7 @@ namespace PayrollProcessor
                             Program.EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, employeeName));
                         }
                         Employee employee = Program.EmployeeDictionary[employeeNumber];
+                        employee.WasAlreadyInPayroll = true;
                         employee.IsMale = !(TryGetStringFromCell(cellData[rowNumber, GENDER_COLUMN], out string gender) && gender == "F");
                         TryGetStringFromCell(cellData[rowNumber, PHONE_NUMBER_COLUMN], out employee.PhoneNumber);
                         TryGetStringFromCell(cellData[rowNumber, SSN_COLUMN], out employee.SocialSecurityNumber);
@@ -226,10 +227,12 @@ namespace PayrollProcessor
                                 continue;
                             }
 
-                            if (EmployeeDictionary.ContainsKey(employeeNumber))
+                            if (!EmployeeDictionary.ContainsKey(employeeNumber))
                             {
-                                EmployeeDictionary[employeeNumber].HadHoursInTimesheets = true;
+                                string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
+                                EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name));
                             }
+                            EmployeeDictionary[employeeNumber].HadHoursInTimesheets = true;
                         }
                     }
                 }
@@ -273,310 +276,315 @@ namespace PayrollProcessor
                 for (int rowNumber = 2; rowNumber <= rows; ++rowNumber)
                 {
                     //Log("cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() == " + cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString());
-                    if (TryGetIntFromCell(cellData[rowNumber, EMPLOYEE_NUMBER], out int employeeNumber))
+                    if (!TryGetIntFromCell(cellData[rowNumber, EMPLOYEE_NUMBER], out int employeeNumber))
                     {
-                        bool bEmpWasAlreadyInPayroll = false;
-                        ImportedEmployee importedEmployee = new();
-                        importedEmployee.WasOnImployeeExportSheet = true;
-                        ImportEmployees.Add(employeeNumber, importedEmployee);
-                        importedEmployee.ImportFields.Add("TimeClockID", employeeNumber.ToString());
-                        importedEmployee.ImportFields.Add("EmployeeNumber", employeeNumber.ToString());
-                        importedEmployee.ImportFields.Add("WorkLocation", "Fargo");
-                        importedEmployee.ImportFields.Add("PayType", "Hourly");
-                        importedEmployee.ImportFields.Add("Frequency", "26");
-                        if (!Program.EmployeeDictionary.ContainsKey(employeeNumber))
+                        if (null == cellData[rowNumber, EMP_FIRST_NAME_COLUMN] || null == cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString())
                         {
-                            string? employeeName = cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() + " " + cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString();
-                            Program.EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, employeeName));
-                            Program.EmployeeDictionary[employeeNumber].WasCreatedFromEmployeeExport = true;
+                            continue;
                         }
-                        else
+                        foreach (var employeeEntry in EmployeeDictionary)
                         {
-                            bEmpWasAlreadyInPayroll = true;
-                            //Log("Employee: " + Program.EmployeeDictionary[employeeNumber].Name + " from employee export is already in payroll.", true);
-                            //continue;
-                        }
-                        Employee employee = Program.EmployeeDictionary[employeeNumber];
-
-                        foreach (var header in headers)
-                        {
-                            Object? cell = null;
-                            for (int i = 0; i < headers.Count; i++)
+                            if (!employeeEntry.Value.WasAlreadyInPayroll && StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString()) && StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString()))
                             {
-                                if (null != cellData[1, i + 1] && header == cellData[1, i + 1].ToString())
-                                {
-                                    cell = cellData[rowNumber, i + 1];
-                                    break;
-                                }
+                                employeeNumber = employeeEntry.Key; 
+                                break;
                             }
-                            if (cell != null)
+                        }
+                    }
+                    ImportedEmployee importedEmployee = new();
+                    importedEmployee.WasOnImployeeExportSheet = true;
+                    ImportEmployees.Add(employeeNumber, importedEmployee);
+                    importedEmployee.ImportFields.Add("TimeClockID", employeeNumber.ToString());
+                    importedEmployee.ImportFields.Add("EmployeeNumber", employeeNumber.ToString());
+                    importedEmployee.ImportFields.Add("WorkLocation", "Fargo");
+                    importedEmployee.ImportFields.Add("PayType", "Hourly");
+                    importedEmployee.ImportFields.Add("Frequency", "26");
+                    if (!Program.EmployeeDictionary.ContainsKey(employeeNumber))
+                    {
+                        string? employeeName = cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() + " " + cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString();
+                        Program.EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, employeeName));
+                        Program.EmployeeDictionary[employeeNumber].WasCreatedFromEmployeeExport = true;
+                    }
+                    Employee employee = Program.EmployeeDictionary[employeeNumber];
+
+                    foreach (var header in headers)
+                    {
+                        Object? cell = null;
+                        for (int i = 0; i < headers.Count; i++)
+                        {
+                            if (null != cellData[1, i + 1] && header == cellData[1, i + 1].ToString())
                             {
-                                TryGetStringFromCell(cell, out string cellString);
-                                switch (header)
-                                {
-                                    case "Start Date":
-                                        double d = double.Parse(cellString);
-                                        importedEmployee.ImportFields["HireDate"] = DateTime.FromOADate(d).ToShortDateString();
-                                        break;
-                                    case "Employee #":
-                                        break;
-                                    case "SSN":
-                                        importedEmployee.ImportFields["SSN"] = cellString;
-                                        employee.SocialSecurityNumber = cellString;
-                                        break;
-                                    case "First Name":
-                                        importedEmployee.ImportFields["FirstName"] = cellString;
-                                        break;
-                                    case "Middle Name":
-                                        importedEmployee.ImportFields["MiddleName"] = cellString;
-                                        break;
-                                    case "Last Name":
-                                        importedEmployee.ImportFields["LastName"] = cellString;
-                                        break;
-                                    case "Email":
-                                        importedEmployee.ImportFields["SelfServiceEnabled"] = /*bEmpWasAlreadyInPayroll ? "N" : */"Y";
-                                        importedEmployee.ImportFields["SelfServiceEmail"] = cellString;
-                                        break;
-                                    case "Street":
-                                        importedEmployee.ImportFields["Address1"] = cellString;
-                                        break;
-                                    case "Apt/Suite/Unit":
-                                        importedEmployee.ImportFields["Address2"] = cellString;
-                                        break;
-                                    case "Zip":
-                                        if (!importedEmployee.ImportFields.ContainsKey("ZipCode"))
-                                        {
-                                            importedEmployee.ImportFields["ZipCode"] = cellString;
-                                            importedEmployee.ImportFields["ResidentLocation"] = cellString;
-                                        }
-                                        break;
-                                    case "City":
-                                        importedEmployee.ImportFields["City"] = cellString;
-                                        break;
-                                    case "State":
-                                        importedEmployee.ImportFields["State"] = cellString;
-                                        break;
-                                    case "Birthdate":
+                                cell = cellData[rowNumber, i + 1];
+                                break;
+                            }
+                        }
+                        if (cell != null)
+                        {
+                            TryGetStringFromCell(cell, out string cellString);
+                            switch (header)
+                            {
+                                case "Start Date":
+                                    double d = double.Parse(cellString);
+                                    importedEmployee.ImportFields["HireDate"] = DateTime.FromOADate(d).ToShortDateString();
+                                    break;
+                                case "Employee #":
+                                    break;
+                                case "SSN":
+                                    importedEmployee.ImportFields["SSN"] = cellString;
+                                    employee.SocialSecurityNumber = cellString;
+                                    break;
+                                case "First Name":
+                                    importedEmployee.ImportFields["FirstName"] = cellString;
+                                    break;
+                                case "Middle Name":
+                                    importedEmployee.ImportFields["MiddleName"] = cellString;
+                                    break;
+                                case "Last Name":
+                                    importedEmployee.ImportFields["LastName"] = cellString;
+                                    break;
+                                case "Email":
+                                    importedEmployee.ImportFields["SelfServiceEnabled"] = "Y";
+                                    importedEmployee.ImportFields["SelfServiceEmail"] = cellString;
+                                    break;
+                                case "Street":
+                                    importedEmployee.ImportFields["Address1"] = cellString;
+                                    break;
+                                case "Apt/Suite/Unit":
+                                    importedEmployee.ImportFields["Address2"] = cellString;
+                                    break;
+                                case "Zip":
+                                    if (!importedEmployee.ImportFields.ContainsKey("ZipCode"))
+                                    {
+                                        importedEmployee.ImportFields["ZipCode"] = cellString;
+                                        importedEmployee.ImportFields["ResidentLocation"] = cellString;
+                                    }
+                                    break;
+                                case "City":
+                                    importedEmployee.ImportFields["City"] = cellString;
+                                    break;
+                                case "State":
+                                    importedEmployee.ImportFields["State"] = cellString;
+                                    break;
+                                case "Birthdate":
+                                    d = double.Parse(cellString);
+                                    importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                                    break;
+                                case "Phone":
+                                    importedEmployee.ImportFields["HomePhone"] = cellString;
+                                    employee.PhoneNumber = cellString;
+                                    break;
+                                case "Date Received (Form I-9)":
+                                    importedEmployee.ImportFields["I9Completed"] = cellString == "" ? "N" : "Y";
+                                    if (cellString != "")
+                                    {
                                         d = double.Parse(cellString);
-                                        importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
-                                        break;
-                                    case "Phone":
-                                        importedEmployee.ImportFields["HomePhone"] = cellString;
-                                        employee.PhoneNumber = cellString;
-                                        break;
-                                    case "Date Received (Form I-9)":
-                                        importedEmployee.ImportFields["I9Completed"] = cellString == "" ? "N" : "Y";
-                                        if (cellString != "")
-                                        {
-                                            d = double.Parse(cellString);
-                                            importedEmployee.ImportFields["I9CompletedDate"] = DateTime.FromOADate(d).ToShortDateString();
-                                        }
-                                        break;
-                                    case "Citizenship Designation (Form I-9)":
-                                        if (StringSearch(cellString, "citizen"))
-                                        {
-                                            importedEmployee.ImportFields["Citizenship"] = "1";
-                                        }
-                                        else if (StringSearch(cellString, "national"))
-                                        {
-                                            importedEmployee.ImportFields["Citizenship"] = "5";
-                                        }
-                                        else if (StringSearch(cellString, "permanent"))
-                                        {
-                                            importedEmployee.ImportFields["Citizenship"] = "3";
-                                        }
-                                        else if (StringSearch(cellString, "alien"))
-                                        {
-                                            importedEmployee.ImportFields["Citizenship"] = "2";
-                                        }
-                                        else
-                                        {
-                                            Log("ERROR: Couldn't find citizenship for " + cellString + " (" + employee.Name);
-                                        }
-                                        break;
-                                    case "Gender":
-                                        employee.IsMale = !StringSearch(cellString, "Female");
-                                        importedEmployee.ImportFields["Gender"] = employee.IsMale ? "M" : "F";
-                                        break;
-                                    case "Position":
-                                        bool fT = false;
-                                        if (StringSearch(cellString, "mechanic"))
-                                        {
-                                            importedEmployee.ImportFields["Job"] = ((int)Jobs.MECHANIC).ToString();
-                                            importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.MECHANIC, false);
-                                            fT = true;
-                                        }
-                                        else if (StringSearch(cellString, "wash bay"))
-                                        {
-                                            importedEmployee.ImportFields["Job"] = ((int)Jobs.WASH_BAY).ToString();
-                                            importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.WASH_BAY, false);
-                                            fT = true;
-                                        }
-                                        else if (StringSearch(cellString, "para"))
-                                        {
-                                            importedEmployee.ImportFields["Job"] = ((int)Jobs.AIDE_SCHOOL).ToString();
-                                            importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.AIDE_SCHOOL, false);
-                                        }
-                                        else if (StringSearch(cellString, "driver"))
-                                        {
-                                            importedEmployee.ImportFields["Job"] = ((int)Jobs.DRIVER_SCHOOL).ToString();
-                                            importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.DRIVER_SCHOOL, false);
-                                        }
-                                        else if (StringSearch(cellData[rowNumber, EMPLOYEE_GROUPS].ToString(), "driver"))
-                                        {
-                                            importedEmployee.ImportFields["Job"] = ((int)Jobs.DRIVER_SCHOOL).ToString();
-                                            importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.DRIVER_SCHOOL, false);
-                                        }
-                                        else if (StringSearch(cellData[rowNumber, EMPLOYEE_GROUPS].ToString(), "para") || StringSearch(cellData[rowNumber, EMPLOYEE_GROUPS].ToString(), "aide"))
-                                        {
-                                            importedEmployee.ImportFields["Job"] = ((int)Jobs.AIDE_SCHOOL).ToString();
-                                            importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.AIDE_SCHOOL, false);
-                                        }
-                                        else
-                                        {
-                                            Log("Giving para as job to emp: " + employee.Name + " for position: " + cellString);
-                                            importedEmployee.ImportFields["Job"] = ((int)Jobs.AIDE_SCHOOL).ToString();
-                                            importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.AIDE_SCHOOL, false);
-                                        }
-                                        importedEmployee.ImportFields["EmploymentCategory"] = fT ? "ACAFT" : "PT";
-                                        employee.EmploymentCategory = fT ? "ACAFT" : "PT";
-                                        break;
-                                    case "Filing Status (W4)":
-                                        if (StringSearch(cellString, "single"))
-                                        {
-                                            importedEmployee.ImportFields["FedFilingStatus"] = "FDS";
-                                            importedEmployee.ImportFields["StateFilingStatus"] = "NDS";
-                                        }
-                                        else if (StringSearch(cellString, "household"))
-                                        {
-                                            importedEmployee.ImportFields["FedFilingStatus"] = "FDH";
-                                            importedEmployee.ImportFields["StateFilingStatus"] = "NDH";
-                                        }
-                                        else
-                                        {
-                                            importedEmployee.ImportFields["FedFilingStatus"] = "FDM";
-                                            importedEmployee.ImportFields["StateFilingStatus"] = "NDM";
-                                        }
-                                        break;
-                                    case "Deductions (W4)":
-                                        importedEmployee.ImportFields["FedExemptions"] = cellString;
-                                        importedEmployee.ImportFields["StateExemptions"] = cellString;
-                                        break;
-                                    case "Total Dependents Withholding (W4)":
-                                        importedEmployee.ImportFields["FedDependentsAmt"] = cellString;
-                                        break;
-                                    case "Extra Withholding (W4)":
-                                        importedEmployee.ImportFields["FedAddlAmount"] = cellString;
-                                        break;
-                                    case "Exempt Status (W4)":
-                                        if (StringSearch(cellString, "EXEMPT"))
-                                        {
-                                            importedEmployee.ImportFields["FedBlockTax"] = "true";
-                                            importedEmployee.ImportFields["StateBlockTax"] = "true";
-                                        }
-                                        break;
-                                    case "Account 1":
-                                        importedEmployee.LatestAccountIndex = 0;
-                                        goto case "Account 2";
-                                    case "Account 1 - $ Specific Deposit Amount":
-                                        importedEmployee.LatestAccountIndex = 0;
-                                        goto case "Account 2 - $ Specific Deposit Amount";
-                                    case "Account 1 - % Net Amount":
-                                        importedEmployee.LatestAccountIndex = 0;
-                                        goto case "Account 2 - % Net Amount";
-                                    case "Account 1 - Account Number":
-                                        importedEmployee.LatestAccountIndex = 0;
-                                        goto case "Account 2 - Account Number";
-                                    case "Account 1 - Deposit Instructions":
-                                        importedEmployee.LatestAccountIndex = 0;
-                                        goto case "Account 2 - Deposit Instructions";
-                                    case "Account 1 - Routing Number":
-                                        importedEmployee.LatestAccountIndex = 0;
-                                        goto case "Account 2 - Routing Number";
-                                    case "Account 1 - Type":
-                                        importedEmployee.LatestAccountIndex = 0;
-                                        goto case "Account 2 - Type";
-                                    case "Account 2":
-                                        importedEmployee.LatestAccountIndex = 1;
-                                        break;
-                                    case "Account 2 - $ Specific Deposit Amount":
-                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Amount"] = cellString;
-                                        importedEmployee.LatestAccountIndex = 1;
-                                        break;
-                                    case "Account 2 - % Net Amount":
-                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Percent"] = cellString;
-                                        importedEmployee.LatestAccountIndex = 1;
-                                        break;
-                                    case "Account 2 - Account Number":
-                                        employee.HasADirectDepositAccount = true;
-                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Key"] = employeeNumber.ToString();
-                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["AccountNumber"] = cellString;
-                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Status"] = "A";
-                                        importedEmployee.LatestAccountIndex = 1;
-                                        break;
-                                    case "Account 2 - Deposit Instructions":
-                                        if (StringSearch(cellString, "Entire Net"))
-                                        {
-                                            importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Sequence"] = "0";
-                                            importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Amount"] = "";
-                                            importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Percent"] = "";
-                                        }
-                                        else
-                                        {
-                                            importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Sequence"] = "1";
-                                        }
-                                        importedEmployee.LatestAccountIndex = 1;
-                                        break;
-                                    case "Account 2 - Routing Number":
-                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["RoutingNumber"] = cellString;
-                                        importedEmployee.LatestAccountIndex = 1;
-                                        break;
-                                    case "Account 2 - Type":
-                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["AccountType"] = StringSearch(cellString, "saving") ? "S" : "C";
-                                        importedEmployee.LatestAccountIndex = 1;
-                                        break;
-                                    case "Account 3":
-                                        break;
-                                    case "Account 3 - Account Number":
-                                        if (null != cellString && "" != cellString)
-                                        {
-                                            Log("3 Accounts found", true);
-                                        }
-                                        break;
-                                    case "Account 3 - Routing Number":
-                                        break;
-                                    case "Account 3 - Type":
-                                        break;
-                                    case "Employee Groups":
-                                        importedEmployee.ImportFields["Rate_Training"] = TRAINING_RATE.ToString();
-                                        employee.PayRates[Jobs.TRAINING] = TRAINING_RATE;
-                                        if (StringSearch(cellString, "GF"))
-                                        {
-                                            employee.IsGrandForksEmployee = true;
-                                            importedEmployee.ImportFields["OrganizationValue2"] = "GF";
-                                        }
-                                        if (StringSearch(cellString, "para") || StringSearch(cellString, "aide"))
-                                        {
-                                            float payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_SCHOOL] : FargoDefaultRates[Jobs.AIDE_SCHOOL];
-                                            importedEmployee.ImportFields["Rate_AidDlySchool"] = payRate.ToString();
-                                            employee.PayRates[Jobs.AIDE_SCHOOL] = payRate;
+                                        importedEmployee.ImportFields["I9CompletedDate"] = DateTime.FromOADate(d).ToShortDateString();
+                                    }
+                                    break;
+                                case "Citizenship Designation (Form I-9)":
+                                    if (StringSearch(cellString, "citizen"))
+                                    {
+                                        importedEmployee.ImportFields["Citizenship"] = "1";
+                                    }
+                                    else if (StringSearch(cellString, "national"))
+                                    {
+                                        importedEmployee.ImportFields["Citizenship"] = "5";
+                                    }
+                                    else if (StringSearch(cellString, "permanent"))
+                                    {
+                                        importedEmployee.ImportFields["Citizenship"] = "3";
+                                    }
+                                    else if (StringSearch(cellString, "alien"))
+                                    {
+                                        importedEmployee.ImportFields["Citizenship"] = "2";
+                                    }
+                                    else
+                                    {
+                                        Log("ERROR: Couldn't find citizenship for " + cellString + " (" + employee.Name);
+                                    }
+                                    break;
+                                case "Gender":
+                                    employee.IsMale = !StringSearch(cellString, "Female");
+                                    importedEmployee.ImportFields["Gender"] = employee.IsMale ? "M" : "F";
+                                    break;
+                                case "Position":
+                                    bool fT = false;
+                                    if (StringSearch(cellString, "mechanic"))
+                                    {
+                                        importedEmployee.ImportFields["Job"] = ((int)Jobs.MECHANIC).ToString();
+                                        importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.MECHANIC, false);
+                                        fT = true;
+                                    }
+                                    else if (StringSearch(cellString, "wash bay"))
+                                    {
+                                        importedEmployee.ImportFields["Job"] = ((int)Jobs.WASH_BAY).ToString();
+                                        importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.WASH_BAY, false);
+                                        fT = true;
+                                    }
+                                    else if (StringSearch(cellString, "para"))
+                                    {
+                                        importedEmployee.ImportFields["Job"] = ((int)Jobs.AIDE_SCHOOL).ToString();
+                                        importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.AIDE_SCHOOL, false);
+                                    }
+                                    else if (StringSearch(cellString, "driver"))
+                                    {
+                                        importedEmployee.ImportFields["Job"] = ((int)Jobs.DRIVER_SCHOOL).ToString();
+                                        importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.DRIVER_SCHOOL, false);
+                                    }
+                                    else if (StringSearch(cellData[rowNumber, EMPLOYEE_GROUPS].ToString(), "driver"))
+                                    {
+                                        importedEmployee.ImportFields["Job"] = ((int)Jobs.DRIVER_SCHOOL).ToString();
+                                        importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.DRIVER_SCHOOL, false);
+                                    }
+                                    else if (StringSearch(cellData[rowNumber, EMPLOYEE_GROUPS].ToString(), "para") || StringSearch(cellData[rowNumber, EMPLOYEE_GROUPS].ToString(), "aide"))
+                                    {
+                                        importedEmployee.ImportFields["Job"] = ((int)Jobs.AIDE_SCHOOL).ToString();
+                                        importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.AIDE_SCHOOL, false);
+                                    }
+                                    else
+                                    {
+                                        Log("Giving para as job to emp: " + employee.Name + " for position: " + cellString);
+                                        importedEmployee.ImportFields["Job"] = ((int)Jobs.AIDE_SCHOOL).ToString();
+                                        importedEmployee.ImportFields["Organization"] = Shift.GetLaborCode(Jobs.AIDE_SCHOOL, false);
+                                    }
+                                    importedEmployee.ImportFields["EmploymentCategory"] = fT ? "ACAFT" : "PT";
+                                    employee.EmploymentCategory = fT ? "ACAFT" : "PT";
+                                    break;
+                                case "Filing Status (W4)":
+                                    if (StringSearch(cellString, "single"))
+                                    {
+                                        importedEmployee.ImportFields["FedFilingStatus"] = "FDS";
+                                        importedEmployee.ImportFields["StateFilingStatus"] = "NDS";
+                                    }
+                                    else if (StringSearch(cellString, "household"))
+                                    {
+                                        importedEmployee.ImportFields["FedFilingStatus"] = "FDH";
+                                        importedEmployee.ImportFields["StateFilingStatus"] = "NDH";
+                                    }
+                                    else
+                                    {
+                                        importedEmployee.ImportFields["FedFilingStatus"] = "FDM";
+                                        importedEmployee.ImportFields["StateFilingStatus"] = "NDM";
+                                    }
+                                    break;
+                                case "Deductions (W4)":
+                                    importedEmployee.ImportFields["FedExemptions"] = cellString;
+                                    importedEmployee.ImportFields["StateExemptions"] = cellString;
+                                    break;
+                                case "Total Dependents Withholding (W4)":
+                                    importedEmployee.ImportFields["FedDependentsAmt"] = cellString;
+                                    break;
+                                case "Extra Withholding (W4)":
+                                    importedEmployee.ImportFields["FedAddlAmount"] = cellString;
+                                    break;
+                                case "Exempt Status (W4)":
+                                    if (StringSearch(cellString, "EXEMPT"))
+                                    {
+                                        importedEmployee.ImportFields["FedBlockTax"] = "true";
+                                        importedEmployee.ImportFields["StateBlockTax"] = "true";
+                                    }
+                                    break;
+                                case "Account 1":
+                                    importedEmployee.LatestAccountIndex = 0;
+                                    goto case "Account 2";
+                                case "Account 1 - $ Specific Deposit Amount":
+                                    importedEmployee.LatestAccountIndex = 0;
+                                    goto case "Account 2 - $ Specific Deposit Amount";
+                                case "Account 1 - % Net Amount":
+                                    importedEmployee.LatestAccountIndex = 0;
+                                    goto case "Account 2 - % Net Amount";
+                                case "Account 1 - Account Number":
+                                    importedEmployee.LatestAccountIndex = 0;
+                                    goto case "Account 2 - Account Number";
+                                case "Account 1 - Deposit Instructions":
+                                    importedEmployee.LatestAccountIndex = 0;
+                                    goto case "Account 2 - Deposit Instructions";
+                                case "Account 1 - Routing Number":
+                                    importedEmployee.LatestAccountIndex = 0;
+                                    goto case "Account 2 - Routing Number";
+                                case "Account 1 - Type":
+                                    importedEmployee.LatestAccountIndex = 0;
+                                    goto case "Account 2 - Type";
+                                case "Account 2":
+                                    importedEmployee.LatestAccountIndex = 1;
+                                    break;
+                                case "Account 2 - $ Specific Deposit Amount":
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Amount"] = cellString;
+                                    importedEmployee.LatestAccountIndex = 1;
+                                    break;
+                                case "Account 2 - % Net Amount":
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Percent"] = cellString;
+                                    importedEmployee.LatestAccountIndex = 1;
+                                    break;
+                                case "Account 2 - Account Number":
+                                    employee.HasADirectDepositAccount = true;
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Key"] = employeeNumber.ToString();
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["AccountNumber"] = cellString;
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Status"] = "A";
+                                    importedEmployee.LatestAccountIndex = 1;
+                                    break;
+                                case "Account 2 - Deposit Instructions":
+                                    if (StringSearch(cellString, "Entire Net"))
+                                    {
+                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Sequence"] = "0";
+                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Amount"] = "";
+                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Percent"] = "";
+                                    }
+                                    else
+                                    {
+                                        importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Sequence"] = "1";
+                                    }
+                                    importedEmployee.LatestAccountIndex = 1;
+                                    break;
+                                case "Account 2 - Routing Number":
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["RoutingNumber"] = cellString;
+                                    importedEmployee.LatestAccountIndex = 1;
+                                    break;
+                                case "Account 2 - Type":
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["AccountType"] = StringSearch(cellString, "saving") ? "S" : "C";
+                                    importedEmployee.LatestAccountIndex = 1;
+                                    break;
+                                case "Account 3":
+                                    break;
+                                case "Account 3 - Account Number":
+                                    if (null != cellString && "" != cellString)
+                                    {
+                                        Log("3 Accounts found", true);
+                                    }
+                                    break;
+                                case "Account 3 - Routing Number":
+                                    break;
+                                case "Account 3 - Type":
+                                    break;
+                                case "Employee Groups":
+                                    importedEmployee.ImportFields["Rate_Training"] = TRAINING_RATE.ToString();
+                                    employee.PayRates[Jobs.TRAINING] = TRAINING_RATE;
+                                    if (StringSearch(cellString, "GF"))
+                                    {
+                                        employee.IsGrandForksEmployee = true;
+                                        importedEmployee.ImportFields["OrganizationValue2"] = "GF";
+                                    }
+                                    if (StringSearch(cellString, "para") || StringSearch(cellString, "aide"))
+                                    {
+                                        float payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_SCHOOL] : FargoDefaultRates[Jobs.AIDE_SCHOOL];
+                                        importedEmployee.ImportFields["Rate_AidDlySchool"] = payRate.ToString();
+                                        employee.PayRates[Jobs.AIDE_SCHOOL] = payRate;
 
-                                            payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
-                                            importedEmployee.ImportFields["Rate_AidDlyChrter"] = payRate.ToString();
-                                            employee.PayRates[Jobs.AIDE_CHARTER] = payRate;
-                                        }
-                                        else if (StringSearch(cellString, "driver"))
-                                        {
-                                            float payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_SCHOOL] : FargoDefaultRates[Jobs.DRIVER_SCHOOL];
-                                            importedEmployee.ImportFields["Rate_DrvrDlySchool"] = payRate.ToString();
-                                            employee.PayRates[Jobs.DRIVER_SCHOOL] = payRate;
+                                        payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
+                                        importedEmployee.ImportFields["Rate_AidDlyChrter"] = payRate.ToString();
+                                        employee.PayRates[Jobs.AIDE_CHARTER] = payRate;
+                                    }
+                                    else if (StringSearch(cellString, "driver"))
+                                    {
+                                        float payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_SCHOOL] : FargoDefaultRates[Jobs.DRIVER_SCHOOL];
+                                        importedEmployee.ImportFields["Rate_DrvrDlySchool"] = payRate.ToString();
+                                        employee.PayRates[Jobs.DRIVER_SCHOOL] = payRate;
 
-                                            payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_CHARTER] : FargoDefaultRates[Jobs.DRIVER_CHARTER];
-                                            importedEmployee.ImportFields["Rate_DrvrSchoolChrtr"] = payRate.ToString();
-                                            employee.PayRates[Jobs.DRIVER_CHARTER] = payRate;
-                                        }
-                                        break;
-                                }
+                                        payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_CHARTER] : FargoDefaultRates[Jobs.DRIVER_CHARTER];
+                                        importedEmployee.ImportFields["Rate_DrvrSchoolChrtr"] = payRate.ToString();
+                                        employee.PayRates[Jobs.DRIVER_CHARTER] = payRate;
+                                    }
+                                    break;
                             }
                         }
                     }
@@ -707,7 +715,18 @@ namespace PayrollProcessor
                                 }
                             }
 
-                            if (TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out shift.BusNumber))
+                            if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))
+                            {
+                                string? busNumberString = cellData[rowNumber, BUS_NUMBER_COLUMN].ToString();
+                                if (null != busNumberString)
+                                {
+                                    busNumberString = busNumberString.Replace("old", "");
+                                    busNumberString = busNumberString.Replace("Old", "");
+                                    busNumberString = busNumberString.Replace(" ", "");
+                                    int.TryParse(busNumberString, out shift.BusNumber);
+                                }
+                            }
+                            else if (TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out shift.BusNumber))
                             {
                                 shift.IsAGrandForksShift = shift.BusNumber >= GF_MIN_BUS && shift.BusNumber <= GF_MAX_BUS;
                             }
@@ -1599,6 +1618,8 @@ namespace PayrollProcessor
                 "Rate_Admin",
                 "Rate_Wash Bay",
                 "Rate_Body Shop",
+                "Rate_Mechanic",
+                "Rate_Cleaning",
                 "OrganizationValue2"
             };
         public Dictionary<string, object> ImportFields = new();

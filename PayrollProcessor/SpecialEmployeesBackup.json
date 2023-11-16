@@ -14,6 +14,7 @@
       "Notes":""
     }
   ],
+  
   "DailyMgExceptions" : [
     {
       "Name":"Abdala Mohamed",
@@ -22,6 +23,7 @@
       "Notes":""
     }
   ],
+
   "ShiftMgExceptionsInDollars" : [
     {
       "Name":"Roger Peterson",
@@ -36,6 +38,7 @@
       "Notes":"Minimum Guarantee is adjusted based on employee's current rate of pay so that the employee will at least earn the specified dollar amount."
     }
   ],
+
   "ShiftMgExceptions" : [
     {
       "Name":"",
@@ -80,6 +83,7 @@
       "Notes":""
     }
   ],
+
   "SmallMgExceptions" : [
     {
       "Name":"Roger Quinn",
@@ -89,6 +93,7 @@
       "Notes":"Roger only gets a 1 hour MG when in bus 318"
     }
   ],
+
   "SpecificShiftMgExceptions" : [
     {
       "Name":"Eric Buringrud",
@@ -98,6 +103,7 @@
       "Notes":"(ShiftNumber: 0-morning, 1-noon, 2-afternoon). Eric gets a 4.5 hour mg in the afternoon."
     }
   ],
+
   "PayRateExceptions" : [
     {
       "Name":"Kenny Biffert",
@@ -112,6 +118,33 @@
       "OverriddenJobType": 13,
       "OverridingJobType": 1,
       "Notes":"When Mari clocks in as Admin, her rate is switched to her driver rate."
+    }
+  ],
+
+  "StartingRateExceptions" : [
+    {
+      "Name":"Janet Olmstad",
+      "IdNumber": 1143,
+      "JobType": 1,
+      "Rate": 18.50,
+      "Notes":"Non-cdl special starting rate (her actual rate is higher due to time and service)."
+    },
+    {
+      "Name":"Jay Nelson",
+      "IdNumber": 1925,
+      "JobType": 1,
+      "Rate": 20.50,
+      "Notes":""
+    }
+  ],
+  
+  "LimitedTimeFrameExceptions" : [
+    {
+      "Name":"Uriel Harris",
+      "IdNumber": 1846,
+      "EarliestClockIn": "06:25",
+      "LatestClockOut": "16:30",
+      "Notes":""
     }
   ]
 }

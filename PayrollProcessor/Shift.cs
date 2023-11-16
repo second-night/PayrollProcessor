@@ -2,6 +2,7 @@
 
 namespace PayrollProcessor
 {
+    //uriel time 6:25 - 4:30
     public class Shift
     {
         public const int WEST_FARGO_BUS_PLACE_HOLDER = int.MaxValue;
@@ -373,6 +374,18 @@ namespace PayrollProcessor
             }
 
             return specialRate; //could be less than their default rate here, and that's fine.
+        }
+
+        public void ModifyClockIn(TimeSpan newClockIn)
+        {
+            ClockIn = newClockIn;
+            ShiftTime = (float)ClockOut.Subtract(ClockIn).TotalHours;
+        }
+
+        public void ModifyClockOut(TimeSpan newClockOut)
+        {
+            ClockOut = newClockOut;
+            ShiftTime = (float)ClockOut.Subtract(ClockIn).TotalHours;
         }
 
         public void AddAll(Shift shift)

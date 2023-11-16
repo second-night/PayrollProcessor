@@ -22,6 +22,7 @@ namespace PayrollProcessor
         public bool IsMale;
         public bool IsAMechanicApprentice;
         public int YearsOfService;
+        public bool WasAlreadyInPayroll;
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, Shift>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, Shift>>[2/*company*/,3/*0-has hours,1-has dollars,2-has both*/];
 
 

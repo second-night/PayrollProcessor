@@ -20,8 +20,8 @@ namespace PayrollProcessor
         public const float TRAINING_RATE= 12.5f;
         public const float STARTING_WASH_BAY_RATE = 16f;
         public const float COACH_HOURLY_RATE_ESTIMATE = 19f;
-        public const float GF_HOCKEY_PAY = 19f;
-        public const float GF_HOCKEY_BAND_PAY = 19f;
+        public const float GF_HOCKEY_PAY = 100f;
+        public const float GF_HOCKEY_BAND_PAY = 120f;
         public static string LogString = "";
         private static ExcelWorker ExcelWorker;
         private static Dictionary<MgSource, float> MgSourceTotals = new();
@@ -325,6 +325,7 @@ namespace PayrollProcessor
                         {
                             if (shift.IsValid(emp))
                             {
+                                SpecialEmployeeHandler.GetInstance().CheckForTimeFrameException(emp, shift);
                                 if (shift.Type() == Type.HOURS && shift.HasSpecialPayRate(emp))
                                 {
                                     shift.DollarAmount = (float)Math.Round(shift.ShiftTime * shift.SpecialRate(emp), 2);
@@ -559,6 +560,12 @@ namespace PayrollProcessor
                     break;
                 case Jobs.BODY_SHOP:
                     ExcelWorker.ImportEmployees[employee.IdNumber].ImportFields["Rate_Body Shop"] = rate.ToString();
+                    break;
+                case Jobs.MECHANIC:
+                    ExcelWorker.ImportEmployees[employee.IdNumber].ImportFields["Rate_Mechanic"] = rate.ToString();
+                    break;
+                case Jobs.CLEANING:
+                    ExcelWorker.ImportEmployees[employee.IdNumber].ImportFields["Rate_Cleaning"] = rate.ToString();
                     break;
                 default:
                     Log("Warning: Trying to import raise for " + job.ToString() + " but can't determine import header.");

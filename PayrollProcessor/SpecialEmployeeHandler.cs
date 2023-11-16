@@ -104,15 +104,44 @@ namespace PayrollProcessor
             ExceptionLog += "The following special exceptions are currently active:\n\n";
             ExceptionLog += "Employees who have a special mg for each shift:\n";
             SpecialEmployees.ShiftMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, entry.Hours));
+            ExceptionLog += "\n";
             SpecialEmployees.SpecificShiftMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receiving a MG of " + entry.Hours + " hours per shift for shifts during the " + ((RouteTimeContext)entry.ShiftNumber).ToString() + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\nOther exceptions: \n";
             SpecialEmployees.WeeklyMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a weekly MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            ExceptionLog += "\n";
             SpecialEmployees.DailyMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a daily MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            ExceptionLog += "\n";
             SpecialEmployees.ShiftMgExceptionsInDollars.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a MG of $" + entry.Dollars + " per shift.", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            ExceptionLog += "\n";
             SpecialEmployees.SmallMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a specially reduced MG of " + entry.Hours + " hours, specifically while driving bus# " + entry.BusNumber + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            ExceptionLog += "\n";
             SpecialEmployees.PayRateExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives their payrate for " + ((Jobs)entry.OverridingJobType).ToString() + " when they clock in as " + ((Jobs)entry.OverriddenJobType).ToString() + ".", 0f, false));
             ExceptionLog += "\n\n\n\n";
             Log(ExceptionLog, true);
+        }
+
+        public void CheckForTimeFrameException(Employee employee, Shift shift)
+        {
+            foreach (var entry in SpecialEmployees.LimitedTimeFrameExceptions)
+            {
+                if (entry.IdNumber == employee.IdNumber)
+                {
+                    if (TimeSpan.TryParse(entry.EarliestClockIn, out TimeSpan earliestClockIn))
+                    {
+                        if (shift.ClockIn.CompareTo(earliestClockIn) < 0)
+                        {
+                            shift.ModifyClockIn(earliestClockIn);
+                        }
+                    }
+                    if (TimeSpan.TryParse(entry.LatestClockOut, out TimeSpan latestClockOut))
+                    {
+                        if (shift.ClockOut.CompareTo(latestClockOut) > 0)
+                        {
+                            shift.ModifyClockOut(latestClockOut);
+                        }
+                    }
+                }
+            }
         }
 
         private void LogEntry(int employeeIdNumber, string message, float hoursGiven, bool bShouldDisplayTotals = true)
@@ -159,6 +188,8 @@ namespace PayrollProcessor
         public List<SpecialPayRateEntry> PayRateExceptions { get; set; } = new();
 
         public List<StartingRateEntry> StartingRateExceptions { get; set; } = new();
+
+        public List<TimeFrameEntry> LimitedTimeFrameExceptions { get; set; } = new();
     }
 
     public class SpecialEntry
@@ -198,5 +229,11 @@ namespace PayrollProcessor
     {
         public int JobType { get; set; }
         public float Rate { get; set; }
+    }
+
+    public class TimeFrameEntry : SpecialEntry
+    {
+        public string EarliestClockIn{ get; set; }
+        public string LatestClockOut { get; set; }
     }
 }

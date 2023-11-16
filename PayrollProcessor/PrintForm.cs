@@ -80,7 +80,7 @@ namespace PayrollProcessor
             // 
             exirtButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             exirtButton.Location = new Point(178, 12);
-            exirtButton.Name = "exirtButton";
+            exirtButton.Name = "exitButton";
             exirtButton.Size = new Size(94, 29);
             exirtButton.TabIndex = 4;
             exirtButton.Text = "Exit Program";
