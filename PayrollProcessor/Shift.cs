@@ -31,7 +31,6 @@ namespace PayrollProcessor
         public TimeSpan ClockIn;
         public TimeSpan ClockOut;
         public int WeekNumber;
-        public bool IsABusStartingShift;
         public bool IsAGrandForksShift;
         public bool IsATotalsShift = false;
         public Company CompanyName;
@@ -109,6 +108,10 @@ namespace PayrollProcessor
             }
             else
             {
+                if (ClockIn.CompareTo(new TimeSpan(0, 1, 0)) < 0)
+                {
+                    return 0f; //shift carried over from day before. If there's MG, they would have gotten it for yesterday (technically they would get more than they should).
+                }
                 if (IsASchoolRouteShift())
                 {
                     if (!Shift.WereThereSchoolRoutesOnThisDay(ShiftLocation, Date.Day))
@@ -313,6 +316,11 @@ namespace PayrollProcessor
         private static Dictionary<Employee, List<Jobs>> PayrateMessages = new();
         public float SpecialRate(Employee emp)
         {
+            if (emp.IdNumber == 1224 && JobType == Jobs.COACH_PUBLIC_DRIVING)
+            {
+                Log("");
+            }
+
             float specialRate = 0f;
             foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
             {

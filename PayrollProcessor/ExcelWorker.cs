@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using DocumentFormat.OpenXml.Spreadsheet;
+using System.Data;
 using System.Diagnostics;
 using static PayrollProcessor.Program;
 using Excel = Microsoft.Office.Interop.Excel;
@@ -233,6 +234,17 @@ namespace PayrollProcessor
                                 EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name));
                             }
                             EmployeeDictionary[employeeNumber].HadHoursInTimesheets = true;
+
+
+                            if (TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out string notes))
+                            {
+                                double d = double.Parse(date);
+                                DateTime conv = DateTime.FromOADate(d);
+                                if (StringSearch(notes, "bonus"))
+                                {
+                                    Program.BusStartingDays.Add(conv.Day);
+                                }
+                            }
                         }
                     }
                 }
@@ -290,6 +302,10 @@ namespace PayrollProcessor
                                 break;
                             }
                         }
+                    }
+                    if (employeeNumber == 0)
+                    {
+                        continue;
                     }
                     ImportedEmployee importedEmployee = new();
                     importedEmployee.WasOnImployeeExportSheet = true;
@@ -705,14 +721,6 @@ namespace PayrollProcessor
                             else
                             {
                                 Log("Problem getting Job Code for code: " + cellData[rowNumber, JOB_TYPE_COLUMN].ToString(), true);
-                            }
-
-                            if (TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out shift.Notes))
-                            {
-                                if (StringSearch(shift.Notes, "bonus"))
-                                {
-                                    shift.IsABusStartingShift = true;
-                                }
                             }
 
                             if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))

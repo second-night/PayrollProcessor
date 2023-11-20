@@ -8,6 +8,12 @@
       "Notes":""
     },
     {
+      "Name":"Brad Rust",
+      "IdNumber": 1734,
+      "Hours": 30,
+      "Notes":""
+    },
+    {
       "Name":"Ali Ahmed",
       "IdNumber": 1448,
       "Hours": 35,
@@ -106,11 +112,32 @@
 
   "PayRateExceptions" : [
     {
+      "Name":"Haji Siyaka",
+      "IdNumber": 1252,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Berehaji clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Keith Miller",
+      "IdNumber": 1127,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Keith clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Kenny Biffert",
       "IdNumber": 1224,
       "OverriddenJobType": 7,
       "OverridingJobType": 1,
       "Notes":"When Kenny clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Roger Trulson",
+      "IdNumber": 672,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Roger clocks in as Mechanic, his rate is switched to his driver rate."
     },
     {
       "Name":"Mari Estes",
@@ -144,6 +171,39 @@
       "IdNumber": 1846,
       "EarliestClockIn": "06:25",
       "LatestClockOut": "16:30",
+      "Notes":""
+    }
+  ],
+
+  "BusStartingBonusDollars" : [
+    {
+      "Name":"Bob Medhus",
+      "IdNumber": 1657,
+      "Dollars": 15,
+      "Notes":""
+    },
+    {
+      "Name":"Haji Siyaka",
+      "IdNumber": 1252,
+      "Dollars": 10,
+      "Notes":""
+    },
+    {
+      "Name":"Keith Miller",
+      "IdNumber": 1127,
+      "Dollars": 10,
+      "Notes":""
+    },
+    {
+      "Name":"Kenny Biffert",
+      "IdNumber": 1224,
+      "Dollars": 10,
+      "Notes":""
+    },
+    {
+      "Name":"Roger Trulson",
+      "IdNumber": 672,
+      "Dollars": 10,
       "Notes":""
     }
   ]

@@ -101,7 +101,7 @@ namespace PayrollProcessor
 
         public void AddExceptionNotificationsToLog()
         {
-            ExceptionLog += "The following special exceptions are currently active:\n\n";
+            ExceptionLog += "The following special exceptions are currently in place:\n\n";
             ExceptionLog += "Employees who have a special mg for each shift:\n";
             SpecialEmployees.ShiftMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, entry.Hours));
             ExceptionLog += "\n";
@@ -190,6 +190,8 @@ namespace PayrollProcessor
         public List<StartingRateEntry> StartingRateExceptions { get; set; } = new();
 
         public List<TimeFrameEntry> LimitedTimeFrameExceptions { get; set; } = new();
+
+        public List<SpecialDollarsEntry> BusStartingBonusDollars { get; set; } = new();
     }
 
     public class SpecialEntry

@@ -23,6 +23,7 @@ namespace PayrollProcessor
         public const float GF_HOCKEY_PAY = 100f;
         public const float GF_HOCKEY_BAND_PAY = 120f;
         public static string LogString = "";
+        public static HashSet<int> BusStartingDays = new();
         private static ExcelWorker ExcelWorker;
         private static Dictionary<MgSource, float> MgSourceTotals = new();
         public static Dictionary<String, bool> DelayedLogMessages = new();
@@ -346,9 +347,24 @@ namespace PayrollProcessor
 
                                 if (!emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)].ContainsKey(shift.WeekNumber))
                                 {
-                                    emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)].Add(shift.WeekNumber, new Shift(Company.VALLEY_BUS_LLC, shift.JobType)) ;
+                                    emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)].Add(shift.WeekNumber, new Shift(Company.VALLEY_BUS_LLC, shift.JobType));
                                 }
 
+                                if (BusStartingDays.Contains(shift.Date.Day))
+                                {
+                                    if ((shift.JobType == Jobs.MECHANIC && shift.ClockIn.CompareTo(new TimeSpan(6, 30, 0)) < 0) || StringSearch(shift.Notes, "bonus"))
+                                    {
+                                        foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.BusStartingBonusDollars)
+                                        {
+                                            if (entry.IdNumber == emp.IdNumber)
+                                            {
+                                                shift.BonusDollars += entry.Dollars;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                //sum all hours
                                 emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)][shift.WeekNumber].IsATotalsShift = true;
                                 emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)][shift.WeekNumber].AddAll(shift);
 
@@ -399,32 +415,35 @@ namespace PayrollProcessor
                         //daily min
                         foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.DailyMgExceptions)
                         {
-                            List<float> dailyMgList = new();
-                            for (int dayNumber = 0; dayNumber < 32; ++dayNumber)
+                            if (entry.IdNumber == emp.IdNumber)
                             {
-                                if (entry.IdNumber == emp.IdNumber && bDriverOrAideShiftWasFoundForDay[dayNumber])
+                                List<float> dailyMgList = new();
+                                for (int dayNumber = 0; dayNumber < 32; ++dayNumber)
                                 {
-                                    if (entry.Hours > dailyRunningTotal[1, dayNumber])
+                                    if (bDriverOrAideShiftWasFoundForDay[dayNumber])
                                     {
-                                        float dailyMg = entry.Hours - dailyRunningTotal[1, dayNumber];
-                                        shiftForDay[dayNumber].MinimumGuaranteeHours += (float)Math.Round(dailyMg, 2);
-                                        dailyMgList.Add((float)Math.Round(dailyMg, 2));
-                                        if (shiftForDay[dayNumber].MgDollars > 0)
+                                        if (entry.Hours > dailyRunningTotal[1, dayNumber])
                                         {
-                                            if (shiftForDay[dayNumber].SpecialRate(emp) < 0.01f)
+                                            float dailyMg = entry.Hours - dailyRunningTotal[1, dayNumber];
+                                            shiftForDay[dayNumber].MinimumGuaranteeHours += (float)Math.Round(dailyMg, 2);
+                                            dailyMgList.Add((float)Math.Round(dailyMg, 2));
+                                            if (shiftForDay[dayNumber].MgDollars > 0)
                                             {
-                                                Log("ERROR:5454352", true);
+                                                if (shiftForDay[dayNumber].SpecialRate(emp) < 0.01f)
+                                                {
+                                                    Log("ERROR:5454352", true);
+                                                }
+                                                shiftForDay[dayNumber].MgDollars += (float)Math.Round(dailyMg * shiftForDay[dayNumber].SpecialRate(emp), 2);
                                             }
-                                            shiftForDay[dayNumber].MgDollars += (float)Math.Round(dailyMg * shiftForDay[dayNumber].SpecialRate(emp), 2);
                                         }
+                                        break;
                                     }
-                                    break;
                                 }
-                            }
-                            if (dailyMgList.Count > 0)
-                            {
-                                DelayedLog("Giving a total of " + dailyMgList.Sum() + " daily MG hours to " + emp.Name + " for a total of " + dailyMgList.Count + " days.");
-                                SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + dailyMgList.Sum();
+                                if (dailyMgList.Count > 0)
+                                {
+                                    DelayedLog("Giving a total of " + dailyMgList.Sum() + " daily MG hours to " + emp.Name + " for a total of " + dailyMgList.Count + " days.");
+                                    SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + dailyMgList.Sum();
+                                }
                             }
                         }
                         for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
