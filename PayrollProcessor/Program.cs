@@ -352,11 +352,11 @@ namespace PayrollProcessor
 
                                 if (BusStartingDays.Contains(shift.Date.Day))
                                 {
-                                    if ((shift.JobType == Jobs.MECHANIC && shift.ClockIn.CompareTo(new TimeSpan(6, 30, 0)) < 0) || StringSearch(shift.Notes, "bonus"))
+                                    if ((shift.JobType == Jobs.MECHANIC && shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0) || StringSearch(shift.Notes, "bonus"))
                                     {
                                         foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.BusStartingBonusDollars)
                                         {
-                                            if (entry.IdNumber == emp.IdNumber)
+                                            if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == shift.JobType)
                                             {
                                                 shift.BonusDollars += entry.Dollars;
                                             }

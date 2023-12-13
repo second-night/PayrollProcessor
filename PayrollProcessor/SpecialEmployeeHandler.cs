@@ -191,7 +191,7 @@ namespace PayrollProcessor
 
         public List<TimeFrameEntry> LimitedTimeFrameExceptions { get; set; } = new();
 
-        public List<SpecialDollarsEntry> BusStartingBonusDollars { get; set; } = new();
+        public List<SpecialBonusDollarsEntry> BusStartingBonusDollars { get; set; } = new();
     }
 
     public class SpecialEntry
@@ -209,6 +209,11 @@ namespace PayrollProcessor
     public class SpecialDollarsEntry : SpecialEntry
     {
         public float Dollars { get; set; }
+    }
+
+    public class SpecialBonusDollarsEntry : SpecialDollarsEntry
+    {
+        public int JobType { get; set; }
     }
 
     public class SpecialBusEntry : SpecialHoursEntry
