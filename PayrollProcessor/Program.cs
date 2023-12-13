@@ -390,7 +390,9 @@ namespace PayrollProcessor
                             }
                         }
 
-                        float[,] weeklyRunnningTotal = new float[2, 3]; //first index:1-working hours,2-all hours second index: weekNumber
+                        float[,,] medhusCounter = new float[3, 6, 2]; // week, hours/dollar/bonus/per diem/ot hours/ot dollars, company number
+                        //total up weeks
+                        float[,] weeklyRunnningTotal = new float[2, 3]; //first index:0-working hours,1-all hours second index: weekNumber
                         for (int company = 0; company < 2; ++company)
                         {
                             for (int shiftType = 0; shiftType < 3; ++shiftType)
@@ -405,6 +407,26 @@ namespace PayrollProcessor
                                             {
                                                 weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
                                                 weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
+                                                //bob medhus
+                                                if (emp.IdNumber == 1657)
+                                                {
+                                                    medhusCounter[shift.WeekNumber, 0, company] += shift.WorkingHours();
+                                                    float dollarAmount = shift.DollarAmount;
+                                                    if (dollarAmount < 0.0001f)
+                                                    {
+                                                        if (!emp.PayRates.ContainsKey(shift.JobType))
+                                                        {
+                                                            Log("Problem getting payrate for totaling up bob medhus's hours", true);
+                                                        }
+                                                        else
+                                                        {
+                                                            dollarAmount = shift.WorkingHours() * emp.PayRates[shift.JobType];
+                                                        }
+                                                    }
+                                                    medhusCounter[shift.WeekNumber, 1, company] += dollarAmount;
+                                                    medhusCounter[shift.WeekNumber, 2, company] += shift.BonusDollars + shift.MgDollars;
+                                                    medhusCounter[shift.WeekNumber, 3, company] += shift.PerDiem;
+                                                }
                                             }
                                         }
                                     }
@@ -446,6 +468,7 @@ namespace PayrollProcessor
                                 }
                             }
                         }
+                        
                         for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
                         {
                             //weekly min 
@@ -477,7 +500,36 @@ namespace PayrollProcessor
                             if (weeklyRunnningTotal[0, weekNumber] > 40f)
                             {
                                 emp.OverTimeHours[weekNumber] = weeklyRunnningTotal[0, weekNumber] - 40f;
+                                //bob medhus
+                                if (emp.IdNumber == 1657)
+                                {
+                                    medhusCounter[weekNumber, 4, 0] = emp.OverTimeHours[weekNumber];
+                                    medhusCounter[weekNumber, 5, 0] = (medhusCounter[weekNumber, 1, 0] / medhusCounter[weekNumber, 0, 0]) * medhusCounter[weekNumber, 4, 0] * 0.5f;
+                                }
                             }
+                        }
+
+                        //bob medhus
+                        if (emp.IdNumber == 1657)
+                        {
+                            string message = "\nFor Bob Medhus, payroll run on " + DateTime.Now.ToShortDateString() + ":";
+                            for (int i = 0; i < 2; i++)
+                            {
+                                message += "\nFor " + (i == 0 ? "Valley Bus, LLC:" : "Valley Bus Coaches:");
+                                message += "\nHours week 1: " + Math.Round(medhusCounter[1, 0, i], 2).ToString();
+                                message += "\nHours week 2: " + Math.Round(medhusCounter[2, 0, i], 2).ToString();
+                                message += "\nDollars week 1: " + Math.Round(medhusCounter[1, 1, i], 2).ToString();
+                                message += "\nDollars week 2: " + Math.Round(medhusCounter[2, 1, i], 2).ToString();
+                                message += "\nBonus Dollars week 1: " + Math.Round(medhusCounter[1, 2, i], 2).ToString();
+                                message += "\nBonus Dollars week 2: " + Math.Round(medhusCounter[2, 2, i], 2).ToString();
+                                message += "\nPer Diem Dollars week 1: " + Math.Round(medhusCounter[1, 3, i], 2).ToString();
+                                message += "\nPer Diem Dollars week 2: " + Math.Round(medhusCounter[2, 3, i], 2).ToString();
+                                message += "\nOvertime Hours week 1: " + Math.Round(medhusCounter[1, 4, i], 2).ToString();
+                                message += "\nOvertime Hours week 2: " + Math.Round(medhusCounter[2, 4, i], 2).ToString();
+                                message += "\nOvertime Dollars week 1: " + Math.Round(medhusCounter[1, 5, i], 2).ToString();
+                                message += "\nOvertime Dollars week 2: " + Math.Round(medhusCounter[2, 5, i], 2).ToString();
+                            }
+                            Log(message);
                         }
                     }
                 }
@@ -540,7 +592,7 @@ namespace PayrollProcessor
 
         public static void GiveRaiseToEmployee(Employee employee, Jobs job, float rate)
         {
-            employee.Raises[job] = rate;
+            employee.NeedsUpdateInPayroll = true;
             employee.PayRates[job] = rate;
             if (!ExcelWorker.ImportEmployees.ContainsKey(employee.IdNumber))
             {

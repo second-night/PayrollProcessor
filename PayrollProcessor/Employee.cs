@@ -8,7 +8,6 @@ namespace PayrollProcessor
         public int IdNumber { get; protected set; }
         public string Name { get; protected set; }
         public Dictionary<Jobs, float> PayRates { get; private set; } = new();
-        public Dictionary<Jobs, float> Raises { get; private set; } = new();
         public List<Shift> Shifts = new();
         public float[] OverTimeHours = new float[3];
         public bool IsSalaried;
@@ -17,6 +16,7 @@ namespace PayrollProcessor
         public string EmploymentCategory;
         public string PhoneNumber;
         public bool WasCreatedFromEmployeeExport;
+        public bool NeedsUpdateInPayroll;
         public bool HadHoursInTimesheets; //means they have been confirmed to have hours in Timesheets.xlsx
         public bool HasADirectDepositAccount;
         public bool IsMale;

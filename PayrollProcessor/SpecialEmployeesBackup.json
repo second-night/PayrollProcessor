@@ -119,6 +119,13 @@
       "Notes":"When Berehaji clocks in as Mechanic, his rate is switched to his driver rate."
     },
     {
+      "Name":"Kim Wick",
+      "IdNumber": 1808,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Kim clocks in as Mechanic, her rate is switched to her driver rate."
+    },
+    {
       "Name":"Keith Miller",
       "IdNumber": 1127,
       "OverriddenJobType": 7,
@@ -185,6 +192,12 @@
     {
       "Name":"Haji Siyaka",
       "IdNumber": 1252,
+      "Dollars": 10,
+      "Notes":""
+    },
+    {
+      "Name":"Kim Wick",
+      "IdNumber": 1808,
       "Dollars": 10,
       "Notes":""
     },

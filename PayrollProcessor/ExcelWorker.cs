@@ -296,7 +296,7 @@ namespace PayrollProcessor
                         }
                         foreach (var employeeEntry in EmployeeDictionary)
                         {
-                            if (!employeeEntry.Value.WasAlreadyInPayroll && StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString()) && StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString()))
+                            if (StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString()) && StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString()))
                             {
                                 employeeNumber = employeeEntry.Key; 
                                 break;
@@ -723,6 +723,7 @@ namespace PayrollProcessor
                                 Log("Problem getting Job Code for code: " + cellData[rowNumber, JOB_TYPE_COLUMN].ToString(), true);
                             }
 
+                            TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out shift.Notes);
                             if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))
                             {
                                 string? busNumberString = cellData[rowNumber, BUS_NUMBER_COLUMN].ToString();
@@ -782,7 +783,7 @@ namespace PayrollProcessor
                                 }
                             }
 
-                            if (StringSearch(shift.Notes, "hockey"))
+                            if (StringSearch(shift.Notes, "Hockey"))
                             {
                                 if (StringSearch(shift.Notes, "Band"))
                                 {
@@ -1163,6 +1164,11 @@ namespace PayrollProcessor
                 }
                 var employee = EmployeeDictionary[employeeEntry.Key];
                 if (!employee.WasCreatedFromEmployeeExport && (employee.Shifts.Count == 0/* || employeeEntry.Value.ImportFields.ContainsKey("SSN")*/))
+                {
+                    //don't update employees who aren't currently active. (payrates, etc..)
+                    continue;
+                }
+                if (employee.WasAlreadyInPayroll && !employee.NeedsUpdateInPayroll)
                 {
                     continue;
                 }
