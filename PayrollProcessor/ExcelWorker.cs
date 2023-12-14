@@ -177,8 +177,6 @@ namespace PayrollProcessor
             const int NOTES_COLUMN = 16;
             const int BUS_NUMBER_COLUMN = 32;
 
-            List<int> employeeIdsToIgnore = new() { 503/*John Mc*/};
-
             if (!CheckForExcelFileOnDesktop("Timesheets.xlsx", out string filePath))
             {
                 return;
@@ -223,11 +221,6 @@ namespace PayrollProcessor
                                 continue;
                             }
 
-                            if (employeeIdsToIgnore.Contains(employeeNumber))
-                            {
-                                continue;
-                            }
-
                             if (!EmployeeDictionary.ContainsKey(employeeNumber))
                             {
                                 string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
@@ -240,7 +233,7 @@ namespace PayrollProcessor
                             {
                                 double d = double.Parse(date);
                                 DateTime conv = DateTime.FromOADate(d);
-                                if (StringSearch(notes, "bonus"))
+                                if (notes == "bonus" || notes == "Bonus")
                                 {
                                     Program.BusStartingDays.Add(conv.Day);
                                 }
@@ -627,8 +620,6 @@ namespace PayrollProcessor
             const int NOTES_COLUMN = 16;
             const int BUS_NUMBER_COLUMN = 32;
 
-            List<int> employeeIdsToIgnore = new() { 503/*John Mc*/};
-
             if (!CheckForExcelFileOnDesktop("Timesheets.xlsx", out string filePath))
             {
                 return;
@@ -675,11 +666,6 @@ namespace PayrollProcessor
                             if (!TryGetIntFromCell(cellData[rowNumber, EMP_NUMBER_COLUMN], out int employeeNumber))
                             {
                                 Log("Couldn't get employee number", true);
-                                continue;
-                            }
-
-                            if (employeeIdsToIgnore.Contains(employeeNumber))
-                            {
                                 continue;
                             }
 
@@ -785,7 +771,7 @@ namespace PayrollProcessor
 
                             if (StringSearch(shift.Notes, "Hockey"))
                             {
-                                if (StringSearch(shift.Notes, "Band"))
+                                if (StringSearch(shift.Notes, "Band") || StringSearch(shift.Notes, "120"))
                                 {
                                     shift.DollarAmount = GF_HOCKEY_BAND_PAY;
                                 }
@@ -1018,7 +1004,7 @@ namespace PayrollProcessor
                 {
                     if (emp != null)
                     {
-                        if (emp.Shifts.Count > 0)
+                        if (!Program.EmployeeIdsToIgnore.Contains(emp.IdNumber) && emp.Shifts.Count > 0)
                         {
                             if (!emp.HasADirectDepositAccount)
                             {
@@ -1359,23 +1345,25 @@ namespace PayrollProcessor
                 matrix[rowCounter, (int)timeColumn] = Math.Round(time, 2);
                 if (shift.HasSpecialPayRate(emp) && dollarAmount < 0.01f)
                 {
-                    //todo: test this
                     matrix[rowCounter, (int)dollarColumn] = Math.Round(shift.SpecialRate(emp) * time, 2);
                 }
             }
-            if (dollarAmount > 0f)
+            if (!shift.DollarsWereWrittenToExport)
             {
-                matrix[rowCounter, (int)dollarColumn] = Math.Round(dollarAmount, 2);
+                shift.DollarsWereWrittenToExport = true;
+                if (dollarAmount > 0f)
+                {
+                    matrix[rowCounter, (int)dollarColumn] = Math.Round(dollarAmount, 2);
+                }
+                if (shift.PerDiem > 0f)
+                {
+                    matrix[rowCounter, (int)TimeCardImportColumns.PER_DIEM_DOLLARS_COLUMN] = Math.Round(shift.PerDiem, 2);
+                }
+                if (shift.BonusDollars > 0)
+                {
+                    matrix[rowCounter, (int)TimeCardImportColumns.BONUS_DOLLARS_COLUMN] = Math.Round(shift.BonusDollars, 2);
+                }
             }
-            if (shift.PerDiem > 0f)
-            {
-                matrix[rowCounter, (int)TimeCardImportColumns.PER_DIEM_DOLLARS_COLUMN] = Math.Round(shift.PerDiem, 2);
-            }
-            if (shift.BonusDollars > 0)
-            {
-                matrix[rowCounter, (int)TimeCardImportColumns.BONUS_DOLLARS_COLUMN] = Math.Round(shift.BonusDollars, 2);
-            }
-            
             if (dollarAmount + shift.PerDiem + shift.BonusDollars + time < 0.001f) 
             {
                 Log("How did shift with no time or dollar amount make it here?", true);

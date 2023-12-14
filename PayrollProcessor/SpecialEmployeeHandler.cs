@@ -103,17 +103,17 @@ namespace PayrollProcessor
         {
             ExceptionLog += "The following special exceptions are currently in place:\n\n";
             ExceptionLog += "Employees who have a special mg for each shift:\n";
-            SpecialEmployees.ShiftMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, entry.Hours));
+            SpecialEmployees.ShiftMgExceptions.FindAll(entry => SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, entry.Hours));
             ExceptionLog += "\n";
-            SpecialEmployees.SpecificShiftMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receiving a MG of " + entry.Hours + " hours per shift for shifts during the " + ((RouteTimeContext)entry.ShiftNumber).ToString() + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            SpecialEmployees.SpecificShiftMgExceptions.FindAll(entry => SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname receiving a MG of " + entry.Hours + " hours per shift for shifts during the " + ((RouteTimeContext)entry.ShiftNumber).ToString() + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\nOther exceptions: \n";
-            SpecialEmployees.WeeklyMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a weekly MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            SpecialEmployees.WeeklyMgExceptions.FindAll(entry => SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a weekly MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
-            SpecialEmployees.DailyMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a daily MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            SpecialEmployees.DailyMgExceptions.FindAll(entry => SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a daily MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
-            SpecialEmployees.ShiftMgExceptionsInDollars.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a MG of $" + entry.Dollars + " per shift.", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            SpecialEmployees.ShiftMgExceptionsInDollars.FindAll(entry => SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a MG of $" + entry.Dollars + " per shift.", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
-            SpecialEmployees.SmallMgExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a specially reduced MG of " + entry.Hours + " hours, specifically while driving bus# " + entry.BusNumber + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
+            SpecialEmployees.SmallMgExceptions.FindAll(entry => SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a specially reduced MG of " + entry.Hours + " hours, specifically while driving bus# " + entry.BusNumber + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
             SpecialEmployees.PayRateExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives their payrate for " + ((Jobs)entry.OverridingJobType).ToString() + " when they clock in as " + ((Jobs)entry.OverriddenJobType).ToString() + ".", 0f, false));
             ExceptionLog += "\n\n\n\n";

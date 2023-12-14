@@ -36,6 +36,7 @@ namespace PayrollProcessor
         public Company CompanyName;
         public int ShiftId;
         public Location ShiftLocation; //WARNING: Be wary of using location for any shift that isn't a driver shift. 
+        public bool DollarsWereWrittenToExport = false;
 
         public Shift()
         {

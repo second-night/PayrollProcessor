@@ -29,6 +29,7 @@ namespace PayrollProcessor
         public static Dictionary<String, bool> DelayedLogMessages = new();
         public static HashSet<Employee> NonCdlDrivers = new();
         private static Dictionary<int, Dictionary<Jobs, float>> ApprenticeMechanicHours = new();
+        public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, 1657/*Bob Medhus*/};
         public static Dictionary<Jobs, float> FargoDefaultRates = new()
         {
             {Jobs.DRIVER_SCHOOL, 20f },
@@ -352,13 +353,17 @@ namespace PayrollProcessor
 
                                 if (BusStartingDays.Contains(shift.Date.Day))
                                 {
-                                    if ((shift.JobType == Jobs.MECHANIC && shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0) || StringSearch(shift.Notes, "bonus"))
+                                    if (shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0 || StringSearch(shift.Notes, "bonus"))
                                     {
                                         foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.BusStartingBonusDollars)
                                         {
                                             if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == shift.JobType)
                                             {
                                                 shift.BonusDollars += entry.Dollars;
+                                                if (shift.ShiftTime < 2)
+                                                {
+                                                    shift.MinimumGuaranteeHours += 2f - shift.ShiftTime;
+                                                }
                                             }
                                         }
                                     }
@@ -516,18 +521,18 @@ namespace PayrollProcessor
                             for (int i = 0; i < 2; i++)
                             {
                                 message += "\nFor " + (i == 0 ? "Valley Bus, LLC:" : "Valley Bus Coaches:");
-                                message += "\nHours week 1: " + Math.Round(medhusCounter[1, 0, i], 2).ToString();
-                                message += "\nHours week 2: " + Math.Round(medhusCounter[2, 0, i], 2).ToString();
-                                message += "\nDollars week 1: " + Math.Round(medhusCounter[1, 1, i], 2).ToString();
-                                message += "\nDollars week 2: " + Math.Round(medhusCounter[2, 1, i], 2).ToString();
-                                message += "\nBonus Dollars week 1: " + Math.Round(medhusCounter[1, 2, i], 2).ToString();
-                                message += "\nBonus Dollars week 2: " + Math.Round(medhusCounter[2, 2, i], 2).ToString();
-                                message += "\nPer Diem Dollars week 1: " + Math.Round(medhusCounter[1, 3, i], 2).ToString();
-                                message += "\nPer Diem Dollars week 2: " + Math.Round(medhusCounter[2, 3, i], 2).ToString();
-                                message += "\nOvertime Hours week 1: " + Math.Round(medhusCounter[1, 4, i], 2).ToString();
-                                message += "\nOvertime Hours week 2: " + Math.Round(medhusCounter[2, 4, i], 2).ToString();
-                                message += "\nOvertime Dollars week 1: " + Math.Round(medhusCounter[1, 5, i], 2).ToString();
-                                message += "\nOvertime Dollars week 2: " + Math.Round(medhusCounter[2, 5, i], 2).ToString();
+                                message += "\nHours week 1:\n" + Math.Round(medhusCounter[1, 0, i], 2).ToString();
+                                message += "\nHours week 2:\n" + Math.Round(medhusCounter[2, 0, i], 2).ToString();
+                                message += "\nDollars week 1:\n" + Math.Round(medhusCounter[1, 1, i], 2).ToString();
+                                message += "\nDollars week 2:\n" + Math.Round(medhusCounter[2, 1, i], 2).ToString();
+                                message += "\nBonus Dollars week 1:\n" + Math.Round(medhusCounter[1, 2, i], 2).ToString();
+                                message += "\nBonus Dollars week 2:\n" + Math.Round(medhusCounter[2, 2, i], 2).ToString();
+                                message += "\nPer Diem Dollars week 1:\n" + Math.Round(medhusCounter[1, 3, i], 2).ToString();
+                                message += "\nPer Diem Dollars week 2:\n" + Math.Round(medhusCounter[2, 3, i], 2).ToString();
+                                message += "\nOvertime Hours week 1:\n" + Math.Round(medhusCounter[1, 4, i], 2).ToString();
+                                message += "\nOvertime Hours week 2:\n" + Math.Round(medhusCounter[2, 4, i], 2).ToString();
+                                message += "\nOvertime Dollars week 1:\n" + Math.Round(medhusCounter[1, 5, i], 2).ToString();
+                                message += "\nOvertime Dollars week 2:\n" + Math.Round(medhusCounter[2, 5, i], 2).ToString();
                             }
                             Log(message);
                         }

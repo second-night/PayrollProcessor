@@ -187,36 +187,42 @@
       "Name":"Bob Medhus",
       "IdNumber": 1657,
       "Dollars": 15,
+      "JobType": 7,
       "Notes":""
     },
     {
       "Name":"Haji Siyaka",
       "IdNumber": 1252,
       "Dollars": 10,
+      "JobType": 7,
       "Notes":""
     },
     {
       "Name":"Kim Wick",
       "IdNumber": 1808,
       "Dollars": 10,
+      "JobType": 7,
       "Notes":""
     },
     {
       "Name":"Keith Miller",
       "IdNumber": 1127,
       "Dollars": 10,
+      "JobType": 7,
       "Notes":""
     },
     {
       "Name":"Kenny Biffert",
       "IdNumber": 1224,
       "Dollars": 10,
+      "JobType": 7,
       "Notes":""
     },
     {
       "Name":"Roger Trulson",
       "IdNumber": 672,
       "Dollars": 10,
+      "JobType": 7,
       "Notes":""
     }
   ]
