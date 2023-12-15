@@ -1348,13 +1348,13 @@ namespace PayrollProcessor
                     matrix[rowCounter, (int)dollarColumn] = Math.Round(shift.SpecialRate(emp) * time, 2);
                 }
             }
-            if (!shift.DollarsWereWrittenToExport)
+            if (dollarAmount > 0f)
             {
-                shift.DollarsWereWrittenToExport = true;
-                if (dollarAmount > 0f)
-                {
-                    matrix[rowCounter, (int)dollarColumn] = Math.Round(dollarAmount, 2);
-                }
+                matrix[rowCounter, (int)dollarColumn] = Math.Round(dollarAmount, 2);
+            }
+            if (!shift.ExtrasWereWrittenToExport)
+            {
+                shift.ExtrasWereWrittenToExport = true;
                 if (shift.PerDiem > 0f)
                 {
                     matrix[rowCounter, (int)TimeCardImportColumns.PER_DIEM_DOLLARS_COLUMN] = Math.Round(shift.PerDiem, 2);
