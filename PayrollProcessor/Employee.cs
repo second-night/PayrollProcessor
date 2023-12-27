@@ -53,7 +53,9 @@ namespace PayrollProcessor
                 }
 
                 //aides don't get downgraded for driving a non-cdl route.
-                rate = Math.Max(PayRates.GetValueOrDefault(Jobs.AIDE_SCHOOL, 0f), IsGrandForksEmployee || shift.IsAGrandForksShift ? GrandForksDefaultRates[shift.JobType] : FargoDefaultRates[shift.JobType]);
+                float paraRate = PayRates.GetValueOrDefault(Jobs.AIDE_SCHOOL, 0f);
+                float nonCdlRate = IsGrandForksEmployee || shift.IsAGrandForksShift ? GrandForksDefaultRates[shift.JobType] : FargoDefaultRates[shift.JobType];
+                rate = Math.Max(paraRate, nonCdlRate);
             }
             else
             {

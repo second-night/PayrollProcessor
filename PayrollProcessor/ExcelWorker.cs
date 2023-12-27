@@ -1004,6 +1004,10 @@ namespace PayrollProcessor
                 {
                     if (emp != null)
                     {
+                        if (emp.IdNumber == 934)
+                        {
+                            Log("");
+                        }
                         if (!Program.EmployeeIdsToIgnore.Contains(emp.IdNumber) && emp.Shifts.Count > 0)
                         {
                             if (!emp.HasADirectDepositAccount)

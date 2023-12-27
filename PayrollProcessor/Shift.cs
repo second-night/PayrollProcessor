@@ -317,16 +317,25 @@ namespace PayrollProcessor
         private static Dictionary<Employee, List<Jobs>> PayrateMessages = new();
         public float SpecialRate(Employee emp)
         {
-            if (emp.IdNumber == 1224 && JobType == Jobs.COACH_PUBLIC_DRIVING)
-            {
-                Log("");
-            }
-
             float specialRate = 0f;
             foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
             {
+                if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == JobType)
+                {
+                    return entry.Rate;
+                }
+            }
+            foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateSubstitutionExceptions)
+            {
                 if (entry.IdNumber == emp.IdNumber && (Jobs)entry.OverriddenJobType == JobType)
                 {
+                    foreach (var entry2 in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
+                    {
+                        if (entry2.IdNumber == emp.IdNumber && entry2.JobType == entry.OverridingJobType)
+                        {
+                            return entry2.Rate;
+                        }
+                    }
                     return emp.PayRates[(Jobs)entry.OverridingJobType];
                 }
             }

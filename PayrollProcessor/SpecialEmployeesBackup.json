@@ -110,7 +110,7 @@
     }
   ],
 
-  "PayRateExceptions" : [
+  "PayRateSubstitutionExceptions" : [
     {
       "Name":"Haji Siyaka",
       "IdNumber": 1252,
@@ -122,8 +122,8 @@
       "Name":"Kim Wick",
       "IdNumber": 1808,
       "OverriddenJobType": 7,
-      "OverridingJobType": 1,
-      "Notes":"When Kim clocks in as Mechanic, her rate is switched to her driver rate."
+      "OverridingJobType": 28,
+      "Notes":"When Kim clocks in as Mechanic, her rate is switched to her special non-cdl rate."
     },
     {
       "Name":"Keith Miller",
@@ -152,6 +152,16 @@
       "OverriddenJobType": 13,
       "OverridingJobType": 1,
       "Notes":"When Mari clocks in as Admin, her rate is switched to her driver rate."
+    }
+  ],
+
+  "PayRateExceptions" : [
+    {
+      "Name":"Kim Wick",
+      "IdNumber": 1808,
+      "JobType": 28,
+      "Rate": 18.50,
+      "Notes":"Kim Wick makes $18.50 as non-cdl driver."
     }
   ],
 

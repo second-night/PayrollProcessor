@@ -51,7 +51,7 @@ namespace PayrollProcessor
             {
                 Log("Error loading special exceptions Json. Either the file format is incorrect or the file was not found. If you have moved this program, please make sure that the folder structure has stayed intact beginning with the folder 'Payroll'. This should not be ignored.", true);
             }
-            if (SpecialEmployees.ShiftMgExceptions.Count == 0 && SpecialEmployees.PayRateExceptions.Count == 0)
+            if (SpecialEmployees.ShiftMgExceptions.Count == 0 && SpecialEmployees.PayRateSubstitutionExceptions.Count == 0)
             {
                 Log("Error loading special exceptions Json. Please make sure the file's json format has not been comprimised. Employee exceptions will not be active unless this is fixed.", true);
             }
@@ -115,7 +115,9 @@ namespace PayrollProcessor
             ExceptionLog += "\n";
             SpecialEmployees.SmallMgExceptions.FindAll(entry => SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a specially reduced MG of " + entry.Hours + " hours, specifically while driving bus# " + entry.BusNumber + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
-            SpecialEmployees.PayRateExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives their payrate for " + ((Jobs)entry.OverridingJobType).ToString() + " when they clock in as " + ((Jobs)entry.OverriddenJobType).ToString() + ".", 0f, false));
+            SpecialEmployees.PayRateSubstitutionExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives their payrate for " + ((Jobs)entry.OverridingJobType).ToString() + " when they clock in as " + ((Jobs)entry.OverriddenJobType).ToString() + ".", 0f, false));
+            ExceptionLog += "\n";
+            SpecialEmployees.PayRateExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives a special payrate of " + (entry.Rate).ToString() + " when they clock in as " + ((Jobs)entry.JobType).ToString() + ".", 0f, false));
             ExceptionLog += "\n\n\n\n";
             Log(ExceptionLog, true);
         }
@@ -160,7 +162,7 @@ namespace PayrollProcessor
         {
             if (EmployeeDictionary.ContainsKey(employeeIdNumber))
             {
-                ExceptionLog += EmployeeDictionary[employeeIdNumber].Name + ": " + guarantee + " hours guaranteed, " + Math.Round(SpecialMgShiftTotals.GetValueOrDefault(employeeIdNumber, 0f), 2) + " hours earned from guarantee.\n";
+                ExceptionLog += EmployeeDictionary[employeeIdNumber].Name + ": " + guarantee + " hours guaranteed, " + Math.Round(SpecialMgShiftTotals.GetValueOrDefault(employeeIdNumber, 0f), 2) + " hours earned from this guarantee.\n";
             }
             else
             {
@@ -184,6 +186,8 @@ namespace PayrollProcessor
         public List<SpecialBusEntry> SmallMgExceptions { get; set; } = new();
 
         public List<SpecialShiftEntry> SpecificShiftMgExceptions { get; set; } = new();
+
+        public List<SpecialPayRateSubstitutionEntry> PayRateSubstitutionExceptions { get; set; } = new();
 
         public List<SpecialPayRateEntry> PayRateExceptions { get; set; } = new();
 
@@ -226,10 +230,16 @@ namespace PayrollProcessor
         public int ShiftNumber { get; set; }
     }
 
-    public class SpecialPayRateEntry : SpecialEntry
+    public class SpecialPayRateSubstitutionEntry : SpecialEntry
     {
         public int OverriddenJobType { get; set; }
         public int OverridingJobType { get; set; }
+    }
+
+    public class SpecialPayRateEntry : SpecialEntry //example: special cdl rate that isn't qualified for raises
+    {
+        public int JobType { get; set; }
+        public float Rate { get; set; }
     }
 
     public class StartingRateEntry : SpecialEntry
