@@ -1,4 +1,5 @@
-﻿using static PayrollProcessor.Program;
+﻿using DocumentFormat.OpenXml.Spreadsheet;
+using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
 {
@@ -17,13 +18,13 @@ namespace PayrollProcessor
         public static int[/*location*/,/*day*/] DailySchoolRouteCounter = new int[4/*location*/,32/*day*/];
 
         public float ShiftTime;
+        public float? PayRate;
         //public float Overtime;
         public float MinimumGuaranteeHours;
         public float SummerGuaranteeHours;
         public Jobs JobType;
         public float DollarAmount;
         public float BonusDollars;
-        public float MgDollars;
         public float PerDiem;
         public int BusNumber;
         public string? Notes;
@@ -60,7 +61,7 @@ namespace PayrollProcessor
 
         public bool IsValid(Employee emp)
         {
-            bool isValid = ShiftTime + DollarAmount + MinimumGuaranteeHours + PerDiem + SummerGuaranteeHours + MgDollars + BonusDollars > 0;
+            bool isValid = ShiftTime + DollarAmount + MinimumGuaranteeHours + PerDiem + SummerGuaranteeHours + BonusDollars > 0;
             if (!isValid)
             {
                 Log("Shift: " + this.ToString() + " is not valid. Please investigate.");
@@ -192,6 +193,27 @@ namespace PayrollProcessor
                 }
                 else if (JobType == Jobs.DRIVER_CHARTER || JobType == Jobs.AIDE_CHARTER || JobType == Jobs.COACH_PUBLIC_DRIVING)
                 {
+                    if (StringSearch(Notes, "Hock"))
+                    {
+                        if (StringSearch(Notes, "Hockey"))
+                        {
+                            Log("Check here (for testing) 959599595", true);
+                            float payRate = employee.GetPayRateForShift(this);
+                            if (StringSearch(Notes, "Band") || StringSearch(Notes, "120"))
+                            {
+                                return (float)Math.Round(GF_HOCKEY_BAND_PAY / payRate, 2);
+                            }
+                            else
+                            {
+                                return (float)Math.Round(GF_HOCKEY_PAY / payRate, 2);
+                            }
+                        }
+                        else
+                        {
+                            Log("Found 'Hock', but not 'Hockey'. Typo?", true);
+                        }
+                    }
+
                     sourceOfMg = MgSource.STANDARD_CHARTER;
                     if ((null != Notes && StringSearch(Notes, "private")) || JobType == Jobs.COACH_PUBLIC_DRIVING)
                     {
@@ -309,36 +331,10 @@ namespace PayrollProcessor
             return JobType == Jobs.DRIVER_SCHOOL || JobType == Jobs.AIDE_SCHOOL || JobType == Jobs.NON_CDL_DRIVER;
         }
 
-        public bool HasSpecialPayRate(Employee emp)
-        {
-            return SpecialRate(emp) > emp.PayRates.GetValueOrDefault(JobType, 0f);
-        }
-
         private static Dictionary<Employee, List<Jobs>> PayrateMessages = new();
         public float SpecialRate(Employee emp)
         {
             float specialRate = 0f;
-            foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
-            {
-                if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == JobType)
-                {
-                    return entry.Rate;
-                }
-            }
-            foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateSubstitutionExceptions)
-            {
-                if (entry.IdNumber == emp.IdNumber && (Jobs)entry.OverriddenJobType == JobType)
-                {
-                    foreach (var entry2 in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
-                    {
-                        if (entry2.IdNumber == emp.IdNumber && entry2.JobType == entry.OverridingJobType)
-                        {
-                            return entry2.Rate;
-                        }
-                    }
-                    return emp.PayRates[(Jobs)entry.OverridingJobType];
-                }
-            }
             if (!emp.PayRates.ContainsKey(JobType) && JobType != Jobs.NON_CDL_DRIVER && JobType != Jobs.VACATION && JobType != Jobs.HOLIDAY && JobType != Jobs.WASH_BAY_OT && JobType != Jobs.COACH_PUBLIC_DRIVING && JobType != Jobs.DRIVER_COACH)
             {
                 if (!PayrateMessages.ContainsKey(emp) || !PayrateMessages[emp].Contains(JobType))
@@ -410,7 +406,6 @@ namespace PayrollProcessor
         {
             ShiftTime += shift.ShiftTime;
             MinimumGuaranteeHours += shift.MinimumGuaranteeHours;
-            MgDollars += shift.MgDollars;
             SummerGuaranteeHours += shift.SummerGuaranteeHours;
             DollarAmount += shift.DollarAmount;
             BonusDollars += shift.BonusDollars;
@@ -422,8 +417,7 @@ namespace PayrollProcessor
 
         public Type Type()
         {
-            float dollarAmount = DollarAmount + MgDollars;
-            return ShiftTime > 0 && dollarAmount > 0 ? PayrollProcessor.Type.BOTH : ShiftTime > 0 ? PayrollProcessor.Type.HOURS : PayrollProcessor.Type.DOLLAR_AMOUNT;
+            return ShiftTime > 0 ? PayrollProcessor.Type.HOURS : PayrollProcessor.Type.DOLLAR_AMOUNT;
         }
 
         public static bool WereThereSchoolRoutesOnThisDay(Location location, int dayNumber)
@@ -453,6 +447,6 @@ namespace PayrollProcessor
 
     public enum Type
     {
-        HOURS, DOLLAR_AMOUNT, BOTH
+        HOURS, DOLLAR_AMOUNT
     }
 }

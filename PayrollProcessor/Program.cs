@@ -1,3 +1,4 @@
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.VisualBasic;
 using System.Diagnostics;
 using System.Text;
@@ -328,69 +329,32 @@ namespace PayrollProcessor
                             if (shift.IsValid(emp))
                             {
                                 SpecialEmployeeHandler.GetInstance().CheckForTimeFrameException(emp, shift);
-                                if (shift.Type() == Type.HOURS && shift.HasSpecialPayRate(emp))
+                                DoBusStartingBonusAndMg(shift, emp);
+                                CheckForMechanicHoursForShift(shift, emp);
+
+                                float? payRate = shift.PayRate;
+                                if (shift.Type() == Type.HOURS && null == payRate)
                                 {
-                                    shift.DollarAmount = (float)Math.Round(shift.ShiftTime * shift.SpecialRate(emp), 2);
-                                    if (shift.MinimumGuaranteeHours > 0)
-                                    {
-                                        shift.MgDollars = (float)Math.Round(shift.MinimumGuaranteeHours * shift.SpecialRate(emp), 2);
-                                    }
+                                    payRate = emp.GetPayRateForShift(shift);
+                                    shift.PayRate = payRate;
                                 }
-                                if (null == emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()])
+                                else if (shift.ShiftTime > 0.01f && shift.JobType != Jobs.DRIVER_COACH)
                                 {
-                                    emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()] = new();
+                                    Log("Check here 131312321", true);
                                 }
 
-                                if (!emp.ShiftTotals[(int)shift.CompanyName, (int) shift.Type()].ContainsKey(shift.GetLaborCode(false)))
-                                {
-                                    emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()].Add(shift.GetLaborCode(false), new());
-                                }
-
-                                if (!emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)].ContainsKey(shift.WeekNumber))
-                                {
-                                    emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)].Add(shift.WeekNumber, new Shift(Company.VALLEY_BUS_LLC, shift.JobType));
-                                }
-
-                                if (BusStartingDays.Contains(shift.Date.Day))
-                                {
-                                    if (shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0 || StringSearch(shift.Notes, "bonus"))
-                                    {
-                                        foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.BusStartingBonusDollars)
-                                        {
-                                            if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == shift.JobType)
-                                            {
-                                                shift.BonusDollars += entry.Dollars;
-                                                if (shift.ShiftTime < 2)
-                                                {
-                                                    shift.MinimumGuaranteeHours += 2f - shift.ShiftTime;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                FindOrMakeMatchingShiftTotalShift(shift, emp, out Shift shiftTotalShift);
+                                shiftTotalShift.PayRate = payRate;
 
                                 //sum all hours
-                                emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)][shift.WeekNumber].IsATotalsShift = true;
-                                emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)][shift.WeekNumber].AddAll(shift);
-
-                                if (emp.IsAMechanicApprentice)
-                                {
-                                    if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.MECHANIC)
-                                    {
-                                        if (!ApprenticeMechanicHours.ContainsKey(emp.IdNumber))
-                                        {
-                                            ApprenticeMechanicHours.Add(emp.IdNumber, new());
-                                        }
-                                        ApprenticeMechanicHours[emp.IdNumber][shift.JobType] = ApprenticeMechanicHours[emp.IdNumber].GetValueOrDefault(shift.JobType, 0f) + shift.ShiftTime;
-                                    }
-                                }
+                                shiftTotalShift.AddAll(shift);
 
                                 dailyRunningTotal[0, shift.Date.Day] += shift.WorkingHours();
                                 dailyRunningTotal[1, shift.Date.Day] += shift.AllHours(true);
                                 if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL)
                                 {
                                     bDriverOrAideShiftWasFoundForDay[shift.Date.Day] = true;
-                                    shiftForDay[shift.Date.Day] = emp.ShiftTotals[(int)shift.CompanyName, (int)shift.Type()][shift.GetLaborCode(false)][shift.WeekNumber];
+                                    shiftForDay[shift.Date.Day] = shiftTotalShift;
                                 }
                             }
                         }
@@ -406,31 +370,35 @@ namespace PayrollProcessor
                                 {
                                     foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
                                     {
-                                        foreach (var shift in pair.Values)
+                                        foreach (var shifts in pair.Values)
                                         {
-                                            if (shift.IsValid(emp))
+                                            foreach (var shift in shifts)
                                             {
-                                                weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
-                                                weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
-                                                //bob medhus
-                                                if (emp.IdNumber == 1657)
+                                                if (shift.IsValid(emp))
                                                 {
-                                                    medhusCounter[shift.WeekNumber, 0, company] += shift.WorkingHours();
-                                                    float dollarAmount = shift.DollarAmount;
-                                                    if (dollarAmount < 0.0001f)
+                                                    weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
+                                                    weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
+                                                    //bob medhus
+                                                    if (emp.IdNumber == 1657)
                                                     {
-                                                        if (!emp.PayRates.ContainsKey(shift.JobType))
+                                                        medhusCounter[shift.WeekNumber, 0, company] += shift.WorkingHours();
+                                                        float dollarAmount = shift.DollarAmount;
+                                                        if (dollarAmount < 0.0001f)
                                                         {
-                                                            Log("Problem getting payrate for totaling up bob medhus's hours", true);
+                                                            float payRate = emp.GetPayRateForShift(shift);
+                                                            if (payRate < 0.1f)
+                                                            {
+                                                                Log("Problem getting payrate for totaling up bob medhus's hours", true);
+                                                            }
+                                                            else
+                                                            {
+                                                                dollarAmount = shift.WorkingHours() * emp.PayRates[shift.JobType];
+                                                            }
                                                         }
-                                                        else
-                                                        {
-                                                            dollarAmount = shift.WorkingHours() * emp.PayRates[shift.JobType];
-                                                        }
+                                                        medhusCounter[shift.WeekNumber, 1, company] += dollarAmount;
+                                                        medhusCounter[shift.WeekNumber, 2, company] += shift.BonusDollars;
+                                                        medhusCounter[shift.WeekNumber, 3, company] += shift.PerDiem;
                                                     }
-                                                    medhusCounter[shift.WeekNumber, 1, company] += dollarAmount;
-                                                    medhusCounter[shift.WeekNumber, 2, company] += shift.BonusDollars + shift.MgDollars;
-                                                    medhusCounter[shift.WeekNumber, 3, company] += shift.PerDiem;
                                                 }
                                             }
                                         }
@@ -454,16 +422,7 @@ namespace PayrollProcessor
                                             float dailyMg = entry.Hours - dailyRunningTotal[1, dayNumber];
                                             shiftForDay[dayNumber].MinimumGuaranteeHours += (float)Math.Round(dailyMg, 2);
                                             dailyMgList.Add((float)Math.Round(dailyMg, 2));
-                                            if (shiftForDay[dayNumber].MgDollars > 0)
-                                            {
-                                                if (shiftForDay[dayNumber].SpecialRate(emp) < 0.01f)
-                                                {
-                                                    Log("ERROR:5454352", true);
-                                                }
-                                                shiftForDay[dayNumber].MgDollars += (float)Math.Round(dailyMg * shiftForDay[dayNumber].SpecialRate(emp), 2);
-                                            }
                                         }
-                                        break;
                                     }
                                 }
                                 if (dailyMgList.Count > 0)
@@ -485,15 +444,6 @@ namespace PayrollProcessor
                                     {
                                         float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
                                         emp.FindDriverOrAideShiftForWeek(weekNumber, emp.IsADriverOrAnAide()).MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
-
-                                        if (emp.FindDriverOrAideShiftForWeek(weekNumber, emp.IsADriverOrAnAide()).MgDollars > 0)
-                                        {
-                                            if (emp.FindDriverOrAideShiftForWeek(weekNumber, emp.IsADriverOrAnAide()).SpecialRate(emp) < 0.01f)
-                                            {
-                                                Log("ERROR:54543656552", true);
-                                            }
-                                            emp.FindDriverOrAideShiftForWeek(weekNumber, emp.IsADriverOrAnAide()).MgDollars += (float)Math.Round(weeklyMg * emp.FindDriverOrAideShiftForWeek(weekNumber, emp.IsADriverOrAnAide()).SpecialRate(emp), 2);
-                                        }
                                         DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
                                         SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
                                     }
@@ -537,6 +487,83 @@ namespace PayrollProcessor
                             Log(message);
                         }
                     }
+                }
+            }
+        }
+
+        private static void FindOrMakeMatchingShiftTotalShift(Shift shiftToMatch, Employee emp, out Shift shiftTotalShift)
+        {
+            if (null == emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()])
+            {
+                emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()] = new();
+            }
+
+            if (!emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()].ContainsKey(shiftToMatch.GetLaborCode(false)))
+            {
+                emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()].Add(shiftToMatch.GetLaborCode(false), new());
+            }
+
+            if (!emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()][shiftToMatch.GetLaborCode(false)].ContainsKey(shiftToMatch.WeekNumber))
+            {
+                emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()][shiftToMatch.GetLaborCode(false)].Add(shiftToMatch.WeekNumber, new());
+            }
+
+            foreach (Shift possibleLikeShift in emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()][shiftToMatch.GetLaborCode(false)][shiftToMatch.WeekNumber])
+            {
+                if (null != shiftToMatch.PayRate)
+                {
+                    if (null != possibleLikeShift.PayRate && Math.Abs((float)(possibleLikeShift.PayRate - shiftToMatch.PayRate)) < 0.01f)
+                    {
+                        shiftTotalShift = possibleLikeShift;
+                        return;
+                    }
+                }
+                else if (null == possibleLikeShift.PayRate)
+                {
+                    shiftTotalShift = possibleLikeShift;
+                    return;
+                }
+            }
+
+            shiftTotalShift = new Shift(Company.VALLEY_BUS_LLC, shiftToMatch.JobType)
+            {
+                IsATotalsShift = true
+            };
+            emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()][shiftToMatch.GetLaborCode(false)][shiftToMatch.WeekNumber].Add(shiftTotalShift);
+        }
+
+        private static void DoBusStartingBonusAndMg(Shift shift, Employee emp)
+        {
+            if (BusStartingDays.Contains(shift.Date.Day))
+            {
+                if (shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0 || StringSearch(shift.Notes, "bonus"))
+                {
+                    foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.BusStartingBonusDollars)
+                    {
+                        if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == shift.JobType)
+                        {
+                            shift.BonusDollars += entry.Dollars;
+                            if (shift.ShiftTime < 2)
+                            {
+                                shift.MinimumGuaranteeHours += 2f - shift.ShiftTime;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void CheckForMechanicHoursForShift(Shift shift, Employee emp)
+        {
+            if (emp.IsAMechanicApprentice)
+            {
+                if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.MECHANIC)
+                {
+                    if (!ApprenticeMechanicHours.ContainsKey(emp.IdNumber))
+                    {
+                        ApprenticeMechanicHours.Add(emp.IdNumber, new());
+                    }
+                    ApprenticeMechanicHours[emp.IdNumber][shift.JobType] = ApprenticeMechanicHours[emp.IdNumber].GetValueOrDefault(shift.JobType, 0f) + shift.ShiftTime;
                 }
             }
         }
@@ -597,6 +624,10 @@ namespace PayrollProcessor
 
         public static void GiveRaiseToEmployee(Employee employee, Jobs job, float rate)
         {
+            if (employee.IdNumber == 1907)
+            {
+                Log("");
+            }
             employee.NeedsUpdateInPayroll = true;
             employee.PayRates[job] = rate;
             if (!ExcelWorker.ImportEmployees.ContainsKey(employee.IdNumber))

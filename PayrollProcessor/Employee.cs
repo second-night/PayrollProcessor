@@ -1,4 +1,5 @@
-﻿using static PayrollProcessor.Program;
+﻿using System.Data;
+using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
 {
@@ -23,7 +24,7 @@ namespace PayrollProcessor
         public bool IsAMechanicApprentice;
         public int YearsOfService;
         public bool WasAlreadyInPayroll;
-        public Dictionary<string/*job code*/, Dictionary<int/*week num*/, Shift>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, Shift>>[2/*company*/,3/*0-has hours,1-has dollars,2-has both*/];
+        public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/,3/*0-has hours,1-has dollars,2-has both*/];
 
 
 
@@ -38,12 +39,58 @@ namespace PayrollProcessor
             PayRates[job] = Math.Max(PayRates.GetValueOrDefault(job, 0f), rate);
         }
 
+        public float GetPayRateForShift(Shift shift)
+        {
+            foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
+            {
+                if (entry.IdNumber == IdNumber && (Jobs)entry.JobType == shift.JobType)
+                {
+                    return entry.Rate;
+                }
+            }
+            foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateSubstitutionExceptions)
+            {
+                if (entry.IdNumber == IdNumber && (Jobs)entry.OverriddenJobType == shift.JobType)
+                {
+                    foreach (var entry2 in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
+                    {
+                        if (entry2.IdNumber == IdNumber && entry2.JobType == entry.OverridingJobType)
+                        {
+                            return entry2.Rate;
+                        }
+                    }
+                    return PayRates[(Jobs)entry.OverridingJobType];
+                }
+            }
+
+            if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.NON_CDL_DRIVER)
+            {
+                return GetDriverRateForSchoolRouteShift(shift);
+            }
+
+            float specialRate = shift.SpecialRate(this);
+
+            if (PayRates.ContainsKey(shift.JobType))
+            {
+                return Math.Max(specialRate, PayRates[shift.JobType]);
+            }
+
+            if (specialRate > 0.001f)
+            {
+                return specialRate;
+            }
+
+            DelayedLog("Warninig: Cannot determine a payrate for Employee " + Name + " ( " + IdNumber + " ) for jobType: " + shift.JobType.ToString());
+            return 0f;
+        }
+
         public float GetDriverRateForSchoolRouteShift(Shift shift)
         {
             if (shift.JobType != Jobs.DRIVER_SCHOOL && shift.JobType != Jobs.NON_CDL_DRIVER)
             {
                 Log("Trying to get driver rate for school route shift for shift.jobtype == " + shift.JobType, true);
             }
+
             float rate = 0f;
             if (shift.JobType == Jobs.NON_CDL_DRIVER)
             {
@@ -104,17 +151,20 @@ namespace PayrollProcessor
         //only use this for weekly MG excpetions - otherwise make sure it will work properly if used for another purpose.
         public Shift FindDriverOrAideShiftForWeek(int week, Jobs jobType)
         {
-            for (int shiftType = 0; shiftType <= (int)Type.BOTH; ++ shiftType)
+            for (int shiftType = 0; shiftType <= (int)Type.DOLLAR_AMOUNT; ++ shiftType)
             {
                 if (null != ShiftTotals[(int)Company.VALLEY_BUS_LLC, shiftType])
                 {
                     foreach (var entry in ShiftTotals[(int)Company.VALLEY_BUS_LLC, shiftType].Values)
                     {
-                        foreach (Shift shift in entry.Values)
+                        foreach (List<Shift> shiftList in entry.Values)
                         {
-                            if (shift.WeekNumber == week && shift.JobType == jobType)
+                            foreach (Shift shift in shiftList)
                             {
-                                return shift;
+                                if (shift.WeekNumber == week && shift.JobType == jobType)
+                                {
+                                    return shift;
+                                }
                             }
                         }
                     }
@@ -130,7 +180,7 @@ namespace PayrollProcessor
                 }
                 if (!ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC][Shift.GetLaborCode(jobType, false)].ContainsKey(week))
                 {
-                    ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC][Shift.GetLaborCode(jobType, false)].Add(week, shift);
+                    ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC][Shift.GetLaborCode(jobType, false)][week].Add(shift);
                 }
                 else
                 {

@@ -710,6 +710,10 @@ namespace PayrollProcessor
                             }
 
                             TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out shift.Notes);
+                            if (StringSearch(shift.Notes, "TNT"))
+                            {
+                                shift.JobType = Jobs.DRIVER_CHARTER;
+                            }
                             if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))
                             {
                                 string? busNumberString = cellData[rowNumber, BUS_NUMBER_COLUMN].ToString();
@@ -766,18 +770,6 @@ namespace PayrollProcessor
                                 if (shift.JobType == Jobs.DRIVER_SCHOOL)
                                 {
                                     Shift.DailySchoolRouteCounter[(int)shift.ShiftLocation, conv.Day] += 1;
-                                }
-                            }
-
-                            if (StringSearch(shift.Notes, "Hockey"))
-                            {
-                                if (StringSearch(shift.Notes, "Band") || StringSearch(shift.Notes, "120"))
-                                {
-                                    shift.DollarAmount = GF_HOCKEY_BAND_PAY;
-                                }
-                                else
-                                {
-                                    shift.DollarAmount = GF_HOCKEY_PAY;
                                 }
                             }
 
@@ -870,6 +862,13 @@ namespace PayrollProcessor
                         TryGetFloatFromCell(cellData[rowNumber, HOURS_COLUMN], out float hours);
                         TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out int busNumber);
 
+                        float? payRate = null;
+                        if (hours > 0.001f)
+                        {
+                            payRate = (float)Math.Round(dollars / hours, 2);
+                            dollars = 0f;
+                        }
+
                         List<Shift> shifts = new();
                         if (hours > 0/*week number doesn't really matter if there's no hours*/ &&
                             dates.Count > 1 && dates[0].CompareTo(FirstDayWeek2) != dates[^1].CompareTo(FirstDayWeek2))
@@ -878,7 +877,6 @@ namespace PayrollProcessor
 
                             shifts = dates.Select(date =>
                             {
-                                //TODO: test this
                                 Shift shift = new(company)
                                 {
                                     Date = date,
@@ -888,6 +886,7 @@ namespace PayrollProcessor
                                     BonusDollars = date.Equals(dates[0]) ? bonus : 0,
                                     PerDiem = date.Equals(dates[0]) ? perDiem : 0,
                                     ShiftTime = hours / dates.Count,
+                                    PayRate = payRate,
                                     BusNumber = busNumber
                                 };
                                 return shift;
@@ -919,6 +918,7 @@ namespace PayrollProcessor
                                 BonusDollars = bonus,
                                 PerDiem = perDiem,
                                 ShiftTime = hours,
+                                PayRate = payRate,
                                 BusNumber = busNumber
 
                             });
@@ -1020,32 +1020,35 @@ namespace PayrollProcessor
                                 {
                                     foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
                                     {
-                                        foreach (Shift shift in pair.Values)
+                                        foreach (var shifts in pair.Values)
                                         {
-                                            if (shift.IsValid(emp) && shift.CompanyName == (Company)company)
+                                            foreach (Shift shift in shifts)
                                             {
-                                                if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars + shift.PerDiem > 0f)
+                                                if (shift.CompanyName == (Company)company && shift.IsValid(emp))
                                                 {
-                                                    if (shift.JobType == Jobs.VACATION)
+                                                    if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars + shift.PerDiem > 0f)
                                                     {
-                                                        WriteToMatrix(emp, shift, shift.ShiftTime, 0f, TimeCardImportColumns.VACATION_HOURS, TimeCardImportColumns.VACATION_WEEK, TimeCardImportColumns.VACATION_DOLLARS, ref rowCounter, matrix);
+                                                        if (shift.JobType == Jobs.VACATION)
+                                                        {
+                                                            WriteToMatrix(emp, shift, shift.ShiftTime, 0f, TimeCardImportColumns.VACATION_HOURS, TimeCardImportColumns.VACATION_WEEK, null, ref rowCounter, matrix);
+                                                        }
+                                                        else if (shift.JobType == Jobs.HOLIDAY)
+                                                        {
+                                                            WriteToMatrix(emp, shift, shift.ShiftTime, 0f, TimeCardImportColumns.HOLIDAY_HOURS, TimeCardImportColumns.HOLIDAY_WEEK, null, ref rowCounter, matrix);
+                                                        }
+                                                        else
+                                                        {
+                                                            WriteToMatrix(emp, shift, shift.ShiftTime, shift.DollarAmount, TimeCardImportColumns.REGULAR_HOURS, TimeCardImportColumns.REGULAR_HOURS_WEEK, TimeCardImportColumns.REGULAR_DOLLARS, ref rowCounter, matrix);
+                                                        }
                                                     }
-                                                    else if (shift.JobType == Jobs.HOLIDAY)
+                                                    if (shift.MinimumGuaranteeHours > 0f)
                                                     {
-                                                        WriteToMatrix(emp, shift, shift.ShiftTime, 0f, TimeCardImportColumns.HOLIDAY_HOURS, TimeCardImportColumns.HOLIDAY_WEEK, TimeCardImportColumns.HOLIDAY_DOLLARS, ref rowCounter, matrix);
+                                                        WriteToMatrix(emp, shift, shift.MinimumGuaranteeHours, 0f, TimeCardImportColumns.MG_HOURS, TimeCardImportColumns.MG_WEEK, null, ref rowCounter, matrix);
                                                     }
-                                                    else
+                                                    if (shift.SummerGuaranteeHours > 0f)
                                                     {
-                                                        WriteToMatrix(emp, shift, shift.ShiftTime, shift.DollarAmount, TimeCardImportColumns.REGULAR_HOURS, TimeCardImportColumns.REGULAR_HOURS_WEEK, TimeCardImportColumns.REGULAR_DOLLARS, ref rowCounter, matrix);
+                                                        WriteToMatrix(emp, shift, shift.SummerGuaranteeHours, 0f, TimeCardImportColumns.SUMMER_BONUS_HOURS, TimeCardImportColumns.SUMMER_BONUS_WEEK, null, ref rowCounter, matrix);
                                                     }
-                                                }
-                                                if (shift.MinimumGuaranteeHours > 0f)
-                                                {
-                                                    WriteToMatrix(emp, shift, shift.MinimumGuaranteeHours, shift.MgDollars, TimeCardImportColumns.MG_HOURS, TimeCardImportColumns.MG_WEEK, TimeCardImportColumns.MG_DOLLARS, ref rowCounter, matrix);
-                                                }
-                                                if (shift.SummerGuaranteeHours > 0f)
-                                                {
-                                                    WriteToMatrix(emp, shift, shift.SummerGuaranteeHours, 0f, TimeCardImportColumns.SUMMER_BONUS_HOURS, TimeCardImportColumns.SUMMER_BONUS_WEEK, TimeCardImportColumns.SUMMER_BONUS_DOLLARS, ref rowCounter, matrix);
                                                 }
                                             }
                                         }
@@ -1255,32 +1258,29 @@ namespace PayrollProcessor
 
         private void WriteHeadersForTimeCardImport(Excel.Worksheet workSheet)
         {
-            workSheet.Cells[1, 1] = "Key";
-            workSheet.Cells[1, 2] = "E_Hourly Regular_Hours";
-            workSheet.Cells[1, 3] = "E_Blended Overtim_Hours";
-            workSheet.Cells[1, 4] = "E_Min Guaran_Hours";
-            workSheet.Cells[1, 5] = "E_Holiday_Hours";
-            workSheet.Cells[1, 6] = "E_Vacation_Hours";
-            workSheet.Cells[1, 7] = "E_Hourly Regular_WeekNumber";
-            workSheet.Cells[1, 8] = "E_Blended Overtim_WeekNumber";
-            workSheet.Cells[1, 9] = "E_Vacation_Dollars";
-            workSheet.Cells[1, 10] = "E_Hourly Regular_Dollars";
-            workSheet.Cells[1, 11] = "E_Per Diem_Dollars";
-            workSheet.Cells[1, 12] = "LaborValue1";
-            workSheet.Cells[1, 13] = "E_Holiday_Dollars";
-            workSheet.Cells[1, 14] = "E_Vacation_WeekNumber";
-            workSheet.Cells[1, 15] = "E_Holiday_WeekNumber";
-            workSheet.Cells[1, 16] = "E_Summer Bonus_Hours";
-            workSheet.Cells[1, 17] = "E_Summer Bonus_WeekNumber";
-            workSheet.Cells[1, 18] = "E_Min Guaran_WeekNumber";
-            workSheet.Cells[1, 19] = "E_Bonus_Dollars";
-            workSheet.Cells[1, 20] = "E_Min Guaran_Dollars";
-            workSheet.Cells[1, 21] = "E_Summer Bonus_Dollars";
+            workSheet.Cells[1, TimeCardImportColumns.EMP_NUMBER + 1] = "Key";
+            workSheet.Cells[1, TimeCardImportColumns.REGULAR_HOURS + 1] = "E_Hourly Regular_Hours";
+            workSheet.Cells[1, TimeCardImportColumns.OT_HOURS + 1] = "E_Blended Overtim_Hours";
+            workSheet.Cells[1, TimeCardImportColumns.MG_HOURS + 1] = "E_Min Guaran_Hours";
+            workSheet.Cells[1, TimeCardImportColumns.HOLIDAY_HOURS + 1] = "E_Holiday_Hours";
+            workSheet.Cells[1, TimeCardImportColumns.VACATION_HOURS + 1] = "E_Vacation_Hours";
+            workSheet.Cells[1, TimeCardImportColumns.REGULAR_HOURS_WEEK + 1] = "E_Hourly Regular_WeekNumber";
+            workSheet.Cells[1, TimeCardImportColumns.OT_WEEK + 1] = "E_Blended Overtim_WeekNumber";
+            workSheet.Cells[1, TimeCardImportColumns.REGULAR_DOLLARS + 1] = "E_Hourly Regular_Dollars";
+            workSheet.Cells[1, TimeCardImportColumns.PER_DIEM_DOLLARS_COLUMN + 1] = "E_Per Diem_Dollars";
+            workSheet.Cells[1, TimeCardImportColumns.JOB_CODE + 1] = "LaborValue1";
+            workSheet.Cells[1, TimeCardImportColumns.VACATION_WEEK + 1] = "E_Vacation_WeekNumber";
+            workSheet.Cells[1, TimeCardImportColumns.HOLIDAY_WEEK + 1] = "E_Holiday_WeekNumber";
+            workSheet.Cells[1, TimeCardImportColumns.SUMMER_BONUS_HOURS + 1] = "E_Summer Bonus_Hours";
+            workSheet.Cells[1, TimeCardImportColumns.SUMMER_BONUS_WEEK + 1] = "E_Summer Bonus_WeekNumber";
+            workSheet.Cells[1, TimeCardImportColumns.MG_WEEK + 1] = "E_Min Guaran_WeekNumber";
+            workSheet.Cells[1, TimeCardImportColumns.BONUS_DOLLARS_COLUMN + 1] = "E_Bonus_Dollars";
+            workSheet.Cells[1, TimeCardImportColumns.PAY_RATE_COLUMN + 1] = "E_*_ORRate";
         }
 
         private enum TimeCardImportColumns
         {
-            EMP_NUMBER = 0, REGULAR_HOURS = 1, OT_HOURS = 2, MG_HOURS = 3, HOLIDAY_HOURS = 4, VACATION_HOURS = 5, REGULAR_HOURS_WEEK = 6, OT_WEEK = 7, VACATION_DOLLARS = 8, REGULAR_DOLLARS = 9, PER_DIEM_DOLLARS_COLUMN = 10, JOB_CODE = 11, HOLIDAY_DOLLARS = 12, VACATION_WEEK = 13, HOLIDAY_WEEK = 14, SUMMER_BONUS_HOURS = 15, SUMMER_BONUS_WEEK = 16, MG_WEEK = 17, BONUS_DOLLARS_COLUMN = 18, MG_DOLLARS = 19, SUMMER_BONUS_DOLLARS = 20
+            EMP_NUMBER = 0, JOB_CODE, REGULAR_HOURS, REGULAR_HOURS_WEEK, MG_HOURS, MG_WEEK, HOLIDAY_HOURS, HOLIDAY_WEEK, VACATION_HOURS, VACATION_WEEK, PAY_RATE_COLUMN, REGULAR_DOLLARS, OT_HOURS, OT_WEEK, BONUS_DOLLARS_COLUMN, PER_DIEM_DOLLARS_COLUMN, SUMMER_BONUS_HOURS, SUMMER_BONUS_WEEK 
         }
 
         private void SaveWorkBook(Excel.Workbook workBook, string filePath)
@@ -1339,22 +1339,44 @@ namespace PayrollProcessor
             return false;
         }
 
-        private void WriteToMatrix(Employee emp, Shift shift, float time, float dollarAmount, TimeCardImportColumns timeColumn, TimeCardImportColumns weekColumn, TimeCardImportColumns dollarColumn, ref int rowCounter, object[,] matrix)
+        private void WriteToMatrix(Employee emp, Shift shift, float time, float dollarAmount, TimeCardImportColumns timeColumn, TimeCardImportColumns weekColumn, TimeCardImportColumns? dollarColumn, ref int rowCounter, object[,] matrix)
         {
             matrix[rowCounter, (int)weekColumn] = shift.WeekNumber;
             matrix[rowCounter, (int)TimeCardImportColumns.EMP_NUMBER] = emp.IdNumber.ToString();
             matrix[rowCounter, (int)TimeCardImportColumns.JOB_CODE] = shift.GetLaborCode(false);
             if (time > 0.001f)
             {
-                matrix[rowCounter, (int)timeColumn] = Math.Round(time, 2);
-                if (shift.HasSpecialPayRate(emp) && dollarAmount < 0.01f)
+                if (dollarAmount > 0f)
                 {
-                    matrix[rowCounter, (int)dollarColumn] = Math.Round(shift.SpecialRate(emp) * time, 2);
+                    Log("In WriteToMatrix(): time > 0f && dollarAmount > 0f", true);
                 }
+                matrix[rowCounter, (int)timeColumn] = Math.Round(time, 2);
             }
             if (dollarAmount > 0f)
             {
-                matrix[rowCounter, (int)dollarColumn] = Math.Round(dollarAmount, 2);
+                if (shift.PayRate > 0f)
+                {
+                    Log("In WriteToMatrix(): dollarAmount > 0f && shift.PayRate > 0f", true);
+                }
+                if (null == dollarColumn)
+                {
+                    Log("In WriteToMatrix(): dollarAmount > 0f but null == dollarColumn.", true);
+                }
+                else
+                {
+                    matrix[rowCounter, (int)dollarColumn] = Math.Round(dollarAmount, 2);
+                }
+            } 
+            else if (shift.PayRate > 0f)
+            {
+                matrix[rowCounter, (int)TimeCardImportColumns.PAY_RATE_COLUMN] = shift.PayRate;
+            }
+            else
+            {
+                if (shift.PerDiem < 0.1f)
+                { //some shifts are just a per diem entry
+                    Log("No Payrate or Dollar amount found for shift", true);
+                }
             }
             if (!shift.ExtrasWereWrittenToExport)
             {
