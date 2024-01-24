@@ -224,7 +224,11 @@ namespace PayrollProcessor
                             if (!EmployeeDictionary.ContainsKey(employeeNumber))
                             {
                                 string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
-                                EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name));
+                                Employee employee = new(employeeNumber, name)
+                                {
+                                    IsPartialEntry = true
+                                };
+                                EmployeeDictionary.Add(employeeNumber, employee);
                             }
                             EmployeeDictionary[employeeNumber].HadHoursInTimesheets = true;
 
@@ -300,8 +304,10 @@ namespace PayrollProcessor
                     {
                         continue;
                     }
-                    ImportedEmployee importedEmployee = new();
-                    importedEmployee.WasOnImployeeExportSheet = true;
+                    ImportedEmployee importedEmployee = new()
+                    {
+                        WasOnImployeeExportSheet = true
+                    };
                     ImportEmployees.Add(employeeNumber, importedEmployee);
                     importedEmployee.ImportFields.Add("TimeClockID", employeeNumber.ToString());
                     importedEmployee.ImportFields.Add("EmployeeNumber", employeeNumber.ToString());
@@ -315,6 +321,7 @@ namespace PayrollProcessor
                         Program.EmployeeDictionary[employeeNumber].WasCreatedFromEmployeeExport = true;
                     }
                     Employee employee = Program.EmployeeDictionary[employeeNumber];
+                    employee.IsPartialEntry = false;
 
                     foreach (var header in headers)
                     {
@@ -1004,15 +1011,15 @@ namespace PayrollProcessor
                 {
                     if (emp != null)
                     {
-                        if (emp.IdNumber == 934)
-                        {
-                            Log("");
-                        }
                         if (!Program.EmployeeIdsToIgnore.Contains(emp.IdNumber) && emp.Shifts.Count > 0)
                         {
                             if (!emp.HasADirectDepositAccount)
                             {
                                 DelayedLog("Employee: " + emp.Name + " (" + emp.IdNumber + ") has no active DD account. Phone: " + emp.PhoneNumber);
+                            }
+                            if (emp.IsPartialEntry)
+                            {
+                                Log("Employee: (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
                             }
                             for (int shiftType = 0; shiftType < 3; ++shiftType)
                             {
@@ -1140,6 +1147,10 @@ namespace PayrollProcessor
             {
                 if (employeeEntry.Value.ImportFields.Count > 0)
                 {
+                    if (StringSearch(employeeEntry.Value.ImportFields.GetValueOrDefault("FirstName", "").ToString(), "Jeff"))
+                    {
+                        Log("");
+                    }
                     foreach (var accountInfo in employeeEntry.Value.DDAccounts)
                     {
                         if (accountInfo.Count > 0)

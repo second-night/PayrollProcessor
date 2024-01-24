@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using DocumentFormat.OpenXml.Spreadsheet;
+using System.Data;
 using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
@@ -24,6 +25,7 @@ namespace PayrollProcessor
         public bool IsAMechanicApprentice;
         public int YearsOfService;
         public bool WasAlreadyInPayroll;
+        public bool IsPartialEntry = false;
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/,3/*0-has hours,1-has dollars,2-has both*/];
 
 
@@ -59,7 +61,18 @@ namespace PayrollProcessor
                             return entry2.Rate;
                         }
                     }
-                    return PayRates[(Jobs)entry.OverridingJobType];
+                    if (PayRates.ContainsKey((Jobs)entry.OverridingJobType))
+                    {
+                        return PayRates[(Jobs)entry.OverridingJobType];
+                    }
+                    else if ((Jobs)entry.OverridingJobType == Jobs.NON_CDL_DRIVER)
+                    {
+                        return NonCdlRate(shift.IsAGrandForksShift);
+                    }
+                    else
+                    {
+                        Log("Problem finding PayRate: " + ((Jobs)entry.OverridingJobType).ToString() + " for employee " + Name, true);
+                    }
                 }
             }
 
@@ -84,6 +97,19 @@ namespace PayrollProcessor
             return 0f;
         }
 
+        public float NonCdlRate(bool bIsForGrandForksShift)
+        {
+            //aides don't get downgraded for driving a non-cdl route.
+            float paraRate = PayRates.GetValueOrDefault(Jobs.AIDE_SCHOOL, 0f);
+            float nonCdlRate = IsGrandForksEmployee || bIsForGrandForksShift ? GrandForksDefaultRates[Jobs.NON_CDL_DRIVER] : FargoDefaultRates[Jobs.NON_CDL_DRIVER];
+            float rate = Math.Max(paraRate, nonCdlRate);
+            if (YearsOfService > 9)
+            {
+                rate += TEN_YEAR_RATE_BUMP;
+            }
+            return rate;
+        }
+
         public float GetDriverRateForSchoolRouteShift(Shift shift)
         {
             if (shift.JobType != Jobs.DRIVER_SCHOOL && shift.JobType != Jobs.NON_CDL_DRIVER)
@@ -98,11 +124,7 @@ namespace PayrollProcessor
                 {
                     DelayedLog("Problem in GetDriverRateForSchoolRouteShift()", true);
                 }
-
-                //aides don't get downgraded for driving a non-cdl route.
-                float paraRate = PayRates.GetValueOrDefault(Jobs.AIDE_SCHOOL, 0f);
-                float nonCdlRate = IsGrandForksEmployee || shift.IsAGrandForksShift ? GrandForksDefaultRates[shift.JobType] : FargoDefaultRates[shift.JobType];
-                rate = Math.Max(paraRate, nonCdlRate);
+                rate = NonCdlRate(shift.IsAGrandForksShift);
             }
             else
             {
@@ -171,6 +193,7 @@ namespace PayrollProcessor
                 }
             }
 
+            //didn't find shift, make new shift
             {//c# scope bs
                 Shift shift = new(Company.VALLEY_BUS_LLC);
                 Shifts.Add(shift);
@@ -180,7 +203,10 @@ namespace PayrollProcessor
                 }
                 if (!ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC][Shift.GetLaborCode(jobType, false)].ContainsKey(week))
                 {
-                    ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC][Shift.GetLaborCode(jobType, false)][week].Add(shift);
+                    ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC][Shift.GetLaborCode(jobType, false)][week] = new()
+                    {
+                        shift
+                    };
                 }
                 else
                 {
@@ -193,6 +219,10 @@ namespace PayrollProcessor
                 if (!PayRates.ContainsKey(jobType))
                 {
                     DelayedLog("Check " + Name + " to ensure they are correctly categorized as a driver or aide. Maybe they are a non-cdl driver?");
+                }
+                else
+                {
+                    shift.PayRate = PayRates[jobType];
                 }
 
                 return shift;

@@ -118,7 +118,6 @@ namespace PayrollProcessor
                 {
                     if (!Shift.WereThereSchoolRoutesOnThisDay(ShiftLocation, Date.Day))
                     {
-                        DelayedLog("Please check to make sure this is working properly in GetMinimumGuaranteeMax (" + employee.Name + " on a " + Date.DayOfWeek.ToString() + " at " + ShiftLocation.ToString() + ").", true);
                         return 0f;
                     }
 
@@ -197,7 +196,6 @@ namespace PayrollProcessor
                     {
                         if (StringSearch(Notes, "Hockey"))
                         {
-                            Log("Check here (for testing) 959599595", true);
                             float payRate = employee.GetPayRateForShift(this);
                             if (StringSearch(Notes, "Band") || StringSearch(Notes, "120"))
                             {

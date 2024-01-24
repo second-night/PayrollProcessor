@@ -119,6 +119,13 @@
       "Notes":"When Berehaji clocks in as Mechanic, his rate is switched to his driver rate."
     },
     {
+      "Name":"Alan Munson",
+      "IdNumber": 1116,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Alan Munson clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Kim Wick",
       "IdNumber": 1808,
       "OverriddenJobType": 7,
@@ -156,13 +163,6 @@
   ],
 
   "PayRateExceptions" : [
-    {
-      "Name":"Kim Wick",
-      "IdNumber": 1808,
-      "JobType": 28,
-      "Rate": 18.50,
-      "Notes":"Kim Wick makes $18.50 as non-cdl driver."
-    }
   ],
 
   "StartingRateExceptions" : [
@@ -170,15 +170,22 @@
       "Name":"Janet Olmstad",
       "IdNumber": 1143,
       "JobType": 1,
-      "Rate": 18.50,
-      "Notes":"Non-cdl special starting rate (her actual rate is higher due to time and service)."
+      "Rate": -1.50,
+      "Notes":"Non-cdl special starting rate is 18.50 (cld rate: 20.00) (her actual rate is higher due to time and service)."
     },
     {
       "Name":"Jay Nelson",
       "IdNumber": 1925,
       "JobType": 1,
-      "Rate": 20.50,
-      "Notes":""
+      "Rate": 0.50,
+      "Notes":"started at 20.50 when starting rate was 20.00"
+    },
+    {
+      "Name":"Eddit Peltier",
+      "IdNumber": 1768,
+      "JobType": 1,
+      "Rate": 0.50,
+      "Notes":"moved up to $21.00/hour with 2 years of service when starting rate was 20.00"
     }
   ],
   
@@ -203,6 +210,13 @@
     {
       "Name":"Haji Siyaka",
       "IdNumber": 1252,
+      "Dollars": 10,
+      "JobType": 7,
+      "Notes":""
+    },
+    {
+      "Name":"Alan Munson",
+      "IdNumber": 1116,
       "Dollars": 10,
       "JobType": 7,
       "Notes":""

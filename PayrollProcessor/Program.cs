@@ -1,4 +1,5 @@
 using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.VisualBasic;
 using System.Diagnostics;
 using System.Text;
@@ -23,6 +24,7 @@ namespace PayrollProcessor
         public const float COACH_HOURLY_RATE_ESTIMATE = 19f;
         public const float GF_HOCKEY_PAY = 100f;
         public const float GF_HOCKEY_BAND_PAY = 120f;
+        public const float TEN_YEAR_RATE_BUMP = 0.5f;
         public static string LogString = "";
         public static HashSet<int> BusStartingDays = new();
         private static ExcelWorker ExcelWorker;
@@ -30,7 +32,8 @@ namespace PayrollProcessor
         public static Dictionary<String, bool> DelayedLogMessages = new();
         public static HashSet<Employee> NonCdlDrivers = new();
         private static Dictionary<int, Dictionary<Jobs, float>> ApprenticeMechanicHours = new();
-        public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, 1657/*Bob Medhus*/};
+        private static bool DoMedhusDeferredPayment;
+        public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, DoMedhusDeferredPayment ? 1657 : 0/*Bob Medhus*/};
         public static Dictionary<Jobs, float> FargoDefaultRates = new()
         {
             {Jobs.DRIVER_SCHOOL, 20f },
@@ -379,7 +382,7 @@ namespace PayrollProcessor
                                                     weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
                                                     weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
                                                     //bob medhus
-                                                    if (emp.IdNumber == 1657)
+                                                    if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
                                                     {
                                                         medhusCounter[shift.WeekNumber, 0, company] += shift.WorkingHours();
                                                         float dollarAmount = shift.DollarAmount;
@@ -456,7 +459,7 @@ namespace PayrollProcessor
                             {
                                 emp.OverTimeHours[weekNumber] = weeklyRunnningTotal[0, weekNumber] - 40f;
                                 //bob medhus
-                                if (emp.IdNumber == 1657)
+                                if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
                                 {
                                     medhusCounter[weekNumber, 4, 0] = emp.OverTimeHours[weekNumber];
                                     medhusCounter[weekNumber, 5, 0] = (medhusCounter[weekNumber, 1, 0] / medhusCounter[weekNumber, 0, 0]) * medhusCounter[weekNumber, 4, 0] * 0.5f;
@@ -465,7 +468,7 @@ namespace PayrollProcessor
                         }
 
                         //bob medhus
-                        if (emp.IdNumber == 1657)
+                        if (DoMedhusDeferredPayment &&emp.IdNumber == 1657)
                         {
                             string message = "\nFor Bob Medhus, payroll run on " + DateTime.Now.ToShortDateString() + ":";
                             for (int i = 0; i < 2; i++)
@@ -602,6 +605,10 @@ namespace PayrollProcessor
                                         break;
                                     }
                                 }
+                                if (employee.YearsOfService > 9)
+                                {
+                                    rate += TEN_YEAR_RATE_BUMP;
+                                }
                             }
                             float newRate = Math.Max(rate, currentRate);
                             if (job == Jobs.DRIVER_SCHOOL && employee.PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f) > newRate)
@@ -682,20 +689,22 @@ namespace PayrollProcessor
 
         public static float GetBasePayRateForEmployee(Jobs jobType, Employee employee)
         {
+            float modifier = 0f;
             foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.StartingRateExceptions)
             {
                 if (entry.IdNumber == employee.IdNumber && (Jobs)entry.JobType == jobType)
                 {
-                    return entry.Rate;
+                    modifier = entry.Rate;
+                    break;
                 }
             }
             if (employee.IsGrandForksEmployee && GrandForksDefaultRates.ContainsKey(jobType))
             {
-                return GrandForksDefaultRates[jobType];
+                return GrandForksDefaultRates[jobType] + modifier;
             }
             else if (!employee.IsGrandForksEmployee && FargoDefaultRates.ContainsKey(jobType))
             {
-                return FargoDefaultRates[jobType];
+                return FargoDefaultRates[jobType] + modifier;
             }
             return 0;
         }
