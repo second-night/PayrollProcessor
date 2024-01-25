@@ -20,7 +20,8 @@ namespace PayrollProcessor
         public bool WasCreatedFromEmployeeExport;
         public bool NeedsUpdateInPayroll;
         public bool HadHoursInTimesheets; //means they have been confirmed to have hours in Timesheets.xlsx
-        public bool HasADirectDepositAccount;
+        public bool HasAnActiveDirectDepositAccount;
+        public bool HasAnyDirectDepositAccount;
         public bool IsMale;
         public bool IsAMechanicApprentice;
         public int YearsOfService;
@@ -138,6 +139,11 @@ namespace PayrollProcessor
             return Math.Max(Math.Max(PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f), PayRates.GetValueOrDefault(Jobs.WASH_BAY)), rate);
         }
 
+        public bool IsANonCdlDriver()
+        {
+            return !PayRates.ContainsKey(Jobs.DRIVER_SCHOOL) && (!PayRates.ContainsKey(Jobs.MECHANIC) || PayRates[Jobs.MECHANIC] < NonCdlRate(IsGrandForksEmployee));
+        }
+
         public List<Shift> SchoolRouteShifts()
         {
             return Shifts.FindAll(shift => shift.IsASchoolRouteShift());
@@ -148,7 +154,7 @@ namespace PayrollProcessor
             return Shifts.FindAll(shift => !shift.IsASchoolRouteShift() && shift.GetMinimumGuaranteeMax(this, out _) > 0f);
         }
 
-        public Jobs IsADriverOrAnAide()
+        public Jobs PrimaryJobType()
         {
             foreach (var shift in Shifts) 
             {
@@ -166,12 +172,36 @@ namespace PayrollProcessor
                 }
             }
 
-            DelayedLog("Warning: Couldn't determine if " + Name + " is a driver or an aide.", true);
+            foreach (var shift in Shifts)
+            {
+                if (shift.JobType == Jobs.WASH_BAY)
+                {
+                    return Jobs.WASH_BAY;
+                }
+            }
+
+            foreach (var shift in Shifts)
+            {
+                if (shift.JobType == Jobs.ADMIN)
+                {
+                    return Jobs.ADMIN;
+                }
+            }
+
+            foreach (var shift in Shifts)
+            {
+                if (shift.JobType == Jobs.MECHANIC)
+                {
+                    return Jobs.MECHANIC;
+                }
+            }
+
+            DelayedLog("Warning: Couldn't determine primary job type for " + Name + ".", true);
             return Jobs.DRIVER_SCHOOL;
         }
 
         //only use this for weekly MG excpetions - otherwise make sure it will work properly if used for another purpose.
-        public Shift FindDriverOrAideShiftForWeek(int week, Jobs jobType)
+        public Shift FindShiftForWeek(int week, Jobs jobType)
         {
             for (int shiftType = 0; shiftType <= (int)Type.DOLLAR_AMOUNT; ++ shiftType)
             {
@@ -218,7 +248,7 @@ namespace PayrollProcessor
 
                 if (!PayRates.ContainsKey(jobType))
                 {
-                    DelayedLog("Check " + Name + " to ensure they are correctly categorized as a driver or aide. Maybe they are a non-cdl driver?");
+                    DelayedLog("Couldn't find payrate for " + Name + " When creating a new shift for special MG.");
                 }
                 else
                 {

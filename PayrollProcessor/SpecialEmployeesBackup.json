@@ -159,6 +159,13 @@
       "OverriddenJobType": 13,
       "OverridingJobType": 1,
       "Notes":"When Mari clocks in as Admin, her rate is switched to her driver rate."
+    },
+    {
+      "Name":"Michelle Scheuring",
+      "IdNumber": 1462,
+      "OverriddenJobType": 13,
+      "OverridingJobType": 1,
+      "Notes":"When Michelle clocks in as Admin, her rate is switched to her driver rate."
     }
   ],
 

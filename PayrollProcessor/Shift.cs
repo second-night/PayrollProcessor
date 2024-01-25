@@ -335,6 +335,10 @@ namespace PayrollProcessor
             float specialRate = 0f;
             if (!emp.PayRates.ContainsKey(JobType) && JobType != Jobs.NON_CDL_DRIVER && JobType != Jobs.VACATION && JobType != Jobs.HOLIDAY && JobType != Jobs.WASH_BAY_OT && JobType != Jobs.COACH_PUBLIC_DRIVING && JobType != Jobs.DRIVER_COACH)
             {
+                if (emp.SocialSecurityNumber == "" || emp.IsPartialEntry)
+                {
+                    return 0f;
+                }
                 if (!PayrateMessages.ContainsKey(emp) || !PayrateMessages[emp].Contains(JobType))
                 {
                     string specialString = JobType == Jobs.WASH_BAY && emp.IsGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
@@ -350,9 +354,9 @@ namespace PayrollProcessor
                             PayrateMessages[emp] = new();
                         }
                         PayrateMessages[emp].Add(JobType);
+                        DelayedLog("Warninig: Employee " + emp.Name + " ( " + emp.IdNumber + " ) doesn't have a payrate for " + JobType.ToString());
                     }
                 }
-                DelayedLog("Warninig: Employee " + emp.Name + " ( " + emp.IdNumber + " ) doesn't have a payrate for " + JobType.ToString());
             }
 
             switch (JobType)

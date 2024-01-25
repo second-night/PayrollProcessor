@@ -141,15 +141,16 @@ namespace PayrollProcessor
                         {
                             TryGetStringFromCell(cellData[rowNumber, EMPLOYMENT_CATEGORY_COLUMN], out employee.EmploymentCategory);
                         }
-                        if (!employee.HasADirectDepositAccount)
+                        if (!employee.HasAnActiveDirectDepositAccount)
                         {
                             for (int i = 0; i < 6; i++)
                             {
                                 if (TryGetStringFromCell(cellData[rowNumber, DD_ACCOUNT_1 + i], out string accountStatus))
                                 {
+                                    employee.HasAnyDirectDepositAccount = true;
                                     if ((i == 5 && accountStatus != "") || accountStatus == "Active")
                                     {
-                                        employee.HasADirectDepositAccount = true;
+                                        employee.HasAnActiveDirectDepositAccount = true;
                                         break;
                                     }
                                 }
@@ -533,7 +534,7 @@ namespace PayrollProcessor
                                     importedEmployee.LatestAccountIndex = 1;
                                     break;
                                 case "Account 2 - Account Number":
-                                    employee.HasADirectDepositAccount = true;
+                                    employee.HasAnActiveDirectDepositAccount = true;
                                     importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Key"] = employeeNumber.ToString();
                                     importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["AccountNumber"] = cellString;
                                     importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Status"] = "A";
@@ -705,7 +706,7 @@ namespace PayrollProcessor
                                 if (shift.JobType == Jobs.DRIVER_SCHOOL && !employee.PayRates.ContainsKey(shift.JobType))
                                 {
                                     shift.JobType = Jobs.NON_CDL_DRIVER;
-                                    if (!employee.IsSalaried)
+                                    if (!employee.IsSalaried && employee.IsANonCdlDriver() && !EmployeeIdsToIgnore.Contains(employeeNumber))
                                     {
                                         NonCdlDrivers.Add(employee);
                                     }
@@ -1013,13 +1014,18 @@ namespace PayrollProcessor
                     {
                         if (!Program.EmployeeIdsToIgnore.Contains(emp.IdNumber) && emp.Shifts.Count > 0)
                         {
-                            if (!emp.HasADirectDepositAccount)
+                            if (!emp.HasAnActiveDirectDepositAccount)
                             {
                                 DelayedLog("Employee: " + emp.Name + " (" + emp.IdNumber + ") has no active DD account. Phone: " + emp.PhoneNumber);
                             }
                             if (emp.IsPartialEntry)
                             {
-                                Log("Employee: (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
+                                Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
+                            }
+                            if (null == emp.SocialSecurityNumber || emp.SocialSecurityNumber == "")
+                            {
+                                Log(emp.Name + " (" + emp.IdNumber + ") is not getting paid because they do not have a social security number in workbright.");
+                                continue;
                             }
                             for (int shiftType = 0; shiftType < 3; ++shiftType)
                             {
@@ -1145,28 +1151,31 @@ namespace PayrollProcessor
             int accountRowNumber = 0;
             foreach (var employeeEntry in ImportEmployees)
             {
-                if (employeeEntry.Value.ImportFields.Count > 0)
+                var employee = EmployeeDictionary[employeeEntry.Key];
+                if (!employee.HasAnyDirectDepositAccount)
                 {
-                    if (StringSearch(employeeEntry.Value.ImportFields.GetValueOrDefault("FirstName", "").ToString(), "Jeff"))
+                    if (employeeEntry.Value.ImportFields.Count > 0)
                     {
-                        Log("");
-                    }
-                    foreach (var accountInfo in employeeEntry.Value.DDAccounts)
-                    {
-                        if (accountInfo.Count > 0)
+                        if (StringSearch(employeeEntry.Value.ImportFields.GetValueOrDefault("FirstName", "").ToString(), "Jeff"))
                         {
-                            for (int columnNumber = 0; columnNumber < ImportedEmployee.DDImportHeaders.Count; columnNumber++)
+                            Log("");
+                        }
+                        foreach (var accountInfo in employeeEntry.Value.DDAccounts)
+                        {
+                            if (accountInfo.Count > 0)
                             {
-                                if (accountInfo.ContainsKey(ImportedEmployee.DDImportHeaders[columnNumber]))
+                                for (int columnNumber = 0; columnNumber < ImportedEmployee.DDImportHeaders.Count; columnNumber++)
                                 {
-                                    directDepositMatrix[accountRowNumber + 1, columnNumber] = accountInfo[ImportedEmployee.DDImportHeaders[columnNumber]];
+                                    if (accountInfo.ContainsKey(ImportedEmployee.DDImportHeaders[columnNumber]))
+                                    {
+                                        directDepositMatrix[accountRowNumber + 1, columnNumber] = accountInfo[ImportedEmployee.DDImportHeaders[columnNumber]];
+                                    }
                                 }
+                                accountRowNumber++;
                             }
-                            accountRowNumber++;
                         }
                     }
                 }
-                var employee = EmployeeDictionary[employeeEntry.Key];
                 if (!employee.WasCreatedFromEmployeeExport && (employee.Shifts.Count == 0/* || employeeEntry.Value.ImportFields.ContainsKey("SSN")*/))
                 {
                     //don't update employees who aren't currently active. (payrates, etc..)
@@ -1176,7 +1185,7 @@ namespace PayrollProcessor
                 {
                     continue;
                 }
-                if (employeeEntry.Value.ImportFields.Count > 0)
+                if (employeeEntry.Value.ImportFields.Count > 0 && null != employee.SocialSecurityNumber && employee.SocialSecurityNumber != "")
                 {
                     if (employeeEntry.Value.ImportFields.ContainsKey("SSN"))
                     {

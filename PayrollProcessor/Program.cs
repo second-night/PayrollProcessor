@@ -446,7 +446,7 @@ namespace PayrollProcessor
                                     if (entry.Hours > weeklyRunnningTotal[1, weekNumber])
                                     {
                                         float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
-                                        emp.FindDriverOrAideShiftForWeek(weekNumber, emp.IsADriverOrAnAide()).MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
+                                        emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType()).MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
                                         DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
                                         SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
                                     }
