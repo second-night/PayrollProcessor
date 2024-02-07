@@ -107,6 +107,13 @@
       "Hours": 4.5,
       "ShiftNumber": 2,
       "Notes":"(ShiftNumber: 0-morning, 1-noon, 2-afternoon). Eric gets a 4.5 hour mg in the afternoon."
+    },
+    {
+      "Name":"Ali Omar",
+      "IdNumber": 1248,
+      "Hours": 3,
+      "ShiftNumber": 2,
+      "Notes":"(ShiftNumber: 0-morning, 1-noon, 2-afternoon). Ali gets a 3 hour mg in the afternoon."
     }
   ],
 
@@ -188,7 +195,7 @@
       "Notes":"started at 20.50 when starting rate was 20.00"
     },
     {
-      "Name":"Eddit Peltier",
+      "Name":"Eddie Peltier",
       "IdNumber": 1768,
       "JobType": 1,
       "Rate": 0.50,
@@ -211,6 +218,7 @@
       "Name":"Bob Medhus",
       "IdNumber": 1657,
       "Dollars": 15,
+      "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
     },
@@ -218,6 +226,7 @@
       "Name":"Haji Siyaka",
       "IdNumber": 1252,
       "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
     },
@@ -225,13 +234,15 @@
       "Name":"Alan Munson",
       "IdNumber": 1116,
       "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
     },
     {
       "Name":"Patrick R. Riley",
       "IdNumber": 602,
-      "Dollars": 10,
+      "Dollars": 20,
+      "ReceivesBusStartingMinimumGuarantee": false,
       "JobType": 13,
       "Notes":""
     },
@@ -239,6 +250,7 @@
       "Name":"Kim Wick",
       "IdNumber": 1808,
       "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
     },
@@ -246,6 +258,7 @@
       "Name":"Keith Miller",
       "IdNumber": 1127,
       "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
     },
@@ -253,6 +266,7 @@
       "Name":"Kenny Biffert",
       "IdNumber": 1224,
       "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
     },
@@ -260,6 +274,7 @@
       "Name":"Roger Trulson",
       "IdNumber": 672,
       "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
     }

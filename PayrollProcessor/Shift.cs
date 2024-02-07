@@ -354,7 +354,7 @@ namespace PayrollProcessor
                             PayrateMessages[emp] = new();
                         }
                         PayrateMessages[emp].Add(JobType);
-                        DelayedLog("Warninig: Employee " + emp.Name + " ( " + emp.IdNumber + " ) doesn't have a payrate for " + JobType.ToString());
+                        DelayedLog("Warninig: Employee " + emp.Name + " ( " + emp.IdNumber + " )" + (emp.IsGrandForksEmployee ? " (GF) " : " (Fargo) ") + "doesn't have a payrate for " + JobType.ToString());
                     }
                 }
             }

@@ -1020,11 +1020,20 @@ namespace PayrollProcessor
                             }
                             if (emp.IsPartialEntry)
                             {
-                                Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
+                                if (!emp.WasReportedForPartialEntry)
+                                {
+                                    emp.WasReportedForPartialEntry = true;
+                                    Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
+                                }
+                                continue;
                             }
                             if (null == emp.SocialSecurityNumber || emp.SocialSecurityNumber == "")
                             {
-                                Log(emp.Name + " (" + emp.IdNumber + ") is not getting paid because they do not have a social security number in workbright.");
+                                if (!emp.WasReportedForPartialEntry)
+                                {
+                                    emp.WasReportedForPartialEntry = true;
+                                    Log(emp.Name + " (" + emp.IdNumber + ") is not getting paid because they do not have a social security number in workbright.");
+                                }
                                 continue;
                             }
                             for (int shiftType = 0; shiftType < 3; ++shiftType)

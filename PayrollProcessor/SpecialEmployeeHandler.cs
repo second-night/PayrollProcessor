@@ -218,6 +218,7 @@ namespace PayrollProcessor
     public class SpecialBonusDollarsEntry : SpecialDollarsEntry
     {
         public int JobType { get; set; }
+        public bool ReceivesBusStartingMinimumGuarantee { get; set; }
     }
 
     public class SpecialBusEntry : SpecialHoursEntry

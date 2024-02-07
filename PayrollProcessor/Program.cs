@@ -546,7 +546,7 @@ namespace PayrollProcessor
                         if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == shift.JobType)
                         {
                             shift.BonusDollars += entry.Dollars;
-                            if (shift.ShiftTime < 2)
+                            if (entry.ReceivesBusStartingMinimumGuarantee && shift.ShiftTime < 2)
                             {
                                 shift.MinimumGuaranteeHours += 2f - shift.ShiftTime;
                             }
@@ -605,10 +605,10 @@ namespace PayrollProcessor
                                         break;
                                     }
                                 }
-                                if (employee.YearsOfService > 9)
-                                {
-                                    rate += TEN_YEAR_RATE_BUMP;
-                                }
+                            }
+                            if (employee.YearsOfService > 9 && (job == Jobs.DRIVER_SCHOOL || job == Jobs.DRIVER_CHARTER || job == Jobs.AIDE_SCHOOL || job == Jobs.AIDE_CHARTER))
+                            {
+                                rate += TEN_YEAR_RATE_BUMP;
                             }
                             float newRate = Math.Max(rate, currentRate);
                             if (job == Jobs.DRIVER_SCHOOL && employee.PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f) > newRate)
@@ -616,7 +616,7 @@ namespace PayrollProcessor
                                 if (employee.IdNumber != 105)
                                 { //Michael Mollenhoff exception
                                     newRate = employee.PayRates[Jobs.MECHANIC];
-                                    Log("Giving driver rate upgrade for mechanic; " + employee.Name + ". Upgrading from " + employee.PayRates[Jobs.DRIVER_SCHOOL] + " to " + newRate, employee.EmploymentCategory != "ACAFT");
+                                    Log("Giving driver rate upgrade for mechanic; " + employee.Name + ". Upgrading from " + employee.PayRates[Jobs.DRIVER_SCHOOL] + " to " + newRate + " (employee.EmploymentCategory == " + employee.EmploymentCategory.ToString() + ").", employee.EmploymentCategory != "ACAFT");
                                 }
                             }
                             if (employee.PayRates[job] < newRate)

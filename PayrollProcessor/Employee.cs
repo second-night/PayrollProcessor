@@ -27,6 +27,7 @@ namespace PayrollProcessor
         public int YearsOfService;
         public bool WasAlreadyInPayroll;
         public bool IsPartialEntry = false;
+        public bool WasReportedForPartialEntry;
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/,3/*0-has hours,1-has dollars,2-has both*/];
 
 
