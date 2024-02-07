@@ -470,22 +470,22 @@ namespace PayrollProcessor
                                 case "Filing Status (W4)":
                                     if (StringSearch(cellString, "single"))
                                     {
-                                        importedEmployee.ImportFields["FedFilingStatus"] = "FDS";
+                                        importedEmployee.ImportFields["FedFilingStatus"] = "FDS2";
                                         importedEmployee.ImportFields["StateFilingStatus"] = "NDS";
                                     }
-                                    else if (StringSearch(cellString, "household"))
+                                    else if (StringSearch(cellString, "Household"))
                                     {
                                         importedEmployee.ImportFields["FedFilingStatus"] = "FDH";
                                         importedEmployee.ImportFields["StateFilingStatus"] = "NDH";
                                     }
                                     else
                                     {
-                                        importedEmployee.ImportFields["FedFilingStatus"] = "FDM";
+                                        importedEmployee.ImportFields["FedFilingStatus"] = "FDM2";
                                         importedEmployee.ImportFields["StateFilingStatus"] = "NDM";
                                     }
                                     break;
                                 case "Deductions (W4)":
-                                    importedEmployee.ImportFields["FedExemptions"] = cellString;
+                                    importedEmployee.ImportFields["FedDeductions"] = cellString;
                                     importedEmployee.ImportFields["StateExemptions"] = cellString;
                                     break;
                                 case "Total Dependents Withholding (W4)":
