@@ -1032,7 +1032,7 @@ namespace PayrollProcessor
                                 if (!emp.WasReportedForPartialEntry)
                                 {
                                     emp.WasReportedForPartialEntry = true;
-                                    Log(emp.Name + " (" + emp.IdNumber + ") is not getting paid because they do not have a social security number in workbright.");
+                                    Log(emp.Name + " (" + emp.IdNumber + ") is not getting paid because they do not have a social security number in workbright.", true);
                                 }
                                 continue;
                             }

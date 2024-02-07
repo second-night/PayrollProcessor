@@ -342,9 +342,17 @@ namespace PayrollProcessor
                 if (!PayrateMessages.ContainsKey(emp) || !PayrateMessages[emp].Contains(JobType))
                 {
                     string specialString = JobType == Jobs.WASH_BAY && emp.IsGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
-                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + (emp.IsGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?" + specialString);
+                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + (emp.IsGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate");
                     if (newRate > 0)
                     {
+                        if (newRate < 2)
+                        {
+                            newRate = GetBasePayRateForEmployee(JobType, emp);
+                            if (newRate < 2)
+                            {
+                                Log("Assigning default rate failed", true);
+                            }
+                        }
                         GiveRaiseToEmployee(emp, JobType, newRate);
                     }
                     else
