@@ -309,6 +309,18 @@ namespace PayrollProcessor
             return "";
         }
 
+        public void CheckWashbayOT(Employee employee)
+        {
+            if (JobType == Jobs.WASH_BAY_OT)
+            {
+                if (!this.Date.DayOfWeek.Equals(DayOfWeek.Saturday) && !this.Date.DayOfWeek.Equals(DayOfWeek.Sunday))
+                {
+                    DelayedLog("Changing wash bay OT shift to washbay shift for " + employee.Name + " on " + this.Date.DayOfWeek.ToString());
+                    JobType = Jobs.WASH_BAY;
+                }
+            }
+        }
+
         public string GetLaborCode(bool isOvertime)
         {
             return GetLaborCode(JobType, isOvertime);
