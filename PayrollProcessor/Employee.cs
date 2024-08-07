@@ -95,7 +95,10 @@ namespace PayrollProcessor
                 return specialRate;
             }
 
-            DelayedLog("Warninig: Cannot determine a payrate for Employee " + Name + " ( " + IdNumber + " ) for jobType: " + shift.JobType.ToString());
+            if (shift.ShiftTime == 0 && shift.ShiftTime > 0.05f)
+            {
+                DelayedLog("Warninig: Cannot determine a payrate for Employee " + Name + " ( " + IdNumber + " ) for jobType: " + shift.JobType.ToString());
+            }
             return 0f;
         }
 
@@ -197,6 +200,14 @@ namespace PayrollProcessor
                 }
             }
 
+            float adminRate = PayRates.GetValueOrDefault(Jobs.ADMIN, 0f);
+            float mechanicRate = PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f);
+            if (adminRate + mechanicRate > 0.001f)
+            {
+                return adminRate > mechanicRate ? Jobs.ADMIN : Jobs.MECHANIC;
+            }
+            
+
             DelayedLog("Warning: Couldn't determine primary job type for " + Name + ".", true);
             return Jobs.DRIVER_SCHOOL;
         }
@@ -228,6 +239,10 @@ namespace PayrollProcessor
             {//c# scope bs
                 Shift shift = new(Company.VALLEY_BUS_LLC);
                 Shifts.Add(shift);
+                if (null == ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC])
+                {
+                    ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC] = new();
+                }
                 if (!ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC].ContainsKey(Shift.GetLaborCode(jobType, false)))
                 {
                     ShiftTotals[(int)Type.HOURS, (int)Company.VALLEY_BUS_LLC].Add(Shift.GetLaborCode(jobType, false), new());

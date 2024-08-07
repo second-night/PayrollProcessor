@@ -149,13 +149,14 @@ namespace PayrollProcessor
             return form.YesNoButton;
         }
 
-        public static float InputNumber(string message)
+        public static float InputNumber(string message, out string nonNumberInput)
         {
             PrintForm form = new PrintForm(message);
             form.button2.Text = "Yes";
             form.button1.Visible = true;
             form.textBox1.Visible = true;
             Application.Run(form);
+            nonNumberInput = form.InputText;
             if (float.TryParse(form.InputText, out float number))
             {
                 return number;

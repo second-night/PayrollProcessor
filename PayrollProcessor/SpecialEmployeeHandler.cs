@@ -1,5 +1,4 @@
 ﻿using System.Text.Json;
-using System.Windows.Forms;
 using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
@@ -71,6 +70,11 @@ namespace PayrollProcessor
             maxMgTime = 0f;
             if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL)
             {
+                if (emp.IdNumber == 2206)
+                {
+                    maxMgTime = 2.5f;
+                    return;
+                }
                 foreach (var entry in SpecialEmployees.ShiftMgExceptionsInDollars)
                 {
                     if (entry != null && entry.IdNumber == emp.IdNumber)
@@ -124,8 +128,17 @@ namespace PayrollProcessor
 
         public void CheckForTimeFrameException(Employee employee, Shift shift)
         {
+            if (shift.JobType != Jobs.WASH_BAY && shift.JobType != Jobs.MECHANIC && shift.JobType != Jobs.ADMIN && shift.JobType != Jobs.BODY_SHOP)
+            {
+                return;
+            }
             foreach (var entry in SpecialEmployees.LimitedTimeFrameExceptions)
             {
+                if (StringSearch(entry.Notes, "void"))
+                {
+                    continue;
+                }
+
                 if (entry.IdNumber == employee.IdNumber)
                 {
                     if (TimeSpan.TryParse(entry.EarliestClockIn, out TimeSpan earliestClockIn))
@@ -133,6 +146,7 @@ namespace PayrollProcessor
                         if (shift.ClockIn.CompareTo(earliestClockIn) < 0)
                         {
                             shift.ModifyClockIn(earliestClockIn);
+                            Log("Modifying Clock in time for " + employee.Name + ".");
                         }
                     }
                     if (TimeSpan.TryParse(entry.LatestClockOut, out TimeSpan latestClockOut))
@@ -140,6 +154,7 @@ namespace PayrollProcessor
                         if (shift.ClockOut.CompareTo(latestClockOut) > 0)
                         {
                             shift.ModifyClockOut(latestClockOut);
+                            Log("Modifying Clock out time for " + employee.Name + ".");
                         }
                     }
                 }
@@ -150,7 +165,7 @@ namespace PayrollProcessor
         {
             if (EmployeeDictionary.ContainsKey(employeeIdNumber))
             {
-                ExceptionLog += message.Replace("empname", EmployeeDictionary[employeeIdNumber].Name) + (bShouldDisplayTotals ? ((EmployeeDictionary[employeeIdNumber].IsMale ? " He" : " She") + " recieved a total of " + Math.Round(hoursGiven, 2) + " hours for this exception.") : "") + "\n";
+                ExceptionLog += message.Replace("empname", EmployeeDictionary[employeeIdNumber].Name) + (bShouldDisplayTotals ? ((EmployeeDictionary[employeeIdNumber].IsMale ? " He" : " She") + " received a total of " + Math.Round(hoursGiven, 2) + " hours for this exception.") : "") + "\n";
             }
             else
             {
@@ -203,6 +218,15 @@ namespace PayrollProcessor
         public string Name { get; set; }
         public int IdNumber { get; set; }
         public string Notes { get; set; }
+
+        public SpecialEntry(string name, int idNumber, string notes)
+        {
+            Name = name;
+            IdNumber = idNumber;
+            Notes = notes;
+        }
+
+        public SpecialEntry() { }
     }
 
     public class SpecialHoursEntry : SpecialEntry

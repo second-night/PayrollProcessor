@@ -1,5 +1,5 @@
 {
-  "JsonInstructions": "Note: When editing this document, pay attention to the format, any change in format can cause the program to fail. It may be wise to make a copy of the previous version before editing. The 'Name' and 'Notes' fields are only there for the user, they do not matter to the program itself.",
+  "JsonInstructions": "Note: When editing this document, pay attention to the format, any change in format can cause the program to fail. It may be wise to make a copy of the previous version before editing. The 'Name' and 'Notes' fields are only there for the user, they do not matter to the program itself.DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, AIDE_SCHOOL = 25, NON_CDL_DRIVER = 28",
   "WeeklyMgExceptions" : [
     {
       "Name":"Ray Johnson",
@@ -119,11 +119,53 @@
 
   "PayRateSubstitutionExceptions" : [
     {
+      "Name":"Pat Riley",
+      "IdNumber": 602,
+      "OverriddenJobType": 1,
+      "OverridingJobType": 13,
+      "Notes":"When Pat clocks in as driver, his rate is switched to his admin rate."
+    },
+    {
+      "Name":"Pat Riley",
+      "IdNumber": 602,
+      "OverriddenJobType": 28,
+      "OverridingJobType": 13,
+      "Notes":"When Pat clocks in as non-cdl driver, his rate is switched to his admin rate."
+    },
+    {
+      "Name":"Pat Riley",
+      "IdNumber": 2206,
+      "OverriddenJobType": 13,
+      "OverridingJobType": 1,
+      "Notes":"When Pat clocks in as admin, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Hussein Shallal",
+      "IdNumber": 1354,
+      "OverriddenJobType": 9,
+      "OverridingJobType": 1,
+      "Notes":"When Hussein clocks in as wash bay, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Hussein Shallal",
+      "IdNumber": 1354,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Hussein clocks in as mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Haji Siyaka",
       "IdNumber": 1252,
       "OverriddenJobType": 7,
       "OverridingJobType": 1,
       "Notes":"When Berehaji clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Karin Thompson-Carlin",
+      "IdNumber": 1886,
+      "OverriddenJobType": 13,
+      "OverridingJobType": 1,
+      "Notes":"When Karin clocks in as Admin, her rate is switched to her driver rate."
     },
     {
       "Name":"Alan Munson",
@@ -140,11 +182,25 @@
       "Notes":"When Kim clocks in as Mechanic, her rate is switched to her special non-cdl rate."
     },
     {
+      "Name":"Daniel Monatukwa",
+      "IdNumber": 2137,
+      "OverriddenJobType": 25,
+      "OverridingJobType": 13,
+      "Notes":"When Daniel clocks in as para/aide, his rate is switched to his admin rate."
+    },
+    {
       "Name":"Keith Miller",
       "IdNumber": 1127,
       "OverriddenJobType": 7,
       "OverridingJobType": 1,
       "Notes":"When Keith clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Keith Miller",
+      "IdNumber": 1127,
+      "OverriddenJobType": 12,
+      "OverridingJobType": 1,
+      "Notes":"When Keith clocks in as Body Shop, his rate is switched to his driver rate."
     },
     {
       "Name":"Kenny Biffert",
@@ -209,7 +265,7 @@
       "IdNumber": 1846,
       "EarliestClockIn": "06:25",
       "LatestClockOut": "16:30",
-      "Notes":""
+      "Notes":"void"
     }
   ],
 
@@ -265,6 +321,14 @@
     {
       "Name":"Kenny Biffert",
       "IdNumber": 1224,
+      "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
+      "JobType": 7,
+      "Notes":""
+    },
+    {
+      "Name":"Julie Gonzalez",
+      "IdNumber": 1976,
       "Dollars": 10,
       "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,

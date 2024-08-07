@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace PayrollProcessor
 {
-    //taskkill /f /im excel.exe
+    //  taskkill /f /im excel.exe
 
     //TODO: display list of people getting special exceptions, display list of non-cdl drivers.
     public static class Program
@@ -15,7 +15,7 @@ namespace PayrollProcessor
         public static Dictionary<int, Employee> EmployeeDictionary = new();
         public const float OUT_OF_TOWN_CHARTER_RATE = 18f;
         public const float T_AND_J_CHARTER_RATE = 19f;
-        public const float OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
+        public const float PRIVATE_OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 50f;
         public const float TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 40f;
         public const float DRIVER_CHARTER_RATE = 17.5f;
@@ -193,7 +193,8 @@ namespace PayrollProcessor
             {
                 //Log("line 145 iterationCounter == " + iterationCounter++);
                 foreach (var pair2 in pair.Value)
-                {
+                { //pair2<route time, List<shift>>
+
                     MgSource sourceOfMg = MgSource.NONE;
                     float maxMinGuarantee = pair2.Value.Max(shift => shift.GetMinimumGuaranteeMax(emp, out sourceOfMg));
                     //if (emp.IdNumber == 1893)
@@ -381,6 +382,8 @@ namespace PayrollProcessor
                                                 {
                                                     weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
                                                     weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
+
+
                                                     //bob medhus
                                                     if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
                                                     {
@@ -443,6 +446,10 @@ namespace PayrollProcessor
                             {
                                 if (entry.IdNumber == emp.IdNumber)
                                 {
+                                    if (StringSearch(emp.Name, "Ray"))
+                                    {
+                                        continue;
+                                    }
                                     if (entry.Hours > weeklyRunnningTotal[1, weekNumber])
                                     {
                                         float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
@@ -761,7 +768,7 @@ namespace PayrollProcessor
             //apprentice mechanics
             List<int> apprenticeMechanicOrder = new()
             {
-                1947,1963,1419,1946,1876,2100
+                1947,1963,1419,1946,1876,2100,1976
             };
             foreach (var empEntry in EmployeeDictionary)
             {
@@ -817,7 +824,7 @@ namespace PayrollProcessor
                 }
             }
             nonCdlDrivers += "\n";
-            Log(nonCdlDrivers, true);
+            Log(nonCdlDrivers);
 
             SpecialEmployeeHandler.GetInstance().AddExceptionNotificationsToLog();
 
@@ -836,6 +843,11 @@ namespace PayrollProcessor
 
     public enum Jobs
     {
-        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, AIDE_SCHOOL = 25, DRIVER_COACH, OUT_OF_TOWN_CHARTER, NON_CDL_DRIVER
+        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
+        VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, 
+        AIDE_SCHOOL = 25, DRIVER_COACH, OUT_OF_TOWN_CHARTER, NON_CDL_DRIVER, 
+        
+        SALARY = 99
     }
+    //  taskkill /f /im excel.exe
 }

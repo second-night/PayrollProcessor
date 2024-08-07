@@ -65,11 +65,12 @@ namespace PayrollProcessor
             if (!isValid)
             {
                 Log("Shift: " + this.ToString() + " is not valid. Please investigate.");
+                return false;
             }
 
             if (emp.IsSalaried)
             {
-                if (JobType == Jobs.DRIVER_SCHOOL || JobType == Jobs.AIDE_SCHOOL || JobType == Jobs.NON_CDL_DRIVER)
+                if (emp.IdNumber !=  1991 && (JobType == Jobs.DRIVER_SCHOOL || JobType == Jobs.AIDE_SCHOOL || JobType == Jobs.NON_CDL_DRIVER))
                 {
                     return false;
                 }
@@ -101,7 +102,7 @@ namespace PayrollProcessor
             return time;
         }
 
-        public float GetMinimumGuaranteeMax(Employee employee, out MgSource sourceOfMg)
+        public float GetMinimumGuaranteeMax(Employee employee, out MgSource sourceOfMg, List<Shift>? shiftsInRouteTimeContext = null)
         {
             sourceOfMg = MgSource.NONE;
             if (null != Notes && (StringSearch(Notes, "no min") || StringSearch(Notes, "nomin") || StringSearch(Notes, "no minimum") || StringSearch(Notes, "tnt") || StringSearch(Notes, "trolley") || StringSearch(Notes, "training")))
@@ -121,7 +122,9 @@ namespace PayrollProcessor
                         return 0f;
                     }
 
-                    if (ShiftTime < 0.08)
+                    var shiftTime = shiftsInRouteTimeContext == null ? ShiftTime : shiftsInRouteTimeContext.Sum(shift => shift.ShiftTime);
+
+                    if (null != shiftsInRouteTimeContext && shiftTime < 0.08)
                     {
                         DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
                         return 0f;
@@ -136,7 +139,7 @@ namespace PayrollProcessor
                         }
                     }
 
-                    if (ShiftTime < 0.2)
+                    if (null != shiftsInRouteTimeContext && shiftTime < 0.2)
                     {
                         DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
                         return 0f;
@@ -169,10 +172,11 @@ namespace PayrollProcessor
                     }
 
                     //non standard mg
-                    if (IsASummerRoute() && maxMg < 2)
+                    float summerMg = /*ShiftLocation == Location.WEST_FARGO ? 3f :*/ 2f;
+                    if (IsASummerRoute() && maxMg < summerMg)
                     {
                         sourceOfMg = MgSource.SUMMER_ROUTE;
-                        maxMg = 2f;
+                        maxMg = summerMg;
                     }
                     if ((IsAGrandForksShift || employee.IsGrandForksEmployee) && maxMg < 2)
                     {
@@ -216,7 +220,7 @@ namespace PayrollProcessor
                     if ((null != Notes && StringSearch(Notes, "private")) || JobType == Jobs.COACH_PUBLIC_DRIVING)
                     {
                         sourceOfMg = MgSource.PRIVATE_CHARTER;
-                        return OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
+                        return PRIVATE_OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
                     }
                     else if (Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
                     {
@@ -342,7 +346,7 @@ namespace PayrollProcessor
                 if (!PayrateMessages.ContainsKey(emp) || !PayrateMessages[emp].Contains(JobType))
                 {
                     string specialString = JobType == Jobs.WASH_BAY && emp.IsGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
-                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + (emp.IsGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate");
+                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + (emp.IsGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate", out string nonNumberInput);
                     if (newRate > 0)
                     {
                         if (newRate < 2)
@@ -357,6 +361,17 @@ namespace PayrollProcessor
                     }
                     else
                     {
+                        if (null != nonNumberInput && nonNumberInput != "")
+                        {
+                            for (int i = 0; i <= (int)Jobs.NON_CDL_DRIVER; ++i)
+                            {
+                                if ("" != ((Jobs)i).ToString() && StringSearch(((Jobs)i).ToString(), nonNumberInput))
+                                {
+                                    this.JobType = (Jobs)i;
+                                    return SpecialRate(emp);
+                                }    
+                            }
+                        }
                         if (!PayrateMessages.ContainsKey(emp))
                         {
                             PayrateMessages[emp] = new();

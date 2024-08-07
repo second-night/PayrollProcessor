@@ -275,7 +275,7 @@ namespace PayrollProcessor
             const int EMP_LAST_NAME_COLUMN = 7;
             const int EMPLOYEE_GROUPS = 44;
 
-            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups" };
+            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups", "Social Security Number", "Birth Date" };
 
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
@@ -296,7 +296,7 @@ namespace PayrollProcessor
                         {
                             if (StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString()) && StringSearch(employeeEntry.Value.Name, cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString()))
                             {
-                                employeeNumber = employeeEntry.Key; 
+                                employeeNumber = employeeEntry.Key;
                                 break;
                             }
                         }
@@ -324,14 +324,17 @@ namespace PayrollProcessor
                     Employee employee = Program.EmployeeDictionary[employeeNumber];
                     employee.IsPartialEntry = false;
 
+                    string[] socialSecurityNumberEntries = new string[2] { "", "" };
+                    string[] birthDateEntries = new string[2] { "", "" };
+
                     foreach (var header in headers)
                     {
                         Object? cell = null;
-                        for (int i = 0; i < headers.Count; i++)
+                        for (int columnNumber = 0; columnNumber < headers.Count; columnNumber++)
                         {
-                            if (null != cellData[1, i + 1] && header == cellData[1, i + 1].ToString())
+                            if (null != cellData[1, columnNumber + 1] && header == cellData[1, columnNumber + 1].ToString())
                             {
-                                cell = cellData[rowNumber, i + 1];
+                                cell = cellData[rowNumber, columnNumber + 1];
                                 break;
                             }
                         }
@@ -347,8 +350,10 @@ namespace PayrollProcessor
                                 case "Employee #":
                                     break;
                                 case "SSN":
-                                    importedEmployee.ImportFields["SSN"] = cellString;
-                                    employee.SocialSecurityNumber = cellString;
+                                    socialSecurityNumberEntries[0] = cellString;
+                                    break;
+                                case "Social Security Number":
+                                    socialSecurityNumberEntries[1] = cellString;
                                     break;
                                 case "First Name":
                                     importedEmployee.ImportFields["FirstName"] = cellString;
@@ -383,8 +388,10 @@ namespace PayrollProcessor
                                     importedEmployee.ImportFields["State"] = cellString;
                                     break;
                                 case "Birthdate":
-                                    d = double.Parse(cellString);
-                                    importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                                    birthDateEntries[0] = cellString;
+                                    break;
+                                case "Birth Date":
+                                    birthDateEntries[1] = cellString;
                                     break;
                                 case "Phone":
                                     importedEmployee.ImportFields["HomePhone"] = cellString;
@@ -581,7 +588,7 @@ namespace PayrollProcessor
                                         employee.IsGrandForksEmployee = true;
                                         importedEmployee.ImportFields["OrganizationValue2"] = "GF";
                                     }
-                                    if (StringSearch(cellString, "para") || StringSearch(cellString, "aide"))
+                                    if (StringSearch(cellString, "para") || StringSearch(cellString, "aide") || StringSearch(cellString, "van driver"))
                                     {
                                         float payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_SCHOOL] : FargoDefaultRates[Jobs.AIDE_SCHOOL];
                                         importedEmployee.ImportFields["Rate_AidDlySchool"] = payRate.ToString();
@@ -603,6 +610,38 @@ namespace PayrollProcessor
                                     }
                                     break;
                             }
+                            string ssn = "";
+                            if ("" != socialSecurityNumberEntries[0])
+                            {
+                                if ("" != socialSecurityNumberEntries[1] && socialSecurityNumberEntries[0] != socialSecurityNumberEntries[1])
+                                {
+                                    if (socialSecurityNumberEntries[0].Replace("-", "") != socialSecurityNumberEntries[1].Replace("-", ""))
+                                    {
+                                        Log("social security number mismatch for employee: " + employee.Name, true);
+                                    }
+                                }
+                                ssn = socialSecurityNumberEntries[0];
+                            }
+                            else if ("" != socialSecurityNumberEntries[1])
+                            {
+                                if (!socialSecurityNumberEntries[1].Contains('-'))
+                                {
+                                    socialSecurityNumberEntries[1] = socialSecurityNumberEntries[1].Insert(3, "-").Insert(6, "-");
+                                }
+                                ssn = socialSecurityNumberEntries[1];
+                            }
+                            importedEmployee.ImportFields["SSN"] = ssn;
+                            employee.SocialSecurityNumber = ssn;
+                        }
+                        if ("" != birthDateEntries[0])
+                        {
+                            double d = double.Parse(birthDateEntries[0]);
+                            importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                        }
+                        else if ("" != birthDateEntries[1])
+                        {
+                            double d = double.Parse(birthDateEntries[1]);
+                            importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
                         }
                     }
                 }
@@ -695,10 +734,13 @@ namespace PayrollProcessor
                             if (!EmployeeDictionary.ContainsKey(employeeNumber))
                             {
                                 string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
-                                DelayedLog("In Timesheets, Employee " + employeeNumber + " (" + name + ") was not found.", true);
-                                EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name));
+                                EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name) { IsPartialEntry = true });
                             }
                             Employee employee = EmployeeDictionary[employeeNumber];
+                            if (employee.IsPartialEntry)
+                            {
+                                Log("In Timesheets, Employee " + employeeNumber + " (" + employee.Name + ") was not found.", true);
+                            }
 
                             if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out int jobTypeInt))
                             {
@@ -722,6 +764,15 @@ namespace PayrollProcessor
                             {
                                 shift.JobType = Jobs.DRIVER_CHARTER;
                             }
+                            if (StringSearch(shift.Notes, "per diem") || StringSearch(shift.Notes, "perdiem"))
+                            {
+                                shift.PerDiem = 45;
+                            }
+                            if (StringSearch(shift.Notes, "wf"))
+                            { //typically, west fargo is determined as the location by job code (20), this is just for WF Paras //update: Wf para has it's own job code now, but I will just leave this because it shouldn't hurt anything.
+                                shift.ShiftLocation = Location.WEST_FARGO;
+                            }
+
                             if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))
                             {
                                 string? busNumberString = cellData[rowNumber, BUS_NUMBER_COLUMN].ToString();
@@ -856,7 +907,7 @@ namespace PayrollProcessor
                         if (!EmployeeDictionary.ContainsKey(employeeNumber))
                         {
                             string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
-                            DelayedLog("In Coaches Payroll, Employee " + employeeNumber + " (" + name + ") was not found.", true);
+                            Log("In Coaches Payroll, Employee " + employeeNumber + " (" + name + ") was not found.", true);
                             EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name));
                         }
                         Employee employee = EmployeeDictionary[employeeNumber];
@@ -878,8 +929,7 @@ namespace PayrollProcessor
                         }
 
                         List<Shift> shifts = new();
-                        if (hours > 0/*week number doesn't really matter if there's no hours*/ &&
-                            dates.Count > 1 && dates[0].CompareTo(FirstDayWeek2) != dates[^1].CompareTo(FirstDayWeek2))
+                        if (dates.Count > 1 && dates[0].CompareTo(FirstDayWeek2) != dates[^1].CompareTo(FirstDayWeek2) && dollars + hours > 0)
                         { //multiple shifts and different weeks.
 
 
@@ -1161,18 +1211,26 @@ namespace PayrollProcessor
             foreach (var employeeEntry in ImportEmployees)
             {
                 var employee = EmployeeDictionary[employeeEntry.Key];
+                if (employee.IdNumber == 2161)
+                {
+                    Log("");
+                }
                 if (!employee.HasAnyDirectDepositAccount)
                 {
                     if (employeeEntry.Value.ImportFields.Count > 0)
                     {
-                        if (StringSearch(employeeEntry.Value.ImportFields.GetValueOrDefault("FirstName", "").ToString(), "Jeff"))
-                        {
-                            Log("");
-                        }
                         foreach (var accountInfo in employeeEntry.Value.DDAccounts)
                         {
                             if (accountInfo.Count > 0)
                             {
+                                if (!employee.WasCreatedFromEmployeeExport)
+                                {
+                                    Log("Adding Direct Deposit for " + employee.Name + "(" + employee.IdNumber + ") and employee.WasCreatedFromEmployeeExport == false");
+                                }
+                                if (employee.WasAlreadyInPayroll)
+                                {
+                                    Log("Adding Direct Deposit for " + employee.Name + "(" + employee.IdNumber + ") and employee.WasAlreadyInPayroll == true");
+                                }
                                 for (int columnNumber = 0; columnNumber < ImportedEmployee.DDImportHeaders.Count; columnNumber++)
                                 {
                                     if (accountInfo.ContainsKey(ImportedEmployee.DDImportHeaders[columnNumber]))
@@ -1398,7 +1456,7 @@ namespace PayrollProcessor
             } 
             else if (shift.PayRate > 0f)
             {
-                matrix[rowCounter, (int)TimeCardImportColumns.PAY_RATE_COLUMN] = shift.PayRate;
+                matrix[rowCounter, (int)TimeCardImportColumns.PAY_RATE_COLUMN] = (float)Math.Round(shift.PayRate.Value, 2);
             }
             else
             {
