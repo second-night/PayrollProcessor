@@ -197,43 +197,45 @@ namespace PayrollProcessor
                 { //pair2<route time, List<shift>>
 
                     MgSource sourceOfMg = MgSource.NONE;
-                    float maxMinGuarantee = pair2.Value.Max(shift => shift.GetMinimumGuaranteeMax(emp, out sourceOfMg));
-                    //if (emp.IdNumber == 1893)
-                    //{
-                    //    Log("maxMinGuarantee == " + maxMinGuarantee);
-                    //}
-                    foreach (var shift in  pair2.Value)
-                    {
-                        //if (emp.IdNumber == 1893)
-                        //{
-                        //    Log("shift.ShiftTime == " + shift.ShiftTime);
-                        //}
-                        if (maxMinGuarantee > shift.ShiftTime)
-                        {
-                            float mg = maxMinGuarantee;
-                            foreach (var shift2 in pair2.Value)
-                            {
-                                mg -= shift2.ShiftTime;
-                            }
+                    //float maxMinGuarantee = pair2.Value.Max(shift => shift.GetMinimumGuaranteeMax(emp, out sourceOfMg));
+                    Shift? shiftToUseForMg = null;
 
-                            if (mg > 0)
-                            {
-                                if (sourceOfMg == MgSource.SUMMER_ROUTE)
-                                {
-                                    shift.SummerGuaranteeHours = (float)Math.Round(mg, 2);
-                                }
-                                else
-                                {
-                                    shift.MinimumGuaranteeHours = (float)Math.Round(mg, 2);
-                                }
-                                DocumentMinimumGuaranteeAmountForShift(emp.IdNumber, sourceOfMg, (float)Math.Round(mg, 2));
-                                //if (emp.IdNumber == 1893)
-                                //{
-                                //    Log("mg == " + mg);
-                                //}
-                            }
+                    float maxMinGuarantee = 0f;
+                    foreach (var shift in pair2.Value)
+                    {
+                        float minGuarantee = pair2.Value.Max(shift => shift.GetMinimumGuaranteeMax(emp, out sourceOfMg));
+                        if (minGuarantee > maxMinGuarantee)
+                        {
+                            shiftToUseForMg = shift;
+                            maxMinGuarantee = minGuarantee;
                         }
-                        break;
+                    }
+
+                    if (shiftToUseForMg == null)
+                    {
+                        continue;
+                    }
+                    float mg = maxMinGuarantee;
+
+                    foreach (var shift in pair2.Value)
+                    {
+                        if (shift.JobInt == shiftToUseForMg.JobInt)
+                        {
+                            mg -= shift.ShiftTime;
+                        }
+                    }
+
+                    if (mg > 0)
+                    {
+                        if (sourceOfMg == MgSource.SUMMER_ROUTE)
+                        {
+                            shiftToUseForMg.SummerGuaranteeHours = (float)Math.Round(mg, 2);
+                        }
+                        else
+                        {
+                            shiftToUseForMg.MinimumGuaranteeHours = (float)Math.Round(mg, 2);
+                        }
+                        DocumentMinimumGuaranteeAmountForShift(emp.IdNumber, sourceOfMg, (float)Math.Round(mg, 2));
                     }
                 }
             }

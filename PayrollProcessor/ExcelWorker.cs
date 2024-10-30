@@ -761,9 +761,9 @@ namespace PayrollProcessor
                                 Log("In Timesheets, Employee " + employeeNumber + " (" + employee.Name + ") was not found.", true);
                             }
 
-                            if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out int jobTypeInt))
+                            if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out shift.JobInt))
                             {
-                                shift.JobType = GetJobTypeFromCode(jobTypeInt);
+                                shift.JobType = GetJobTypeFromCode(shift.JobInt);
                                 if (shift.JobType == Jobs.DRIVER_SCHOOL && !employee.PayRates.ContainsKey(shift.JobType))
                                 {
                                     shift.JobType = Jobs.NON_CDL_DRIVER;
@@ -825,7 +825,7 @@ namespace PayrollProcessor
                                     }
                                 }
 
-                                if (jobTypeInt == 20 || jobTypeInt == 23)
+                                if (shift.JobInt == 20 || shift.JobInt == 23)
                                 {
                                     shift.BusNumber = Shift.WEST_FARGO_BUS_PLACE_HOLDER;
                                 }
@@ -833,7 +833,7 @@ namespace PayrollProcessor
 
                             if ((shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL) && !StringSearch(shift.Notes, "training"))
                             {
-                                if (jobTypeInt == 20 || jobTypeInt == 23)
+                                if (shift.JobInt == 20 || shift.JobInt == 23)
                                 {
                                     shift.ShiftLocation = Location.WEST_FARGO;
                                 }
