@@ -1,6 +1,8 @@
-﻿using DocumentFormat.OpenXml.Spreadsheet;
+﻿using DocumentFormat.OpenXml.ExtendedProperties;
+using DocumentFormat.OpenXml.Spreadsheet;
 using System.Data;
 using System.Diagnostics;
+using static PayrollProcessor.ExcelWorker;
 using static PayrollProcessor.Program;
 using Excel = Microsoft.Office.Interop.Excel;
 //using XmlExcel = OfficeOpenXml.Core.ExcelPackage;
@@ -76,6 +78,7 @@ namespace PayrollProcessor
             const int EMP_FIRST_NAME_COLUMN = 4;
             const int GENDER_COLUMN = 8;
             const int PHONE_NUMBER_COLUMN = 15;
+            const int HIRE_DATE_COLUMN = 18;
             const int SALARY_COLUMN = 28;
             int ADMIN_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.ADMIN, 30);
             int AIDE_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, 31);
@@ -114,6 +117,14 @@ namespace PayrollProcessor
                         employee.IsMale = !(TryGetStringFromCell(cellData[rowNumber, GENDER_COLUMN], out string gender) && gender == "F");
                         TryGetStringFromCell(cellData[rowNumber, PHONE_NUMBER_COLUMN], out employee.PhoneNumber);
                         TryGetStringFromCell(cellData[rowNumber, SSN_COLUMN], out employee.SocialSecurityNumber);
+
+                        string? date = cellData[rowNumber, HIRE_DATE_COLUMN].ToString();
+                        if (date != null && date != "")
+                        {
+                            double d = double.Parse(date);
+                            DateTime conv = DateTime.FromOADate(d);
+                            employee.HireDate = conv;
+                        }
                         foreach (KeyValuePair<Jobs, int> entry in payColumns)
                         {
                             if (TryGetFloatFromCell(cellData[rowNumber, entry.Value], out float payRate))
@@ -275,7 +286,7 @@ namespace PayrollProcessor
             const int EMP_LAST_NAME_COLUMN = 7;
             const int EMPLOYEE_GROUPS = 44;
 
-            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups", "Social Security Number", "Birth Date" };
+            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups", "Full Social Security Number", "Birth Date" };
 
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
@@ -309,6 +320,11 @@ namespace PayrollProcessor
                     {
                         WasOnImployeeExportSheet = true
                     };
+                    if (ImportEmployees.ContainsKey(employeeNumber))
+                    {
+                        Log("Fatal Error:\nDuplicate employee number " + employeeNumber.ToString() + " found.");
+                        Exit();
+                    }
                     ImportEmployees.Add(employeeNumber, importedEmployee);
                     importedEmployee.ImportFields.Add("TimeClockID", employeeNumber.ToString());
                     importedEmployee.ImportFields.Add("EmployeeNumber", employeeNumber.ToString());
@@ -352,7 +368,7 @@ namespace PayrollProcessor
                                 case "SSN":
                                     socialSecurityNumberEntries[0] = cellString;
                                     break;
-                                case "Social Security Number":
+                                case "Full Social Security Number":
                                     socialSecurityNumberEntries[1] = cellString;
                                     break;
                                 case "First Name":
@@ -610,39 +626,41 @@ namespace PayrollProcessor
                                     }
                                     break;
                             }
-                            string ssn = "";
-                            if ("" != socialSecurityNumberEntries[0])
-                            {
-                                if ("" != socialSecurityNumberEntries[1] && socialSecurityNumberEntries[0] != socialSecurityNumberEntries[1])
-                                {
-                                    if (socialSecurityNumberEntries[0].Replace("-", "") != socialSecurityNumberEntries[1].Replace("-", ""))
-                                    {
-                                        Log("social security number mismatch for employee: " + employee.Name, true);
-                                    }
-                                }
-                                ssn = socialSecurityNumberEntries[0];
-                            }
-                            else if ("" != socialSecurityNumberEntries[1])
-                            {
-                                if (!socialSecurityNumberEntries[1].Contains('-'))
-                                {
-                                    socialSecurityNumberEntries[1] = socialSecurityNumberEntries[1].Insert(3, "-").Insert(6, "-");
-                                }
-                                ssn = socialSecurityNumberEntries[1];
-                            }
-                            importedEmployee.ImportFields["SSN"] = ssn;
-                            employee.SocialSecurityNumber = ssn;
                         }
-                        if ("" != birthDateEntries[0])
+                    }
+
+                    string ssn = "";
+                    if ("" != socialSecurityNumberEntries[0])
+                    {
+                        if ("" != socialSecurityNumberEntries[1] && socialSecurityNumberEntries[0] != socialSecurityNumberEntries[1])
                         {
-                            double d = double.Parse(birthDateEntries[0]);
-                            importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                            if (socialSecurityNumberEntries[0].Replace("-", "") != socialSecurityNumberEntries[1].Replace("-", ""))
+                            {
+                                Log("social security number mismatch for employee: " + employee.Name);
+                            }
                         }
-                        else if ("" != birthDateEntries[1])
+                        ssn = socialSecurityNumberEntries[0];
+                    }
+                    else if ("" != socialSecurityNumberEntries[1])
+                    {
+                        if (!socialSecurityNumberEntries[1].Contains('-'))
                         {
-                            double d = double.Parse(birthDateEntries[1]);
-                            importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                            socialSecurityNumberEntries[1] = socialSecurityNumberEntries[1].Insert(3, "-").Insert(6, "-");
                         }
+                        ssn = socialSecurityNumberEntries[1];
+                    }
+                    importedEmployee.ImportFields["SSN"] = ssn;
+                    employee.SocialSecurityNumber = ssn;
+                    CheckEmployeeNumberWithSocialSecurityNumber(employee);
+                    if ("" != birthDateEntries[0])
+                    {
+                        double d = double.Parse(birthDateEntries[0]);
+                        importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                    }
+                    else if ("" != birthDateEntries[1])
+                    {
+                        double d = double.Parse(birthDateEntries[1]);
+                        importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
                     }
                 }
             }
@@ -731,11 +749,12 @@ namespace PayrollProcessor
                             TryParseTimeSpan(cellData[rowNumber, PUNCH_IN_COLUMN], out shift.ClockIn);
                             TryParseTimeSpan(cellData[rowNumber, PUNCH_OUT_COLUMN], out shift.ClockOut);
 
-                            if (!EmployeeDictionary.ContainsKey(employeeNumber))
-                            {
-                                string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
-                                EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name) { IsPartialEntry = true });
-                            }
+                            //if (!EmployeeDictionary.ContainsKey(employeeNumber))
+                            //{
+                            //    string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
+                            //    EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name) { IsPartialEntry = true });
+                            //}
+
                             Employee employee = EmployeeDictionary[employeeNumber];
                             if (employee.IsPartialEntry)
                             {
@@ -863,7 +882,10 @@ namespace PayrollProcessor
             var lastModified = File.GetLastWriteTime(filePath);
             if (new DateTime(lastModified.Year, lastModified.Month, lastModified.Day).CompareTo(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day)) < 0)
             {
-                Log("CoachesPayroll is old.", true);
+                if (PrintForm.InputBool("CoachesPayroll is old. Would you like to skip CoachesPayroll?"))
+                {
+                    return;
+                }
             }
             Excel.Application excelApp = new();
             var fInfo = new FileInfo(filePath);
@@ -1368,6 +1390,26 @@ namespace PayrollProcessor
         private enum TimeCardImportColumns
         {
             EMP_NUMBER = 0, JOB_CODE, REGULAR_HOURS, REGULAR_HOURS_WEEK, MG_HOURS, MG_WEEK, HOLIDAY_HOURS, HOLIDAY_WEEK, VACATION_HOURS, VACATION_WEEK, PAY_RATE_COLUMN, REGULAR_DOLLARS, OT_HOURS, OT_WEEK, BONUS_DOLLARS_COLUMN, PER_DIEM_DOLLARS_COLUMN, SUMMER_BONUS_HOURS, SUMMER_BONUS_WEEK 
+        }
+
+        private void CheckEmployeeNumberWithSocialSecurityNumber(Employee employee)
+        {
+            if (employee.SocialSecurityNumber.Equals(""))
+            {
+                return;
+            }
+            foreach (var employeeEntry in EmployeeDictionary)
+            {
+                if (StringSearch(employeeEntry.Value.SocialSecurityNumber, employee.SocialSecurityNumber.ToString()))
+                {
+                    if (employeeEntry.Key != employee.IdNumber)
+                    {
+                        Log("Employee number mismatch:\n" + employee.Name + ": " + employee.IdNumber.ToString() + "\n" + employeeEntry.Value.Name + ": " + employeeEntry.Key.ToString(), true);
+
+                    }
+                    break;
+                }
+            }
         }
 
         private void SaveWorkBook(Excel.Workbook workBook, string filePath)

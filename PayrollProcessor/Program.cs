@@ -1,6 +1,7 @@
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.VisualBasic;
+using System.Data;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -36,12 +37,12 @@ namespace PayrollProcessor
         public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, DoMedhusDeferredPayment ? 1657 : 0/*Bob Medhus*/};
         public static Dictionary<Jobs, float> FargoDefaultRates = new()
         {
-            {Jobs.DRIVER_SCHOOL, 20f },
+            {Jobs.DRIVER_SCHOOL, 21.5f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
             {Jobs.COACH_PUBLIC_DRIVING, OUT_OF_TOWN_CHARTER_RATE },
-            {Jobs.AIDE_SCHOOL, 17.5f },
+            {Jobs.AIDE_SCHOOL, 18f },
             {Jobs.AIDE_CHARTER, 16f },
-            {Jobs.NON_CDL_DRIVER, 17.5f },
+            {Jobs.NON_CDL_DRIVER, 18.5f },
             {Jobs.TRAINING, TRAINING_RATE }
         };
         public static Dictionary<Jobs, float> GrandForksDefaultRates = new()
@@ -446,10 +447,6 @@ namespace PayrollProcessor
                             {
                                 if (entry.IdNumber == emp.IdNumber)
                                 {
-                                    if (StringSearch(emp.Name, "Ray"))
-                                    {
-                                        continue;
-                                    }
                                     if (entry.Hours > weeklyRunnningTotal[1, weekNumber])
                                     {
                                         float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
@@ -586,62 +583,48 @@ namespace PayrollProcessor
                 {
                     continue;
                 }
-                bool bDoingAnnualRaises = false; //TODO: GUI
-                float driverRaise = 0f;
-                float aideRaise = 0f;
                 for (int jobOrdinal = 0;  jobOrdinal <= (int)Jobs.AIDE_SCHOOL; ++jobOrdinal)
                 {
-                    Jobs job = (Jobs)jobOrdinal;
-                    if (employee.PayRates.ContainsKey(job) && employee.PayRates[job] > 0)
+                    Jobs jobType = (Jobs)jobOrdinal;
+                    if (employee.PayRates.ContainsKey(jobType) && employee.PayRates[jobType] > 0)
                     {
-                        float rate = GetBasePayRateForEmployee(job, employee);
-                        float currentRate = employee.PayRates[job];
-                        if (rate > 0)
+                        float baseRate = GetBasePayRateForEmployee(jobType, employee);
+                        float newRate = TimeInServiceAdjustment(baseRate, employee, jobType, false);
+                        if (employee.PayRates[jobType] < newRate)
                         {
-                            if (job == Jobs.DRIVER_SCHOOL || job == Jobs.AIDE_SCHOOL)
-                            {
-                                if (bDoingAnnualRaises)
-                                {
-                                    currentRate += job == Jobs.DRIVER_SCHOOL ? driverRaise : aideRaise;
-                                }
-                                for (int years = 6; years > 0; --years)
-                                {
-                                    if (employee.YearsOfService >= years)
-                                    {
-                                        rate += 0.25f * years;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (employee.YearsOfService > 9 && (job == Jobs.DRIVER_SCHOOL || job == Jobs.DRIVER_CHARTER || job == Jobs.AIDE_SCHOOL || job == Jobs.AIDE_CHARTER))
-                            {
-                                rate += TEN_YEAR_RATE_BUMP;
-                            }
-                            float newRate = Math.Max(rate, currentRate);
-                            if (job == Jobs.DRIVER_SCHOOL && employee.PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f) > newRate)
-                            {
-                                if (employee.IdNumber != 105)
-                                { //Michael Mollenhoff exception
-                                    newRate = employee.PayRates[Jobs.MECHANIC];
-                                    Log("Giving driver rate upgrade for mechanic; " + employee.Name + ". Upgrading from " + employee.PayRates[Jobs.DRIVER_SCHOOL] + " to " + newRate + " (employee.EmploymentCategory == " + employee.EmploymentCategory.ToString() + ").", employee.EmploymentCategory != "ACAFT");
-                                }
-                            }
-                            if (employee.PayRates[job] < newRate)
-                            {
-                                GiveRaiseToEmployee(employee, job, newRate);
-                            }
+                            GiveRaiseToEmployee(employee, jobType, newRate);
                         }
                     }
                 }
             }
         }
 
+        public static float TimeInServiceAdjustment(float baseRate, Employee employee, Jobs jobType, bool bShouldIncludeNonCdl)
+        {
+            float newRate = baseRate;
+            if (newRate > 0)
+            {
+                if (jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.AIDE_SCHOOL || (bShouldIncludeNonCdl && jobType == Jobs.NON_CDL_DRIVER))
+                {
+                    for (int years = 6; years > 0; --years)
+                    {
+                        if (employee.YearsOfService >= years)
+                        {
+                            newRate += 0.25f * years;
+                            break;
+                        }
+                    }
+                }
+                if (employee.YearsOfService > 9 && (jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.NON_CDL_DRIVER || jobType == Jobs.DRIVER_CHARTER || jobType == Jobs.AIDE_SCHOOL || jobType == Jobs.AIDE_CHARTER))
+                {
+                    newRate += TEN_YEAR_RATE_BUMP;
+                }
+            }
+            return newRate;
+        }
+
         public static void GiveRaiseToEmployee(Employee employee, Jobs job, float rate)
         {
-            if (employee.IdNumber == 1907)
-            {
-                Log("");
-            }
             employee.NeedsUpdateInPayroll = true;
             employee.PayRates[job] = rate;
             if (!ExcelWorker.ImportEmployees.ContainsKey(employee.IdNumber))
@@ -694,7 +677,7 @@ namespace PayrollProcessor
             }
         }
 
-        public static float GetBasePayRateForEmployee(Jobs jobType, Employee employee)
+        public static float GetBasePayRateForEmployee(Jobs jobType, Employee employee, bool bIsForGrandForks = false)
         {
             float modifier = 0f;
             foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.StartingRateExceptions)
@@ -705,11 +688,19 @@ namespace PayrollProcessor
                     break;
                 }
             }
-            if (employee.IsGrandForksEmployee && GrandForksDefaultRates.ContainsKey(jobType))
+
+            bIsForGrandForks |= employee.IsGrandForksEmployee;
+
+            if (jobType == Jobs.DRIVER_SCHOOL && employee.IsGrandForksEmployee && employee.HireDate.CompareTo(new DateTime(2024, 05, 01)) < 0)
+            {
+                modifier = Math.Max(modifier, 1f);
+            }
+
+            if (bIsForGrandForks && GrandForksDefaultRates.ContainsKey(jobType))
             {
                 return GrandForksDefaultRates[jobType] + modifier;
             }
-            else if (!employee.IsGrandForksEmployee && FargoDefaultRates.ContainsKey(jobType))
+            else if (!bIsForGrandForks && FargoDefaultRates.ContainsKey(jobType))
             {
                 return FargoDefaultRates[jobType] + modifier;
             }

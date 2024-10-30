@@ -15,6 +15,7 @@ namespace PayrollProcessor
         public bool IsSalaried;
         public bool IsGrandForksEmployee;
         public string SocialSecurityNumber;
+        public DateTime HireDate = DateTime.Now;
         public string EmploymentCategory;
         public string PhoneNumber;
         public bool WasCreatedFromEmployeeExport;
@@ -102,19 +103,6 @@ namespace PayrollProcessor
             return 0f;
         }
 
-        public float NonCdlRate(bool bIsForGrandForksShift)
-        {
-            //aides don't get downgraded for driving a non-cdl route.
-            float paraRate = PayRates.GetValueOrDefault(Jobs.AIDE_SCHOOL, 0f);
-            float nonCdlRate = IsGrandForksEmployee || bIsForGrandForksShift ? GrandForksDefaultRates[Jobs.NON_CDL_DRIVER] : FargoDefaultRates[Jobs.NON_CDL_DRIVER];
-            float rate = Math.Max(paraRate, nonCdlRate);
-            if (YearsOfService > 9)
-            {
-                rate += TEN_YEAR_RATE_BUMP;
-            }
-            return rate;
-        }
-
         public float GetDriverRateForSchoolRouteShift(Shift shift)
         {
             if (shift.JobType != Jobs.DRIVER_SCHOOL && shift.JobType != Jobs.NON_CDL_DRIVER)
@@ -141,6 +129,21 @@ namespace PayrollProcessor
             }
             
             return Math.Max(Math.Max(PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f), PayRates.GetValueOrDefault(Jobs.WASH_BAY)), rate);
+        }
+
+        private float NonCdlRate(bool bIsForGrandForks)
+        {
+            float baseRate = GetBasePayRateForEmployee(Jobs.NON_CDL_DRIVER, this, bIsForGrandForks);
+            float newRate = TimeInServiceAdjustment(baseRate, this, Jobs.NON_CDL_DRIVER, true);
+            float paraRate = GetBasePayRateForEmployee(Jobs.AIDE_SCHOOL, this, bIsForGrandForks);
+            paraRate = TimeInServiceAdjustment(paraRate, this, Jobs.AIDE_SCHOOL, false);
+
+            if (paraRate > newRate)
+            {
+                Log("Possible issue where paraRate > nonCdl rate.");
+            }
+
+            return Math.Max(newRate, paraRate);
         }
 
         public bool IsANonCdlDriver()
@@ -275,10 +278,4 @@ namespace PayrollProcessor
             }
         }
     }
-
-    enum Exceptions
-    {
-        BURINGRUD, 
-    }
-
 }

@@ -54,6 +54,12 @@
     },
     {
       "Name":"",
+      "IdNumber": 1610,
+      "Hours": 2,
+      "Notes":""
+    },
+    {
+      "Name":"",
       "IdNumber": 1266,
       "Hours": 2,
       "Notes":""
@@ -133,11 +139,18 @@
       "Notes":"When Pat clocks in as non-cdl driver, his rate is switched to his admin rate."
     },
     {
-      "Name":"Pat Riley",
-      "IdNumber": 2206,
-      "OverriddenJobType": 13,
-      "OverridingJobType": 1,
-      "Notes":"When Pat clocks in as admin, his rate is switched to his driver rate."
+      "Name":"Mohamed Mustafa Mohamed",
+      "IdNumber": 1534,
+      "OverriddenJobType": 1,
+      "OverridingJobType": 13,
+      "Notes":"When MMM clocks in as driver, his rate is switched to his admin rate."
+    },
+    {
+      "Name":"Merthom Wuo",
+      "IdNumber": 2259,
+      "OverriddenJobType": 25,
+      "OverridingJobType": 13,
+      "Notes":"When Merthom clocks in as para/aide, her rate is switched to her admin rate."
     },
     {
       "Name":"Hussein Shallal",
@@ -256,6 +269,13 @@
       "JobType": 1,
       "Rate": 0.50,
       "Notes":"moved up to $21.00/hour with 2 years of service when starting rate was 20.00"
+    },
+    {
+      "Name":"Enos Washington",
+      "IdNumber": 1610,
+      "JobType": 1,
+      "Rate": 1.75,
+      "Notes":"moved up to $23.00/hour with 5 years of service when starting rate was 20.00"
     }
   ],
   
