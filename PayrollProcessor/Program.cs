@@ -74,6 +74,7 @@ namespace PayrollProcessor
             TotalUpShiftsForEmployees();
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WritePayrollImports();
+            ExcelWorker.WriteBirthDates();
             FinalLogging();
             //Log("Processed is finished. Have a nice day!", true);
         }

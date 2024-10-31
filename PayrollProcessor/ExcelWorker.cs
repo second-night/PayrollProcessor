@@ -76,9 +76,12 @@ namespace PayrollProcessor
             const int SSN_COLUMN = 2;
             const int EMP_LAST_NAME_COLUMN = 3;
             const int EMP_FIRST_NAME_COLUMN = 4;
+            const int BIRTH_DATE_COLUMN = 7;
             const int GENDER_COLUMN = 8;
             const int PHONE_NUMBER_COLUMN = 15;
             const int HIRE_DATE_COLUMN = 18;
+            const int TERM_DATE_COLUMN = 19;
+            const int REHIRE_DATE_COLUMN = 20;
             const int SALARY_COLUMN = 28;
             int ADMIN_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.ADMIN, 30);
             int AIDE_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, 31);
@@ -117,13 +120,19 @@ namespace PayrollProcessor
                         employee.IsMale = !(TryGetStringFromCell(cellData[rowNumber, GENDER_COLUMN], out string gender) && gender == "F");
                         TryGetStringFromCell(cellData[rowNumber, PHONE_NUMBER_COLUMN], out employee.PhoneNumber);
                         TryGetStringFromCell(cellData[rowNumber, SSN_COLUMN], out employee.SocialSecurityNumber);
-
-                        string? date = cellData[rowNumber, HIRE_DATE_COLUMN].ToString();
-                        if (date != null && date != "")
+                        TryGetDateFromCell(cellData[rowNumber, HIRE_DATE_COLUMN], out employee.HireDate);
+                        TryGetDateFromCell(cellData[rowNumber, BIRTH_DATE_COLUMN], out employee.BirthDate);
+                        if (TryGetDateFromCell(cellData[rowNumber, TERM_DATE_COLUMN], out DateTime TermDate))
                         {
-                            double d = double.Parse(date);
-                            DateTime conv = DateTime.FromOADate(d);
-                            employee.HireDate = conv;
+                            TryGetDateFromCell(cellData[rowNumber, REHIRE_DATE_COLUMN], out DateTime rehireDate);
+                            if (TermDate.CompareTo(employee.HireDate) >= 0 && TermDate.CompareTo(rehireDate) >= 0)
+                            {
+                                employee.IsTerminated = true;
+                            }
+                            else
+                            {
+                                Log("Rehire date for " + employee.Name + " is less than the hire or rehire date.", true);
+                            }
                         }
                         foreach (KeyValuePair<Jobs, int> entry in payColumns)
                         {
@@ -177,6 +186,8 @@ namespace PayrollProcessor
             //Marshal.ReleaseComObject(excelApp);
         }
 
+
+
         public void PreCheckTimeSheets()
         {
             const int EMP_NUMBER_COLUMN = 2;
@@ -210,49 +221,43 @@ namespace PayrollProcessor
                 {
                     if (null != cellData[rowNumber, DAY_COLUMN])
                     {
-                        string? date = cellData[rowNumber, DAY_COLUMN].ToString();
-                        if (date == null || date == "" || date == " ")
+                        if (!TryGetDateFromCell(cellData[rowNumber, DAY_COLUMN], out DateTime date))
                         {
                             Log("date == nothing for row: " + rowNumber);
                             continue;
                         }
-                        else
+                        if (!TryGetFloatFromCell(cellData[rowNumber, ROUNDED_TIME_COLUMN], out float time))
                         {
-                            if (!TryGetFloatFromCell(cellData[rowNumber, ROUNDED_TIME_COLUMN], out float time))
-                            {
-                                continue;
-                            }
-                            if (time < 0.1f)
-                            {
-                                continue;
-                            }
+                            continue;
+                        }
+                        if (time < 0.1f)
+                        {
+                            continue;
+                        }
 
-                            if (!TryGetIntFromCell(cellData[rowNumber, EMP_NUMBER_COLUMN], out int employeeNumber))
-                            {
-                                Log("Couldn't get employee number", true);
-                                continue;
-                            }
+                        if (!TryGetIntFromCell(cellData[rowNumber, EMP_NUMBER_COLUMN], out int employeeNumber))
+                        {
+                            Log("Couldn't get employee number", true);
+                            continue;
+                        }
 
-                            if (!EmployeeDictionary.ContainsKey(employeeNumber))
+                        if (!EmployeeDictionary.ContainsKey(employeeNumber))
+                        {
+                            string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
+                            Employee employee = new(employeeNumber, name)
                             {
-                                string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
-                                Employee employee = new(employeeNumber, name)
-                                {
-                                    IsPartialEntry = true
-                                };
-                                EmployeeDictionary.Add(employeeNumber, employee);
-                            }
-                            EmployeeDictionary[employeeNumber].HadHoursInTimesheets = true;
+                                IsPartialEntry = true
+                            };
+                            EmployeeDictionary.Add(employeeNumber, employee);
+                        }
+                        EmployeeDictionary[employeeNumber].HadHoursInTimesheets = true;
 
 
-                            if (TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out string notes))
+                        if (TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out string notes))
+                        {
+                            if (notes == "bonus" || notes == "Bonus")
                             {
-                                double d = double.Parse(date);
-                                DateTime conv = DateTime.FromOADate(d);
-                                if (notes == "bonus" || notes == "Bonus")
-                                {
-                                    Program.BusStartingDays.Add(conv.Day);
-                                }
+                                Program.BusStartingDays.Add(date.Day);
                             }
                         }
                     }
@@ -360,8 +365,10 @@ namespace PayrollProcessor
                             switch (header)
                             {
                                 case "Start Date":
-                                    double d = double.Parse(cellString);
-                                    importedEmployee.ImportFields["HireDate"] = DateTime.FromOADate(d).ToShortDateString();
+                                    if (TryGetDateFromCell(cell, out DateTime hireDate))
+                                    {
+                                        importedEmployee.ImportFields["HireDate"] = hireDate.ToShortDateString();
+                                    }
                                     break;
                                 case "Employee #":
                                     break;
@@ -415,10 +422,9 @@ namespace PayrollProcessor
                                     break;
                                 case "Date Received (Form I-9)":
                                     importedEmployee.ImportFields["I9Completed"] = cellString == "" ? "N" : "Y";
-                                    if (cellString != "")
+                                    if (TryGetDateFromCell(cell, out DateTime iNineDate))
                                     {
-                                        d = double.Parse(cellString);
-                                        importedEmployee.ImportFields["I9CompletedDate"] = DateTime.FromOADate(d).ToShortDateString();
+                                        importedEmployee.ImportFields["I9CompletedDate"] = iNineDate.ToShortDateString();
                                     }
                                     break;
                                 case "Citizenship Designation (Form I-9)":
@@ -655,12 +661,14 @@ namespace PayrollProcessor
                     if ("" != birthDateEntries[0])
                     {
                         double d = double.Parse(birthDateEntries[0]);
-                        importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                        employee.BirthDate = DateTime.FromOADate(d);
+                        importedEmployee.ImportFields["BirthDate"] = employee.BirthDate.ToShortDateString();
                     }
                     else if ("" != birthDateEntries[1])
                     {
                         double d = double.Parse(birthDateEntries[1]);
-                        importedEmployee.ImportFields["BirthDate"] = DateTime.FromOADate(d).ToShortDateString();
+                        employee.BirthDate = DateTime.FromOADate(d);
+                        importedEmployee.ImportFields["BirthDate"] = employee.BirthDate.ToShortDateString();
                     }
                 }
             }
@@ -711,148 +719,143 @@ namespace PayrollProcessor
                 {
                     if (null != cellData[rowNumber, DAY_COLUMN])
                     {
-                        string? date = cellData[rowNumber, DAY_COLUMN].ToString();
-                        if (date == null || date == "" || date == " ")
+                        if (!TryGetDateFromCell(cellData[rowNumber, DAY_COLUMN], out DateTime date))
                         {
                             Log("date == nothing for row: " + rowNumber);
                             continue;
                         }
+
+                        if (!TryGetFloatFromCell(cellData[rowNumber, ROUNDED_TIME_COLUMN], out float time))
+                        {
+                            continue;
+                        }
+                        if (time < 0.1f)
+                        {
+                            continue;
+                        }
+
+                        if (!TryGetIntFromCell(cellData[rowNumber, EMP_NUMBER_COLUMN], out int employeeNumber))
+                        {
+                            Log("Couldn't get employee number", true);
+                            continue;
+                        }
+
+                        Shift shift = new(Company.VALLEY_BUS_LLC);
+                        shift.ShiftTime = time;
+                        shift.Date = date;
+
+                        shift.WeekNumber = date.CompareTo(FirstDayWeek2) < 0 ? 1 : 2;
+                        if (date.AddDays(7).CompareTo(FirstDayWeek2) < 0 || date.AddDays(-7).CompareTo(FirstDayWeek2) > 0)
+                        {
+                            Log("ERROR: Date of shift: " + date.ToShortDateString() + " is not within 7 days of FirstDayWeek2 ( " + FirstDayWeek2.ToShortDateString() + ")", true);
+                        }
+
+                        TryParseTimeSpan(cellData[rowNumber, PUNCH_IN_COLUMN], out shift.ClockIn);
+                        TryParseTimeSpan(cellData[rowNumber, PUNCH_OUT_COLUMN], out shift.ClockOut);
+
+                        //if (!EmployeeDictionary.ContainsKey(employeeNumber))
+                        //{
+                        //    string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
+                        //    EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name) { IsPartialEntry = true });
+                        //}
+
+                        Employee employee = EmployeeDictionary[employeeNumber];
+                        if (employee.IsPartialEntry)
+                        {
+                            Log("In Timesheets, Employee " + employeeNumber + " (" + employee.Name + ") was not found.", true);
+                        }
+
+                        if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out shift.JobInt))
+                        {
+                            shift.JobType = GetJobTypeFromCode(shift.JobInt);
+                            if (shift.JobType == Jobs.DRIVER_SCHOOL && !employee.PayRates.ContainsKey(shift.JobType))
+                            {
+                                shift.JobType = Jobs.NON_CDL_DRIVER;
+                                if (!employee.IsSalaried && employee.IsANonCdlDriver() && !EmployeeIdsToIgnore.Contains(employeeNumber))
+                                {
+                                    NonCdlDrivers.Add(employee);
+                                }
+                            }
+                        }
                         else
                         {
-                            if (!TryGetFloatFromCell(cellData[rowNumber, ROUNDED_TIME_COLUMN], out float time))
+                            Log("Problem getting Job Code for code: " + cellData[rowNumber, JOB_TYPE_COLUMN].ToString(), true);
+                        }
+
+                        TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out shift.Notes);
+                        if (StringSearch(shift.Notes, "TNT"))
+                        {
+                            shift.JobType = Jobs.DRIVER_CHARTER;
+                        }
+                        if (StringSearch(shift.Notes, "per diem") || StringSearch(shift.Notes, "perdiem"))
+                        {
+                            shift.PerDiem = 45;
+                        }
+                        if (StringSearch(shift.Notes, "wf"))
+                        { //typically, west fargo is determined as the location by job code (20), this is just for WF Paras //update: Wf para has it's own job code now, but I will just leave this because it shouldn't hurt anything.
+                            shift.ShiftLocation = Location.WEST_FARGO;
+                        }
+
+                        if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))
+                        {
+                            string? busNumberString = cellData[rowNumber, BUS_NUMBER_COLUMN].ToString();
+                            if (null != busNumberString)
                             {
-                                continue;
+                                busNumberString = busNumberString.Replace("old", "");
+                                busNumberString = busNumberString.Replace("Old", "");
+                                busNumberString = busNumberString.Replace(" ", "");
+                                int.TryParse(busNumberString, out shift.BusNumber);
                             }
-                            if (time < 0.1f)
+                        }
+                        else if (TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out shift.BusNumber))
+                        {
+                            shift.IsAGrandForksShift = shift.BusNumber >= GF_MIN_BUS && shift.BusNumber <= GF_MAX_BUS;
+                        }
+                        else
+                        {
+                            if (null == cellData[rowNumber, BUS_NUMBER_COLUMN] || !StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "N/A"))
                             {
-                                continue;
-                            }
-
-                            if (!TryGetIntFromCell(cellData[rowNumber, EMP_NUMBER_COLUMN], out int employeeNumber))
-                            {
-                                Log("Couldn't get employee number", true);
-                                continue;
-                            }
-
-                            Shift shift = new(Company.VALLEY_BUS_LLC);
-                            shift.ShiftTime = time;
-                            double d = double.Parse(date);
-                            DateTime conv = DateTime.FromOADate(d);
-                            shift.Date = conv;
-
-                            shift.WeekNumber = conv.CompareTo(FirstDayWeek2) < 0 ? 1 : 2;
-                            if (conv.AddDays(7).CompareTo(FirstDayWeek2) < 0 || conv.AddDays(-7).CompareTo(FirstDayWeek2) > 0)
-                            {
-                                Log("ERROR: Date of shift: " + conv.ToShortDateString() + " is not within 7 days of FirstDayWeek2 ( " + FirstDayWeek2.ToShortDateString() + ")", true);
-                            }
-
-                            TryParseTimeSpan(cellData[rowNumber, PUNCH_IN_COLUMN], out shift.ClockIn);
-                            TryParseTimeSpan(cellData[rowNumber, PUNCH_OUT_COLUMN], out shift.ClockOut);
-
-                            //if (!EmployeeDictionary.ContainsKey(employeeNumber))
-                            //{
-                            //    string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
-                            //    EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, name) { IsPartialEntry = true });
-                            //}
-
-                            Employee employee = EmployeeDictionary[employeeNumber];
-                            if (employee.IsPartialEntry)
-                            {
-                                Log("In Timesheets, Employee " + employeeNumber + " (" + employee.Name + ") was not found.", true);
-                            }
-
-                            if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out shift.JobInt))
-                            {
-                                shift.JobType = GetJobTypeFromCode(shift.JobInt);
-                                if (shift.JobType == Jobs.DRIVER_SCHOOL && !employee.PayRates.ContainsKey(shift.JobType))
+                                if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && null != cellData[rowNumber, BUS_NUMBER_COLUMN].ToString())
                                 {
-                                    shift.JobType = Jobs.NON_CDL_DRIVER;
-                                    if (!employee.IsSalaried && employee.IsANonCdlDriver() && !EmployeeIdsToIgnore.Contains(employeeNumber))
+                                    if (!BusProblems.Contains(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString()))
                                     {
-                                        NonCdlDrivers.Add(employee);
+                                        Log("Problem getting bus number for busName: " + cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), true);
+                                        BusProblems.Add(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString());
                                     }
                                 }
-                            }
-                            else
-                            {
-                                Log("Problem getting Job Code for code: " + cellData[rowNumber, JOB_TYPE_COLUMN].ToString(), true);
+                                else if (null != cellData[rowNumber, BUS_NUMBER_COLUMN - 1 /*bus name column*/])
+                                {
+                                    Log("Problem getting bus number for MobileID: " + cellData[rowNumber, BUS_NUMBER_COLUMN - 1].ToString());
+                                }
                             }
 
-                            TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out shift.Notes);
-                            if (StringSearch(shift.Notes, "TNT"))
+                            if (shift.JobInt == 20 || shift.JobInt == 23)
                             {
-                                shift.JobType = Jobs.DRIVER_CHARTER;
+                                shift.BusNumber = Shift.WEST_FARGO_BUS_PLACE_HOLDER;
                             }
-                            if (StringSearch(shift.Notes, "per diem") || StringSearch(shift.Notes, "perdiem"))
+                        }
+
+                        if ((shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL) && !StringSearch(shift.Notes, "training"))
+                        {
+                            if (shift.JobInt == 20 || shift.JobInt == 23)
                             {
-                                shift.PerDiem = 45;
-                            }
-                            if (StringSearch(shift.Notes, "wf"))
-                            { //typically, west fargo is determined as the location by job code (20), this is just for WF Paras //update: Wf para has it's own job code now, but I will just leave this because it shouldn't hurt anything.
                                 shift.ShiftLocation = Location.WEST_FARGO;
                             }
-
-                            if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))
+                            else if (shift.IsAGrandForksShift || employee.IsGrandForksEmployee)
                             {
-                                string? busNumberString = cellData[rowNumber, BUS_NUMBER_COLUMN].ToString();
-                                if (null != busNumberString)
-                                {
-                                    busNumberString = busNumberString.Replace("old", "");
-                                    busNumberString = busNumberString.Replace("Old", "");
-                                    busNumberString = busNumberString.Replace(" ", "");
-                                    int.TryParse(busNumberString, out shift.BusNumber);
-                                }
-                            }
-                            else if (TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out shift.BusNumber))
-                            {
-                                shift.IsAGrandForksShift = shift.BusNumber >= GF_MIN_BUS && shift.BusNumber <= GF_MAX_BUS;
+                                shift.ShiftLocation = Location.GRAND_FORKS;
                             }
                             else
                             {
-                                if (null == cellData[rowNumber, BUS_NUMBER_COLUMN] || !StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "N/A"))
-                                {
-                                    if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && null != cellData[rowNumber, BUS_NUMBER_COLUMN].ToString())
-                                    {
-                                        if (!BusProblems.Contains(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString()))
-                                        {
-                                            Log("Problem getting bus number for busName: " + cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), true);
-                                            BusProblems.Add(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString());
-                                        }
-                                    }
-                                    else if (null != cellData[rowNumber, BUS_NUMBER_COLUMN - 1 /*bus name column*/])
-                                    {
-                                        Log("Problem getting bus number for MobileID: " + cellData[rowNumber, BUS_NUMBER_COLUMN - 1].ToString());
-                                    }
-                                }
-
-                                if (shift.JobInt == 20 || shift.JobInt == 23)
-                                {
-                                    shift.BusNumber = Shift.WEST_FARGO_BUS_PLACE_HOLDER;
-                                }
+                                shift.ShiftLocation = Location.FARGO;
                             }
-
-                            if ((shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL) && !StringSearch(shift.Notes, "training"))
+                            if (shift.JobType == Jobs.DRIVER_SCHOOL)
                             {
-                                if (shift.JobInt == 20 || shift.JobInt == 23)
-                                {
-                                    shift.ShiftLocation = Location.WEST_FARGO;
-                                }
-                                else if (shift.IsAGrandForksShift || employee.IsGrandForksEmployee)
-                                {
-                                    shift.ShiftLocation = Location.GRAND_FORKS;
-                                }
-                                else
-                                {
-                                    shift.ShiftLocation = Location.FARGO;
-                                }
-                                if (shift.JobType == Jobs.DRIVER_SCHOOL)
-                                {
-                                    Shift.DailySchoolRouteCounter[(int)shift.ShiftLocation, conv.Day] += 1;
-                                }
+                                Shift.DailySchoolRouteCounter[(int)shift.ShiftLocation, date.Day] += 1;
                             }
-
-                            employee.Shifts.Add(shift);
                         }
+
+                        employee.Shifts.Add(shift);
                     }
                 }
             }
@@ -1226,7 +1229,6 @@ namespace PayrollProcessor
                 directDepositMatrix[0, columnNumber] = ImportedEmployee.DDImportHeaders[columnNumber];
             }
 
-            var employeeList = ImportEmployees.Values.ToList();
             int employeeRowNumber = 0;
             int raisesRowNumber = 0;
             int accountRowNumber = 0;
@@ -1365,6 +1367,159 @@ namespace PayrollProcessor
             //Marshal.ReleaseComObject(xlApp);
         }
 
+        public void WriteBirthDates()
+        {
+            Excel.Application xlApp = new();
+            xlApp.DisplayAlerts = false;
+            object misValue = System.Reflection.Missing.Value;
+            if (xlApp == null)
+            {
+                MessageBox.Show("Excel is not properly installed!!");
+                return;
+            }
+
+            Excel.Workbook? workBook = null;
+            String path = DesktopPath() + "BirthDates.xlsx";
+            var fInfo = new FileInfo(path);
+            if (fInfo.Exists)
+            {
+                workBook = xlApp.Workbooks.Open(path);
+            }
+            if (null == workBook)
+            {
+                //create new workbook
+                workBook = xlApp.Workbooks.Add(misValue);
+            }
+            if (workBook.Worksheets.Count < 2)
+            {
+                workBook.Worksheets.Add(misValue);
+            }
+
+
+            Excel.Worksheet workSheet = (Excel.Worksheet)workBook.Worksheets.get_Item(2);
+            HashSet<int> activeEmployees = EmployeeDictionary
+            .Where(kvp => kvp.Value.Shifts.Count > 0)
+            .Select(kvp => kvp.Value.IdNumber)
+            .ToHashSet();
+            Object[,] activeEmployeesObject = new String[1, 1];
+            activeEmployeesObject[0,0] = String.Join(",", activeEmployees);
+
+
+            Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["B15"]];
+            var cellData = (Object[,])range.Value2;
+
+            bool bDateWasFound = false;
+            bool bShouldWriteBirthDates = true;
+            for (int row = 1; row < 10; ++row)
+            {
+                if (TryGetStringFromCell(cellData[row, 1], out String dateString) && (DateTime.TryParse(dateString, out DateTime dateOfData) || TryGetDateFromCell(cellData[row, 1], out dateOfData)))
+                {
+                    if (TryGetStringFromCell(cellData[row, 2], out String cellString))
+                    {
+                        HashSet<int> numberSet = cellString
+                            .Split(',')
+                            .Select(int.Parse)
+                            .ToHashSet();
+                        activeEmployees.UnionWith(numberSet);
+                    }
+
+                    if (dateOfData.Year == DateTime.Now.Year && dateOfData.Month == DateTime.Now.Month)
+                    {
+                        if (dateOfData.Day == DateTime.Now.Day)
+                        {
+                            bDateWasFound = true; //this means we are just overwriting this value
+                            break;
+                        }
+                        else if (DateTime.Now.Day - dateOfData.Day < 5 && DateTime.Now.DayOfWeek != DayOfWeek.Wednesday)
+                        {
+                            bShouldWriteBirthDates = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (bShouldWriteBirthDates)
+            {
+
+                for (int row = 1; row < 10; ++row)
+                {
+                    if (TryGetStringFromCell(cellData[row, 1], out String dateString) && (DateTime.TryParse(dateString, out DateTime dateOfData) || TryGetDateFromCell(cellData[row, 1], out dateOfData)))
+                    {
+                        if (dateOfData.AddMonths(3).CompareTo(DateTime.Now) >= 1 && (!bDateWasFound || dateOfData.Date != DateTime.Now.Date))
+                        {
+                            continue;
+                        }
+                    } 
+                    else if (bDateWasFound)
+                    {
+                        continue;
+                    }
+
+                    Object[,] now = new string[1, 1];
+                    now[0, 0] = DateTime.Now.ToShortDateString();
+                    workSheet.Range["A" + row].Value = now;
+                    workSheet.Range["B" + row].Value = activeEmployeesObject;
+                    break;
+                }
+
+                object[,] employeeMatrix = new string[Program.EmployeeDictionary.Count + 1, 52];
+
+                int employeeRowNumber = 0;
+                Dictionary<DateTime, String> birthDates = new();
+                foreach (var employeeEntry in EmployeeDictionary)
+                {
+                    var employee = employeeEntry.Value;
+                    if (employee.IsTerminated || !activeEmployees.Contains(employee.IdNumber))
+                    {
+                        continue;
+                    }
+
+                    if (employee.BirthDate.Month != DateTime.Now.AddMonths(1).Month)
+                    {
+                        continue;
+                    }
+
+                    birthDates.Add(employee.BirthDate, employee.Name);
+                }
+
+                var sortedByDay = birthDates
+                    .OrderBy(kvp => kvp.Key.Day)
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+                foreach (var kvp in sortedByDay)
+                {
+                    employeeMatrix[employeeRowNumber + 1, 0] = kvp.Value;
+                    employeeMatrix[employeeRowNumber + 1, 1] = kvp.Key.ToShortDateString();
+                    employeeRowNumber++;
+                }
+
+                workSheet = (Excel.Worksheet)workBook.Worksheets.get_Item(1);
+                //Marshal.ReleaseComObject(workSheet2);
+
+                range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["AZ" + employeeMatrix.GetLength(0)]];
+                range.Value = employeeMatrix;
+
+                SaveWorkBook(workBook, path);
+            }
+
+            workBook.Close(true, misValue, misValue);
+            //Marshal.ReleaseComObject(workSheet);
+            //Marshal.ReleaseComObject(workBook);
+
+            //var p = new Process
+            //{
+            //    StartInfo = new ProcessStartInfo(path)
+            //    {
+            //        UseShellExecute = true
+            //    }
+            //};
+            //p.Start();
+
+            xlApp.Quit();
+            //Marshal.ReleaseComObject(xlApp);
+        }
+
         private void WriteHeadersForTimeCardImport(Excel.Worksheet workSheet)
         {
             workSheet.Cells[1, TimeCardImportColumns.EMP_NUMBER + 1] = "Key";
@@ -1434,6 +1589,25 @@ namespace PayrollProcessor
                 if ("" != str && null != str)
                 {
                     outString = str;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool TryGetDateFromCell(Object cellData, out DateTime date)
+        {
+            date = DateTime.MinValue;
+            if (null != cellData)
+            {
+                string? str = cellData.ToString();
+                if (str != null && str != "")
+                {
+                    if (!double.TryParse(str, out double d))
+                    {
+                        return false;
+                    }
+                    date = DateTime.FromOADate(d);
                     return true;
                 }
             }
