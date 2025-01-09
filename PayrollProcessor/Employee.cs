@@ -150,7 +150,9 @@ namespace PayrollProcessor
 
         public bool IsANonCdlDriver()
         {
-            return !PayRates.ContainsKey(Jobs.DRIVER_SCHOOL) && (!PayRates.ContainsKey(Jobs.MECHANIC) || PayRates[Jobs.MECHANIC] < NonCdlRate(IsGrandForksEmployee));
+            float baseRate = GetBasePayRateForEmployee(Jobs.DRIVER_SCHOOL, this, IsGrandForksEmployee);
+            float newRate = TimeInServiceAdjustment(baseRate, this, Jobs.DRIVER_SCHOOL, true);
+            return !PayRates.ContainsKey(Jobs.DRIVER_SCHOOL) && (!PayRates.ContainsKey(Jobs.MECHANIC) || PayRates[Jobs.MECHANIC] < newRate);
         }
 
         public List<Shift> SchoolRouteShifts()

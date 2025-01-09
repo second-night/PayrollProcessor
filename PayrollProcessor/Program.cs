@@ -1,3 +1,4 @@
+using DocumentFormat.OpenXml.ExtendedProperties;
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.VisualBasic;
@@ -5,20 +6,20 @@ using System.Data;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
 {
     //  taskkill /f /im excel.exe
 
-    //TODO: display list of people getting special exceptions, display list of non-cdl drivers.
     public static class Program
     {
         public static Dictionary<int, Employee> EmployeeDictionary = new();
         public const float OUT_OF_TOWN_CHARTER_RATE = 18f;
         public const float T_AND_J_CHARTER_RATE = 19f;
         public const float PRIVATE_OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
-        public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 50f;
-        public const float TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 40f;
+        public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 72f;
+        public const float TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 70f;
         public const float DRIVER_CHARTER_RATE = 17.5f;
         public const float TRAINING_RATE= 12.5f;
         public const float STARTING_WASH_BAY_RATE = 16f;
@@ -29,12 +30,16 @@ namespace PayrollProcessor
         public static string LogString = "";
         public static HashSet<int> BusStartingDays = new();
         private static ExcelWorker ExcelWorker;
+        private static bool DoMedhusDeferredPayment;
+        public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, DoMedhusDeferredPayment ? 1657 : 0/*Bob Medhus*/};
+
+        //fields for logging
         private static Dictionary<MgSource, float> MgSourceTotals = new();
         public static Dictionary<String, bool> DelayedLogMessages = new();
         public static HashSet<Employee> NonCdlDrivers = new();
         private static Dictionary<int, Dictionary<Jobs, float>> ApprenticeMechanicHours = new();
-        private static bool DoMedhusDeferredPayment;
-        public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, DoMedhusDeferredPayment ? 1657 : 0/*Bob Medhus*/};
+
+
         public static Dictionary<Jobs, float> FargoDefaultRates = new()
         {
             {Jobs.DRIVER_SCHOOL, 21.5f },
@@ -75,6 +80,7 @@ namespace PayrollProcessor
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WritePayrollImports();
             ExcelWorker.WriteBirthDates();
+            ExcelWorker.WriteOverTimeReport();
             FinalLogging();
             //Log("Processed is finished. Have a nice day!", true);
         }
@@ -209,6 +215,12 @@ namespace PayrollProcessor
                         {
                             shiftToUseForMg = shift;
                             maxMinGuarantee = minGuarantee;
+                        }
+
+                        if (shift.JobType == Jobs.MECHANIC && emp.IdNumber == 1248)
+                        {
+                            //ali omar exception
+                            shift.MinimumGuaranteeHours = Math.Max(0, 1 - shift.ShiftTime);
                         }
                     }
 
@@ -442,7 +454,7 @@ namespace PayrollProcessor
                                 }
                             }
                         }
-                        
+
                         for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
                         {
                             //weekly min 
@@ -475,7 +487,7 @@ namespace PayrollProcessor
                         }
 
                         //bob medhus
-                        if (DoMedhusDeferredPayment &&emp.IdNumber == 1657)
+                        if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
                         {
                             string message = "\nFor Bob Medhus, payroll run on " + DateTime.Now.ToShortDateString() + ":";
                             for (int i = 0; i < 2; i++)
@@ -499,6 +511,120 @@ namespace PayrollProcessor
                     }
                 }
             }
+
+            LogPayRateAverages();
+        }
+
+        static void LogPayRateAverages()
+        {
+            bool bShouldTreatWestFargoAsFargo = true;
+
+            for (int location = (int)Location.FARGO; location <= (int)Location.GRAND_FORKS; ++location)
+            {
+                var payRates = new Dictionary<Jobs, List<float>>();
+                var hours = new Dictionary<Jobs, List<float>>();
+                var shifts = new Dictionary<Jobs, List<Shift>>();
+                var employeesPerJob = new Dictionary<Jobs, HashSet<Employee>>();
+                var payRatesByEmployee = new Dictionary<Jobs, List<float>>();
+                var averagePayRateByEmployee = new Dictionary<Jobs, float>();
+
+                if (bShouldTreatWestFargoAsFargo && (Location)location == Location.WEST_FARGO)
+                {
+                    continue;
+                }
+
+                foreach (var emp in EmployeeDictionary.Values)
+                {
+                    if (emp != null && emp.Shifts.Count > 0)
+                    {
+                        foreach (var shift in emp.Shifts)
+                        {
+                            if (shift.PayRate != null)
+                            {
+                                if ((int)shift.ShiftLocation != location)
+                                {
+                                    if ((Location)location != Location.FARGO || shift.ShiftLocation != Location.WEST_FARGO)
+                                    {
+                                        continue;
+                                    }
+                                    if (!bShouldTreatWestFargoAsFargo)
+                                    {
+                                        continue;
+                                    }
+                                }
+                                // Initialize collections if needed
+                                if (!payRates.ContainsKey(shift.JobType))
+                                {
+                                    payRates[shift.JobType] = new List<float>();
+                                    hours[shift.JobType] = new List<float>();
+                                    shifts[shift.JobType] = new();
+                                    payRatesByEmployee[shift.JobType] = new List<float>();
+                                    employeesPerJob[shift.JobType] = new HashSet<Employee>();
+                                }
+
+                                // Add pay rate and hours
+                                payRates[shift.JobType].Add((float)shift.PayRate);
+                                hours[shift.JobType].Add((float)shift.AllHours(false));
+                                shifts[shift.JobType].Add(shift);
+
+                                // Track employee-specific pay rates
+                                if (!employeesPerJob[shift.JobType].Contains(emp))
+                                {
+                                    employeesPerJob[shift.JobType].Add(emp);
+                                    payRatesByEmployee[shift.JobType].Add((float)shift.PayRate);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Calculate and display average pay rates
+                foreach (var job in payRates.Keys)
+                {
+                    float averagePayRate = CalculateAveragePayRate(payRates[job], hours[job], job, (Location)location, shifts[job]);
+                }
+
+                // Calculate average pay rate by employee
+                foreach (var jobType in payRatesByEmployee.Keys)
+                {
+                    var totalPayRate = payRatesByEmployee[jobType].Sum(); // Sum of unique pay rates
+                    var employeeCount = employeesPerJob[jobType].Count;   // Count of unique employees
+                    if (employeeCount > 0)
+                    {
+                        float averagePayRate = totalPayRate / employeeCount;
+                        averagePayRateByEmployee[jobType] = averagePayRate;
+                        if (jobType == Jobs.NON_CDL_DRIVER || jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.AIDE_SCHOOL)
+                        {
+                            Log($"{jobType}: " + $"{(Location)location}: Average Pay Rate by employee = {averagePayRate:F2} and employee count == " + employeeCount.ToString());
+                        }
+                    }
+                }
+            }
+        }
+
+        static float CalculateAveragePayRate(List<float> rates, List<float> hours, Jobs job, Location location, List<Shift> shifts)
+        {
+            // Ensure data consistency
+            if (rates.Count != hours.Count || rates.Count == 0)
+                throw new InvalidOperationException("Rates and hours must have the same non-zero count.");
+
+            // Calculate weighted average
+            float totalPay = 0;
+            float totalHours = hours.Sum();
+            float averagedPayRate = 0f;
+            for (int i = 0; i < rates.Count; i++)
+            {
+                totalPay += rates[i] * hours[i];
+                averagedPayRate += (hours[i] / totalHours) * rates[i];
+
+            }
+
+            var totalCumulativePayRate = rates.Sum();
+            if (job == Jobs.NON_CDL_DRIVER || job == Jobs.DRIVER_SCHOOL || job == Jobs.AIDE_SCHOOL)
+            {
+                Log("(" + job.ToString() + ") averagedPayRate == " + $"{averagedPayRate:F2} and totalHours == " + totalHours + "(" + hours.Sum() + ") and totalPay == " + totalPay);
+            }
+            return totalPay / totalHours;
         }
 
         private static void FindOrMakeMatchingShiftTotalShift(Shift shiftToMatch, Employee emp, out Shift shiftTotalShift)
@@ -544,7 +670,8 @@ namespace PayrollProcessor
 
         private static void DoBusStartingBonusAndMg(Shift shift, Employee emp)
         {
-            if (BusStartingDays.Contains(shift.Date.Day))
+            bool bBusStartingDayOverride = true;
+            if (BusStartingDays.Contains(shift.Date.Day) || bBusStartingDayOverride)
             {
                 if (shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0 || StringSearch(shift.Notes, "bonus"))
                 {
@@ -717,11 +844,12 @@ namespace PayrollProcessor
 
         public static string MakeLog()
         {
-            string[] paths = new string[2];
+            string[] paths = new string[3];
             paths[0] = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.Parent.Parent.FullName;
-            paths[0] += "\\Logs\\Log" + DateTime.Today.ToShortDateString().Replace("/", "-") + "_forPayday_" + ExcelWorker.FirstDayWeek2.AddDays(12).ToShortDateString().Replace("/", "-") + ".txt";
+            paths[0] += "\\Logs\\Log" + DateTime.Today.ToShortDateString().Replace("/", "-") + "_forPayDate_" + ExcelWorker.FirstDayWeek2.AddDays(12).ToShortDateString().Replace("/", "-") + ".txt";
+            paths[1] = "C:\\Users\\User\\valleybusllc.com\\PayrollExceptionMonitoring - PayrollMonitoring\\" + "log_forPayDate_" + ExcelWorker.FirstDayWeek2.AddDays(12).ToShortDateString().Replace("/", "-") + ".txt";
 
-            paths[1] = DesktopPath() + "PayrollLog.txt";
+            paths[2] = DesktopPath() + "PayrollLog.txt";
 
             for (int i = 0; i < paths.Length; ++i)
             {

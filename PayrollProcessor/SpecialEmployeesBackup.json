@@ -293,7 +293,7 @@
     {
       "Name":"Bob Medhus",
       "IdNumber": 1657,
-      "Dollars": 15,
+      "Dollars": 20,
       "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
@@ -349,6 +349,22 @@
     {
       "Name":"Julie Gonzalez",
       "IdNumber": 1976,
+      "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
+      "JobType": 7,
+      "Notes":""
+    },
+    {
+      "Name":"Ryan Garfield",
+      "IdNumber": 2117,
+      "Dollars": 10,
+      "ReceivesBusStartingMinimumGuarantee": true,
+      "JobType": 7,
+      "Notes":""
+    },
+    {
+      "Name":"Chris Craig",
+      "IdNumber": 1803,
       "Dollars": 10,
       "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,

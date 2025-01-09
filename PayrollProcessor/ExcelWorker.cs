@@ -15,6 +15,7 @@ namespace PayrollProcessor
         private const int GF_MIN_BUS = 300;
         public static Dictionary<int, ImportedEmployee> ImportEmployees = new();
         public DateTime FirstDayWeek2;
+
         public ExcelWorker()
         {
             DateTime today = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day);
@@ -185,8 +186,6 @@ namespace PayrollProcessor
             //Marshal.ReleaseComObject(workBook);
             //Marshal.ReleaseComObject(excelApp);
         }
-
-
 
         public void PreCheckTimeSheets()
         {
@@ -1401,6 +1400,14 @@ namespace PayrollProcessor
             .Where(kvp => kvp.Value.Shifts.Count > 0)
             .Select(kvp => kvp.Value.IdNumber)
             .ToHashSet();
+
+            foreach (var kvp in EmployeeDictionary)
+            {
+                if (kvp.Value.IsSalaried && !kvp.Value.IsTerminated)
+                {
+                    activeEmployees.Add(kvp.Key);
+                }
+            }
             Object[,] activeEmployeesObject = new String[1, 1];
             activeEmployeesObject[0,0] = String.Join(",", activeEmployees);
 
@@ -1408,6 +1415,7 @@ namespace PayrollProcessor
             Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["B15"]];
             var cellData = (Object[,])range.Value2;
 
+            DateTime payDate = FirstDayWeek2.AddDays(12);
             bool bDateWasFound = false;
             bool bShouldWriteBirthDates = true;
             for (int row = 1; row < 10; ++row)
@@ -1423,16 +1431,17 @@ namespace PayrollProcessor
                         activeEmployees.UnionWith(numberSet);
                     }
 
-                    if (dateOfData.Year == DateTime.Now.Year && dateOfData.Month == DateTime.Now.Month)
+                    if (dateOfData.Year == payDate.Year && dateOfData.Month == payDate.Month)
                     {
-                        if (dateOfData.Day == DateTime.Now.Day)
+                        if (dateOfData.Day == payDate.Day)
                         {
                             bDateWasFound = true; //this means we are just overwriting this value
-                            break;
-                        }
-                        else if (DateTime.Now.Day - dateOfData.Day < 5 && DateTime.Now.DayOfWeek != DayOfWeek.Wednesday)
-                        {
-                            bShouldWriteBirthDates = false;
+
+                            if (Math.Abs(payDate.Day - dateOfData.Day) > 10)
+                            {
+                                bShouldWriteBirthDates = false;
+                            }
+
                             break;
                         }
                     }
@@ -1446,7 +1455,7 @@ namespace PayrollProcessor
                 {
                     if (TryGetStringFromCell(cellData[row, 1], out String dateString) && (DateTime.TryParse(dateString, out DateTime dateOfData) || TryGetDateFromCell(cellData[row, 1], out dateOfData)))
                     {
-                        if (dateOfData.AddMonths(3).CompareTo(DateTime.Now) >= 1 && (!bDateWasFound || dateOfData.Date != DateTime.Now.Date))
+                        if (dateOfData.AddMonths(3).CompareTo(payDate) >= 1 && (!bDateWasFound || dateOfData.Date != payDate.Date))
                         {
                             continue;
                         }
@@ -1457,7 +1466,7 @@ namespace PayrollProcessor
                     }
 
                     Object[,] now = new string[1, 1];
-                    now[0, 0] = DateTime.Now.ToShortDateString();
+                    now[0, 0] = payDate.ToShortDateString();
                     workSheet.Range["A" + row].Value = now;
                     workSheet.Range["B" + row].Value = activeEmployeesObject;
                     break;
@@ -1466,7 +1475,7 @@ namespace PayrollProcessor
                 object[,] employeeMatrix = new string[Program.EmployeeDictionary.Count + 1, 52];
 
                 int employeeRowNumber = 0;
-                Dictionary<DateTime, String> birthDates = new();
+                Dictionary<DateTime, List<String>> birthDates = new();
                 foreach (var employeeEntry in EmployeeDictionary)
                 {
                     var employee = employeeEntry.Value;
@@ -1479,8 +1488,11 @@ namespace PayrollProcessor
                     {
                         continue;
                     }
-
-                    birthDates.Add(employee.BirthDate, employee.Name);
+                    if (!birthDates.ContainsKey(employee.BirthDate))
+                    {
+                        birthDates.Add(employee.BirthDate, new());
+                    }
+                    birthDates[employee.BirthDate].Add(employee.Name);
                 }
 
                 var sortedByDay = birthDates
@@ -1489,9 +1501,12 @@ namespace PayrollProcessor
 
                 foreach (var kvp in sortedByDay)
                 {
-                    employeeMatrix[employeeRowNumber + 1, 0] = kvp.Value;
-                    employeeMatrix[employeeRowNumber + 1, 1] = kvp.Key.ToShortDateString();
-                    employeeRowNumber++;
+                    foreach (var employeeName in kvp.Value)
+                    {
+                        employeeMatrix[employeeRowNumber + 1, 0] = employeeName;
+                        employeeMatrix[employeeRowNumber + 1, 1] = kvp.Key.ToShortDateString();
+                        employeeRowNumber++;
+                    }
                 }
 
                 workSheet = (Excel.Worksheet)workBook.Worksheets.get_Item(1);
@@ -1518,6 +1533,74 @@ namespace PayrollProcessor
 
             xlApp.Quit();
             //Marshal.ReleaseComObject(xlApp);
+        }
+
+        public void WriteOverTimeReport()
+        {
+            Excel.Application xlApp = new();
+            xlApp.DisplayAlerts = false;
+            object misValue = System.Reflection.Missing.Value;
+            if (xlApp == null)
+            {
+                MessageBox.Show("Excel is not properly installed!!");
+                return;
+            }
+
+            Excel.Workbook? workBook = null;
+            String ShortDateString = FirstDayWeek2.AddDays(12).ToShortDateString().Replace("/", "-");
+            String path = "C:\\Users\\User\\valleybusllc.com\\PayrollExceptionMonitoring - PayrollMonitoring\\OvertimeReport_" + ShortDateString + ".xlsx";
+            var fInfo = new FileInfo(path);
+            //if (fInfo.Exists)
+            //{
+            //    fInfo.Delete();
+            //}
+            if (null == workBook)
+            {
+                //create new workbook
+                workBook = xlApp.Workbooks.Add(misValue);
+            }
+
+            List<Employee> filteredEmployees = EmployeeDictionary.Values
+            //.Where(emp => emp.OverTimeHours.Any(hours => hours >= 5))
+            .Where(emp => emp.OverTimeHours.Any(hours => hours > 0))
+            .OrderByDescending(emp => emp.OverTimeHours.Sum())
+            .ToList();
+
+            Excel.Worksheet workSheet = (Excel.Worksheet)workBook.Worksheets.get_Item(1);
+
+            workSheet.Cells[1, 1] = "Employee";
+            workSheet.Cells[1, 2] = "OT Week 1";
+            workSheet.Cells[1, 3] = "OT Week 2";
+            workSheet.Cells[1, 4] = "OT Total";
+
+            const int ROW_COUNT = 1500;
+            object[,] matrix = new object[ROW_COUNT, 4];
+            int rowCounter = 0;
+            foreach (Employee employee in filteredEmployees)
+            {
+                matrix[rowCounter, 0] = employee.Name;
+                matrix[rowCounter, 1] = Math.Round(employee.OverTimeHours[1], 2).ToString();
+                matrix[rowCounter, 2] = Math.Round(employee.OverTimeHours[2], 2).ToString();
+                matrix[rowCounter, 3] = Math.Round(employee.OverTimeHours[1] + employee.OverTimeHours[2], 2).ToString();
+                ++rowCounter;
+            }
+
+
+            Excel.Range range = workSheet.Range[workSheet.Range["A2"], workSheet.Range["D" + ROW_COUNT]];
+            range.Value = matrix;
+            var cellData = (Object[,])range.Value2;
+            SaveWorkBook(workBook, path);
+
+            workBook.Close(true, misValue, misValue);
+            xlApp.Quit();
+            var p = new Process
+            {
+                StartInfo = new ProcessStartInfo("C:\\Users\\User\\valleybusllc.com\\PayrollExceptionMonitoring - PayrollMonitoring\\OvertimeReport_" + ShortDateString + ".xlsx")
+                {
+                    UseShellExecute = true
+                }
+            };
+            p.Start();
         }
 
         private void WriteHeadersForTimeCardImport(Excel.Worksheet workSheet)
