@@ -69,6 +69,7 @@ namespace PayrollProcessor
             Console.SetOut(new ToDebugWriter());
             ApplicationConfiguration.Initialize();
             ExcelWorker = new();
+            CheckForVacationCutOff(ExcelWorker.FirstDayWeek2);
             ExcelWorker.ReadIsolvedEmployees();
             ExcelWorker.PreCheckTimeSheets();
             ExcelWorker.ReadEmployeeExport();
@@ -465,9 +466,16 @@ namespace PayrollProcessor
                                     if (entry.Hours > weeklyRunnningTotal[1, weekNumber])
                                     {
                                         float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
-                                        emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType()).MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
-                                        DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
-                                        SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
+                                        var shift = emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType(), false);
+                                        if (shift != null)
+                                        {
+                                            if (shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.VACATION)
+                                            {
+                                                shift.MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
+                                                DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
+                                                SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
+                                            }    
+                                        }
                                     }
                                     break;
                                 }
@@ -837,6 +845,23 @@ namespace PayrollProcessor
             return 0;
         }
 
+        public static void CheckForVacationCutOff(DateTime firstDayWeekTwo)
+        {
+            DateTime payDate = firstDayWeekTwo.AddDays(12);
+
+            if (payDate.Month == 1 && payDate.Day == 1)
+            {
+                payDate = payDate.AddDays(-1);
+            }
+
+            DateTime nextPayDate = payDate.AddDays(7);
+
+            if (nextPayDate.Year > payDate.Year)
+            {
+                Log("This is the last pay period for the year. Please check accrual cut-offs", true);
+            }
+        }
+
         public static string DesktopPath()
         {
             return Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\";
@@ -949,6 +974,13 @@ namespace PayrollProcessor
             Log(nonCdlDrivers);
 
             SpecialEmployeeHandler.GetInstance().AddExceptionNotificationsToLog();
+
+            DolStatisticsTracker dolStatisticsTracker = new();
+            foreach (var emp in EmployeeDictionary.Values)
+            {
+                dolStatisticsTracker.RegisterEmployeeAfterShiftTotals(emp);
+            }
+            dolStatisticsTracker.AddDolStatisticsToLog();
 
 
             string logPath = MakeLog();

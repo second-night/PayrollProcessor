@@ -103,6 +103,26 @@ namespace PayrollProcessor
             return time;
         }
 
+        public float TotalCompensation(Employee employee)
+        {
+            if (!IsValid(employee))
+            {
+                return 0f;
+            }
+            
+            if ((null == PayRate || PayRate < 1) && DollarAmount < 0.01f)
+            {
+                Log("Issue with shift.TotalCompensation(). It is likely being called before the payrate has been calculated for the shift.", true);
+            }
+
+            float dollarAmountLocal = DollarAmount + BonusDollars;
+            if (dollarAmountLocal < 0.01f && null != PayRate)
+            {
+                dollarAmountLocal += AllHours(false) * PayRate.Value;
+            }
+            return dollarAmountLocal;
+        }
+
         public float GetMinimumGuaranteeMax(Employee employee, out MgSource sourceOfMg, List<Shift>? shiftsInRouteTimeContext = null)
         {
             sourceOfMg = MgSource.NONE;

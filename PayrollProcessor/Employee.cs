@@ -13,6 +13,7 @@ namespace PayrollProcessor
         public List<Shift> Shifts = new();
         public float[] OverTimeHours = new float[3];
         public bool IsSalaried;
+        public float AnnualSalaryAmount;
         public bool IsGrandForksEmployee;
         public string SocialSecurityNumber;
         public DateTime HireDate = DateTime.Now;
@@ -220,7 +221,7 @@ namespace PayrollProcessor
         }
 
         //only use this for weekly MG excpetions - otherwise make sure it will work properly if used for another purpose.
-        public Shift FindShiftForWeek(int week, Jobs jobType)
+        public Shift? FindShiftForWeek(int week, Jobs jobType, bool bShouldCreateNewShiftIfShiftIsNotFound)
         {
             for (int shiftType = 0; shiftType <= (int)Type.DOLLAR_AMOUNT; ++ shiftType)
             {
@@ -240,6 +241,11 @@ namespace PayrollProcessor
                         }
                     }
                 }
+            }
+
+            if (!bShouldCreateNewShiftIfShiftIsNotFound)
+            {
+                return null;
             }
 
             //didn't find shift, make new shift

@@ -2,12 +2,6 @@
   "JsonInstructions": "Note: When editing this document, pay attention to the format, any change in format can cause the program to fail. It may be wise to make a copy of the previous version before editing. The 'Name' and 'Notes' fields are only there for the user, they do not matter to the program itself.DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, AIDE_SCHOOL = 25, NON_CDL_DRIVER = 28",
   "WeeklyMgExceptions" : [
     {
-      "Name":"Ray Johnson",
-      "IdNumber": 739,
-      "Hours": 30,
-      "Notes":""
-    },
-    {
       "Name":"Brad Rust",
       "IdNumber": 1734,
       "Hours": 30,
@@ -25,6 +19,12 @@
     {
       "Name":"Abdala Mohamed",
       "IdNumber": 1030,
+      "Hours": 6,
+      "Notes":""
+    },
+    {
+      "Name":"Ray Johnson",
+      "IdNumber": 739,
       "Hours": 6,
       "Notes":""
     }

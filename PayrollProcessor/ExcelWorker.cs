@@ -84,6 +84,7 @@ namespace PayrollProcessor
             const int TERM_DATE_COLUMN = 19;
             const int REHIRE_DATE_COLUMN = 20;
             const int SALARY_COLUMN = 28;
+            const int BI_WEEKLY_SALARY_COLUMN = 54;
             int ADMIN_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.ADMIN, 30);
             int AIDE_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, 31);
             int AIDE_CHARTER_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_CHARTER, 32);
@@ -143,6 +144,10 @@ namespace PayrollProcessor
                             }
                         }
                         if (TryGetFloatFromCell(cellData[rowNumber, SALARY_COLUMN], out float salary) && salary > 50)
+                        {
+                            employee.IsSalaried = true;
+                        }
+                        else if (TryGetFloatFromCell(cellData[rowNumber, BI_WEEKLY_SALARY_COLUMN], out float salary2) && salary2 > 50)
                         {
                             employee.IsSalaried = true;
                         }
@@ -1084,6 +1089,10 @@ namespace PayrollProcessor
                 int rowCounter = 0;
                 foreach (var emp in SortedEmployees)
                 {
+                    if (emp.IdNumber == 1768)
+                    {
+                        continue;
+                    }
                     if (emp != null)
                     {
                         if (!Program.EmployeeIdsToIgnore.Contains(emp.IdNumber) && emp.Shifts.Count > 0)
