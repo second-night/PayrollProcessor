@@ -8,7 +8,7 @@ namespace PayrollProcessor
     {
         public const int WEST_FARGO_BUS_PLACE_HOLDER = int.MaxValue;
         private static readonly int[] BigBusNumbers = new int[] { WEST_FARGO_BUS_PLACE_HOLDER, 14, 26, 28, 29, 32, 33, 37, 38, 39, 40, 41, 44, 45, 46, 48, 49, 52, 53, 55, 56, 57, 58, 59, 60, 61, 63, 64, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 100, 105, 109, 111, 113, 301, 302, 306, 308, 309, 310, 311, 312, 313, 314, 315, 317, 321, 322, 329, 330, 333 };
-        private static readonly int[] SpedBusNumbers = new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 30, 31, 34, 35, 36, 42, 43, 47, 50, 51, 54, 62, 65, 99, 101, 102, 103, 104, 106, 107, 108, 110, 112, 114, 115, 116, 502, 503, 504, 505, 303, 304, 305, 307, 316, 318, 319, 320, 323, 324, 325, 326, 327, 328, 331, 332 };
+        private static readonly int[] SpedBusNumbers = new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 30, 31, 34, 35, 36, 42, 43, 47, 50, 51, 54, 62, 65, 99, 101, 102, 103, 104, 106, 107, 108, 110, 112, 114, 115, 116, 117, 118, 119, 502, 503, 504, 505, 303, 304, 305, 307, 316, 318, 319, 320, 323, 324, 325, 326, 327, 328, 331, 332 };
         private const int TJ_MAX_BUS = 799;
         private const int TJ_MIN_BUS = 700;
         private const int BusStartingDailyBonus = 10;
@@ -65,6 +65,11 @@ namespace PayrollProcessor
             bool isValid = ShiftTime + DollarAmount + MinimumGuaranteeHours + PerDiem + SummerGuaranteeHours + BonusDollars > 0;
             if (!isValid)
             {
+                if (ClockIn.CompareTo(ClockOut) == 0)
+                {
+                    //this shift was deemed to be in valid due to schedule conflict.
+                    return false;
+                }
                 Log("Shift: " + this.ToString() + " is not valid. Please investigate.");
                 return false;
             }
@@ -110,7 +115,7 @@ namespace PayrollProcessor
                 return 0f;
             }
             
-            if ((null == PayRate || PayRate < 1) && DollarAmount < 0.01f)
+            if ((null == PayRate || PayRate < 1) && DollarAmount < 0.01f && PerDiem < 0.01f)
             {
                 Log("Issue with shift.TotalCompensation(). It is likely being called before the payrate has been calculated for the shift.", true);
             }
@@ -171,6 +176,10 @@ namespace PayrollProcessor
                     float maxMg = 1.5f;
                     if (BigBusNumbers.Contains(BusNumber) || SpedBusNumbers.Contains(BusNumber))
                     {
+                        if (BigBusNumbers.Contains(BusNumber) && SpedBusNumbers.Contains(BusNumber))
+                        {
+                            Log("Problem with bus numbers. Bus #" + BusNumber.ToString() + " is included in both small and big bus numbers.", true);
+                        }
                         maxMg = BigBusNumbers.Contains(BusNumber) ? 2f : 1.5f;
                     }
                     else
@@ -190,6 +199,10 @@ namespace PayrollProcessor
                                 }
                             }
                         }
+                        if (BusNumber != 0 && BusNumber < 300)
+                        {
+                            Log("Bus not found, bus#" + BusNumber);
+                        }
                     }
 
                     //non standard mg
@@ -199,7 +212,7 @@ namespace PayrollProcessor
                         sourceOfMg = MgSource.SUMMER_ROUTE;
                         maxMg = summerMg;
                     }
-                    if ((IsAGrandForksShift || employee.IsGrandForksEmployee) && maxMg < 2)
+                    if ((IsAGrandForksShift || employee.IsAGrandForksEmployee) && maxMg < 2)
                     {
                         sourceOfMg = MgSource.GRAND_FORKS_ROUTE;
                         maxMg = 2f;
@@ -263,7 +276,7 @@ namespace PayrollProcessor
         {
             if (JobType == Jobs.AIDE_CHARTER)
             {
-                return employee.IsGrandForksEmployee || IsAGrandForksShift ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
+                return employee.IsAGrandForksEmployee || IsAGrandForksShift ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
             }
 
             if (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS && !TAndJMessageWasDisplayed)
@@ -354,6 +367,13 @@ namespace PayrollProcessor
 
         public RouteTimeContext TimeContext()
         {
+            if (Date.TimeOfDay.CompareTo(new TimeSpan(0, 3, 0)) < 0)
+            {
+                if (JobType != Jobs.COACH_PUBLIC_DRIVING)
+                {
+                    Log("Warning: Trying to get TimeContext for shift with TimeOfDay: " + Date.TimeOfDay.ToString(), true);
+                }
+            }
             if (Date.TimeOfDay.CompareTo(new TimeSpan(9, 10, 0)) <= 0)
             {
                 return PayrollProcessor.RouteTimeContext.MORNING;
@@ -370,7 +390,8 @@ namespace PayrollProcessor
         public float SpecialRate(Employee emp)
         {
             float specialRate = 0f;
-            if (!emp.PayRates.ContainsKey(JobType) && JobType != Jobs.NON_CDL_DRIVER && JobType != Jobs.VACATION && JobType != Jobs.HOLIDAY && JobType != Jobs.WASH_BAY_OT && JobType != Jobs.COACH_PUBLIC_DRIVING && JobType != Jobs.DRIVER_COACH)
+            if (!emp.PayRates.ContainsKey(JobType) && 
+                JobType != Jobs.NON_CDL_DRIVER && JobType != Jobs.VACATION && JobType != Jobs.HOLIDAY && JobType != Jobs.WASH_BAY_OT && JobType != Jobs.COACH_PUBLIC_DRIVING && JobType != Jobs.DRIVER_COACH)
             {
                 if (emp.SocialSecurityNumber == "" || emp.IsPartialEntry)
                 {
@@ -378,8 +399,8 @@ namespace PayrollProcessor
                 }
                 if (!PayrateMessages.ContainsKey(emp) || !PayrateMessages[emp].Contains(JobType))
                 {
-                    string specialString = JobType == Jobs.WASH_BAY && emp.IsGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
-                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + (emp.IsGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate", out string nonNumberInput);
+                    string specialString = JobType == Jobs.WASH_BAY && emp.IsAGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
+                    float newRate = PrintForm.InputNumber("Warninig: Employee " + emp.Name + (emp.IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate", out string nonNumberInput);
                     if (newRate > 0)
                     {
                         if (newRate < 2)
@@ -410,7 +431,7 @@ namespace PayrollProcessor
                             PayrateMessages[emp] = new();
                         }
                         PayrateMessages[emp].Add(JobType);
-                        DelayedLog("Warninig: Employee " + emp.Name + " ( " + emp.IdNumber + " )" + (emp.IsGrandForksEmployee ? " (GF) " : " (Fargo) ") + "doesn't have a payrate for " + JobType.ToString());
+                        DelayedLog("Warninig: Employee " + emp.Name + " ( " + emp.IdNumber + " )" + (emp.IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + "doesn't have a payrate for " + JobType.ToString());
                     }
                 }
             }
@@ -434,9 +455,22 @@ namespace PayrollProcessor
                 case Jobs.VACATION:
                     return emp.PayRates.Values.Max();
                 default:
-                    if (IsAGrandForksShift && GrandForksDefaultRates.ContainsKey(JobType))
+                    if (IsAGrandForksShift && GrandForksDefaultRates.ContainsKey(JobType) && GrandForksDefaultRates[JobType] != FargoDefaultRates.GetValueOrDefault(JobType, 0f))
                     {
                         specialRate = GrandForksDefaultRates[JobType];
+                        if (!emp.IsAGrandForksEmployee && emp.PayRates.ContainsKey(JobType) && FargoDefaultRates.ContainsKey(JobType))
+                        {
+                            var preUpdate = specialRate;
+                            specialRate += emp.PayRates[JobType] - FargoDefaultRates[JobType];
+                            if (specialRate > preUpdate)
+                            {
+                                Log("Upgraded special GF payrate for " + JobType.ToString() + " from " + preUpdate + " to " + specialRate);
+                            }
+                            else if (emp.YearsOfService > 0)
+                            {
+                                Log("Expected there to be a rate increase for special GF rate for " + emp.Name + " because years of service == " + emp.YearsOfService + " but there was no increase.");
+                            }
+                        }
                     }
                     else if (!IsAGrandForksShift && FargoDefaultRates.ContainsKey(JobType))
                     {

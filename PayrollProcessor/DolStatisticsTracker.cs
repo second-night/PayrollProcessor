@@ -1,8 +1,10 @@
 ﻿using DocumentFormat.OpenXml.ExtendedProperties;
+using Microsoft.VisualBasic.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using static PayrollProcessor.Program;
 using System.Threading.Tasks;
 
 namespace PayrollProcessor
@@ -13,12 +15,12 @@ namespace PayrollProcessor
         public int FemaleEmployeeCount;
         public float TotalCompensation;
         public float TotalHoursCompensated;
-        HashSet<int> EmployeeIds;
+        private HashSet<int> EmployeeIds = new();
 
         private void RegisterSalariedEmployee(Employee emp)
         {
             float perPaySalary = emp.AnnualSalaryAmount / 26;
-            float hours = emp.AnnualSalaryAmount < 30000f ? 40f : 80f; //close enough
+            float hours = emp.AnnualSalaryAmount < 30000f ? 40f : 80f; //should generally be accurate
             TotalCompensation += perPaySalary;
             TotalHoursCompensated += hours;
         }
@@ -31,7 +33,12 @@ namespace PayrollProcessor
             }
             EmployeeIds.Add(emp.IdNumber);
 
-            if (emp.IsTerminated && emp.Shifts.Count == 0)
+            if (emp.AnnualSalaryAmount > 0 && !emp.IsTerminated)
+            {  
+                RegisterSalariedEmployee(emp);
+            }
+
+            if (emp.IsTerminated || emp.Shifts.Count == 0)
             {
                 return;
             }
@@ -40,11 +47,6 @@ namespace PayrollProcessor
             if (!emp.IsMale)
             {
                 FemaleEmployeeCount++;
-            }
-
-            if (emp.AnnualSalaryAmount > 0 && !emp.IsTerminated)
-            {  
-                RegisterSalariedEmployee(emp);
             }
 
             for (int company = (int)Company.VALLEY_BUS_LLC; company <= (int)Company.VALLEY_BUS_COACHES; ++company)
@@ -77,6 +79,7 @@ namespace PayrollProcessor
             str += "\nTotal compensation: " + Math.Round(TotalCompensation, 2).ToString();
             str += "\nTotal hours: " + Math.Round(TotalHoursCompensated, 0);
             str += "\n(Average pay rate: " + Math.Round(TotalCompensation / TotalHoursCompensated, 2).ToString() + ")";
+            Log(str);
         }
     }
 }

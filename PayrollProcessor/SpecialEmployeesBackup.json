@@ -139,6 +139,27 @@
       "Notes":"When Pat clocks in as non-cdl driver, his rate is switched to his admin rate."
     },
     {
+      "Name":"Williamae Choloh",
+      "IdNumber": 2203,
+      "OverriddenJobType": 28,
+      "OverridingJobType": 13,
+      "Notes":"When Williamae clocks in as non-cdl driver, her rate is switched to her admin rate."
+    },
+    {
+      "Name":"Williamae Choloh",
+      "IdNumber": 2203,
+      "OverriddenJobType": 1,
+      "OverridingJobType": 13,
+      "Notes":"When Williamae clocks in as driver, her rate is switched to her admin rate."
+    },
+    {
+      "Name":"Ali Omar",
+      "IdNumber": 1248,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Ali Omar clocks in as mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Mohamed Mustafa Mohamed",
       "IdNumber": 1534,
       "OverriddenJobType": 1,
@@ -188,6 +209,20 @@
       "Notes":"When Alan Munson clocks in as Mechanic, his rate is switched to his driver rate."
     },
     {
+      "Name":"Alberto Rodriquez",
+      "IdNumber": 1946,
+      "OverriddenJobType": 1,
+      "OverridingJobType": 7,
+      "Notes":"When Alberto clocks in as driver, his rate is switched to his Mechanic rate."
+    },
+    {
+      "Name":"Chris Clark",
+      "IdNumber": 1983,
+      "OverriddenJobType": 1,
+      "OverridingJobType": 7,
+      "Notes":"When Chris clocks in as driver, his rate is switched to his Mechanic rate."
+    },
+    {
       "Name":"Kim Wick",
       "IdNumber": 1808,
       "OverriddenJobType": 7,
@@ -200,6 +235,13 @@
       "OverriddenJobType": 25,
       "OverridingJobType": 13,
       "Notes":"When Daniel clocks in as para/aide, his rate is switched to his admin rate."
+    },
+    {
+      "Name":"Daniel Monatukwa",
+      "IdNumber": 2137,
+      "OverriddenJobType": 1,
+      "OverridingJobType": 13,
+      "Notes":"When Daniel clocks in as driver, his rate is switched to his admin rate."
     },
     {
       "Name":"Keith Miller",

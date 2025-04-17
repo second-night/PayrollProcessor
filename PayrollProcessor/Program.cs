@@ -678,8 +678,7 @@ namespace PayrollProcessor
 
         private static void DoBusStartingBonusAndMg(Shift shift, Employee emp)
         {
-            bool bBusStartingDayOverride = true;
-            if (BusStartingDays.Contains(shift.Date.Day) || bBusStartingDayOverride)
+            if (BusStartingDays.Contains(shift.Date.Day))
             {
                 if (shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0 || StringSearch(shift.Notes, "bonus"))
                 {
@@ -827,12 +826,12 @@ namespace PayrollProcessor
                 }
             }
 
-            bIsForGrandForks |= employee.IsGrandForksEmployee;
-
-            if (jobType == Jobs.DRIVER_SCHOOL && employee.IsGrandForksEmployee && employee.HireDate.CompareTo(new DateTime(2024, 05, 01)) < 0)
+            if (jobType == Jobs.DRIVER_SCHOOL && employee.IsAGrandForksEmployee && employee.HireDate.CompareTo(new DateTime(2024, 05, 01)) < 0)
             {
                 modifier = Math.Max(modifier, 1f);
             }
+
+            bIsForGrandForks |= employee.IsAGrandForksEmployee;
 
             if (bIsForGrandForks && GrandForksDefaultRates.ContainsKey(jobType))
             {
@@ -957,7 +956,7 @@ namespace PayrollProcessor
             string nonCdlDrivers = "\nNon CDL Drivers: \n\nFargo:\n";
             foreach (var employee in NonCdlDrivers)
             {
-                if (!employee.IsGrandForksEmployee)
+                if (!employee.IsAGrandForksEmployee)
                 {
                     nonCdlDrivers += employee.Name + "\n";
                 }
@@ -965,7 +964,7 @@ namespace PayrollProcessor
             nonCdlDrivers += "\nGrand Forks:\n";
             foreach (var employee in NonCdlDrivers)
             {
-                if (employee.IsGrandForksEmployee)
+                if (employee.IsAGrandForksEmployee)
                 {
                     nonCdlDrivers += employee.Name + "\n";
                 }

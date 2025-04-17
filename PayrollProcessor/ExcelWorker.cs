@@ -1,7 +1,9 @@
 ﻿using DocumentFormat.OpenXml.ExtendedProperties;
 using DocumentFormat.OpenXml.Spreadsheet;
+using System;
 using System.Data;
 using System.Diagnostics;
+using System.IO;
 using static PayrollProcessor.ExcelWorker;
 using static PayrollProcessor.Program;
 using Excel = Microsoft.Office.Interop.Excel;
@@ -15,6 +17,7 @@ namespace PayrollProcessor
         private const int GF_MIN_BUS = 300;
         public static Dictionary<int, ImportedEmployee> ImportEmployees = new();
         public DateTime FirstDayWeek2;
+        HashSet<string> FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll = new() { "EmployeeNumber", "EmploymentCategory", "SSN" };
 
         public ExcelWorker()
         {
@@ -151,11 +154,11 @@ namespace PayrollProcessor
                         {
                             employee.IsSalaried = true;
                         }
-                        if (!employee.IsGrandForksEmployee)
+                        if (!employee.IsAGrandForksEmployee)
                         {
                             if (TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string tag))
                             {
-                                employee.IsGrandForksEmployee = StringSearch(tag, "Grand Forks") || StringSearch(tag, "GF");
+                                employee.IsAGrandForksEmployee = StringSearch(tag, "Grand Forks") || StringSearch(tag, "GF");
                             }
                         }
                         employee.IsAMechanicApprentice = TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string s) && StringSearch(s, "Apprentice");
@@ -248,14 +251,79 @@ namespace PayrollProcessor
                         if (!EmployeeDictionary.ContainsKey(employeeNumber))
                         {
                             string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
-                            Employee employee = new(employeeNumber, name)
+                            Employee emp = new(employeeNumber, name)
                             {
                                 IsPartialEntry = true
                             };
-                            EmployeeDictionary.Add(employeeNumber, employee);
+                            EmployeeDictionary.Add(employeeNumber, emp);
                         }
                         EmployeeDictionary[employeeNumber].HadHoursInTimesheets = true;
 
+
+                        Shift temporaryShift = new(Company.VALLEY_BUS_LLC); //temporary, doesn't get added to employee shifts.
+                        temporaryShift.ShiftTime = time;
+                        temporaryShift.Date = date;
+                        Employee employee = EmployeeDictionary[employeeNumber];
+
+                        if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out temporaryShift.JobInt))
+                        {
+                            temporaryShift.JobType = GetJobTypeFromCode(temporaryShift.JobInt);
+                            if (temporaryShift.JobType == Jobs.DRIVER_SCHOOL && !employee.PayRates.ContainsKey(temporaryShift.JobType))
+                            {
+                                temporaryShift.JobType = Jobs.NON_CDL_DRIVER;
+                            }
+                        }
+
+                        if (temporaryShift.IsASchoolRouteShift())
+                        {
+                            if (null != cellData[rowNumber, BUS_NUMBER_COLUMN] && StringSearch(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), "old"))
+                            {
+                                string? busNumberString = cellData[rowNumber, BUS_NUMBER_COLUMN].ToString();
+                                if (null != busNumberString)
+                                {
+                                    busNumberString = busNumberString.Replace("old", "");
+                                    busNumberString = busNumberString.Replace("Old", "");
+                                    busNumberString = busNumberString.Replace(" ", "");
+                                    if (int.TryParse(busNumberString, out temporaryShift.BusNumber))
+                                    {
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out temporaryShift.BusNumber);
+                            }
+                        }
+
+                        if (temporaryShift.BusNumber != 0)
+                        {
+                            //if (!employee.RoutesByBusNumber.ContainsKey(temporaryShift.BusNumber))
+                            //{
+                            //    employee.RoutesByBusNumber.Add(temporaryShift.BusNumber, new());
+                            //}
+                            //if (!employee.RoutesByBusNumber[temporaryShift.BusNumber].ContainsKey(temporaryShift.TimeContext()))
+                            //{
+                            //    employee.RoutesByBusNumber[temporaryShift.BusNumber].Add(temporaryShift.TimeContext(), new());
+                            //}
+                            //employee.RoutesByBusNumber[temporaryShift.BusNumber][temporaryShift.TimeContext()] += 1;
+
+                            if (!employee.BusShiftTotals.ContainsKey(date.DayOfWeek))
+                            {
+                                employee.BusShiftTotals.Add(date.DayOfWeek, new());
+                                employee.ShiftsByBusNumber.Add(date.DayOfWeek, new());
+                            }
+                            if (!employee.BusShiftTotals[date.DayOfWeek].ContainsKey(temporaryShift.TimeContext()))
+                            {
+                                employee.BusShiftTotals[date.DayOfWeek].Add(temporaryShift.TimeContext(), new());
+                                employee.ShiftsByBusNumber[date.DayOfWeek].Add(temporaryShift.TimeContext(), new());
+                            }
+                            if (!employee.ShiftsByBusNumber[date.DayOfWeek][temporaryShift.TimeContext()].ContainsKey(temporaryShift.BusNumber))
+                            {
+                                employee.ShiftsByBusNumber[date.DayOfWeek][temporaryShift.TimeContext()].Add(temporaryShift.BusNumber, new());
+                            }
+                            employee.BusShiftTotals[date.DayOfWeek][temporaryShift.TimeContext()] += 1;
+                            employee.ShiftsByBusNumber[date.DayOfWeek][temporaryShift.TimeContext()][temporaryShift.BusNumber] += 1;
+                        }
 
                         if (TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out string notes))
                         {
@@ -279,6 +347,7 @@ namespace PayrollProcessor
         {
             if (!CheckForExcelFileOnDesktop("Employee Export.xlsx", out string filePath))
             {
+                Log("Couldn't find employee export.", true);
                 return;
             }
             var lastModified = System.IO.File.GetLastWriteTime(filePath);
@@ -295,7 +364,7 @@ namespace PayrollProcessor
             const int EMP_LAST_NAME_COLUMN = 7;
             const int EMPLOYEE_GROUPS = 44;
 
-            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups", "Full Social Security Number", "Birth Date" };
+            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups" };
 
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
@@ -344,7 +413,6 @@ namespace PayrollProcessor
                     {
                         string? employeeName = cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() + " " + cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString();
                         Program.EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, employeeName));
-                        Program.EmployeeDictionary[employeeNumber].WasCreatedFromEmployeeExport = true;
                     }
                     Employee employee = Program.EmployeeDictionary[employeeNumber];
                     employee.IsPartialEntry = false;
@@ -365,6 +433,10 @@ namespace PayrollProcessor
                         }
                         if (cell != null)
                         {
+                            if (employee.WasAlreadyInPayroll && !FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(header))
+                            {
+                                continue;
+                            }
                             TryGetStringFromCell(cell, out string cellString);
                             switch (header)
                             {
@@ -405,6 +477,10 @@ namespace PayrollProcessor
                                     if (!importedEmployee.ImportFields.ContainsKey("ZipCode"))
                                     {
                                         importedEmployee.ImportFields["ZipCode"] = cellString;
+                                        if (cellString == "58102")
+                                        {
+                                            cellString += "[ND0170050]";
+                                        }
                                         importedEmployee.ImportFields["ResidentLocation"] = cellString;
                                     }
                                     break;
@@ -611,26 +687,26 @@ namespace PayrollProcessor
                                     employee.PayRates[Jobs.TRAINING] = TRAINING_RATE;
                                     if (StringSearch(cellString, "GF"))
                                     {
-                                        employee.IsGrandForksEmployee = true;
+                                        employee.IsAGrandForksEmployee = true;
                                         importedEmployee.ImportFields["OrganizationValue2"] = "GF";
                                     }
                                     if (StringSearch(cellString, "para") || StringSearch(cellString, "aide") || StringSearch(cellString, "van driver"))
                                     {
-                                        float payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_SCHOOL] : FargoDefaultRates[Jobs.AIDE_SCHOOL];
+                                        float payRate = employee.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_SCHOOL] : FargoDefaultRates[Jobs.AIDE_SCHOOL];
                                         importedEmployee.ImportFields["Rate_AidDlySchool"] = payRate.ToString();
                                         employee.PayRates[Jobs.AIDE_SCHOOL] = payRate;
 
-                                        payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
+                                        payRate = employee.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
                                         importedEmployee.ImportFields["Rate_AidDlyChrter"] = payRate.ToString();
                                         employee.PayRates[Jobs.AIDE_CHARTER] = payRate;
                                     }
                                     else if (StringSearch(cellString, "driver"))
                                     {
-                                        float payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_SCHOOL] : FargoDefaultRates[Jobs.DRIVER_SCHOOL];
+                                        float payRate = employee.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_SCHOOL] : FargoDefaultRates[Jobs.DRIVER_SCHOOL];
                                         importedEmployee.ImportFields["Rate_DrvrDlySchool"] = payRate.ToString();
                                         employee.PayRates[Jobs.DRIVER_SCHOOL] = payRate;
 
-                                        payRate = employee.IsGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_CHARTER] : FargoDefaultRates[Jobs.DRIVER_CHARTER];
+                                        payRate = employee.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_CHARTER] : FargoDefaultRates[Jobs.DRIVER_CHARTER];
                                         importedEmployee.ImportFields["Rate_DrvrSchoolChrtr"] = payRate.ToString();
                                         employee.PayRates[Jobs.DRIVER_CHARTER] = payRate;
                                     }
@@ -710,6 +786,7 @@ namespace PayrollProcessor
             var fInfo = new FileInfo(filePath);
             Excel.Workbook workBook = excelApp.Workbooks.Open(filePath);
 
+            var employeeScheduleData = LoadEmployeeScheduleData();
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
                 Excel.Range range = sheet.Range[sheet.Range["A6"], sheet.Range["B8"]];
@@ -808,7 +885,10 @@ namespace PayrollProcessor
                                 busNumberString = busNumberString.Replace("old", "");
                                 busNumberString = busNumberString.Replace("Old", "");
                                 busNumberString = busNumberString.Replace(" ", "");
-                                int.TryParse(busNumberString, out shift.BusNumber);
+                                if (int.TryParse(busNumberString, out shift.BusNumber))
+                                {
+                                }
+                                
                             }
                         }
                         else if (TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out shift.BusNumber))
@@ -839,13 +919,13 @@ namespace PayrollProcessor
                             }
                         }
 
-                        if ((shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL) && !StringSearch(shift.Notes, "training"))
+                        if (shift.IsASchoolRouteShift() && !StringSearch(shift.Notes, "training"))
                         {
                             if (shift.JobInt == 20 || shift.JobInt == 23)
                             {
                                 shift.ShiftLocation = Location.WEST_FARGO;
                             }
-                            else if (shift.IsAGrandForksShift || employee.IsGrandForksEmployee)
+                            else if (shift.IsAGrandForksShift || employee.IsAGrandForksEmployee)
                             {
                                 shift.ShiftLocation = Location.GRAND_FORKS;
                             }
@@ -859,6 +939,11 @@ namespace PayrollProcessor
                             }
                         }
 
+                        if (shift.IsASchoolRouteShift())
+                        {
+                            CheckShiftAgainstSchedule(shift, employee, employeeScheduleData);
+                        }
+
                         employee.Shifts.Add(shift);
                     }
                 }
@@ -869,6 +954,71 @@ namespace PayrollProcessor
 
             //Marshal.ReleaseComObject(workBook);
             //Marshal.ReleaseComObject(excelApp);
+        }
+
+        static HashSet<int> LoggedEmployees = new();
+        static void CheckShiftAgainstSchedule(Shift shift, Employee employee, Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> employeeScheduleData)
+        {
+            if (!shift.IsASchoolRouteShift())
+            {
+                return;
+            }
+            foreach (var kvp in employeeScheduleData)
+            {
+                if (kvp.Key == employee.IdNumber)
+                {
+                    if (!kvp.Value.ContainsKey(shift.TimeContext()))
+                    {
+                        continue;
+                    }
+
+                    TimeSpan earliestClockIn = kvp.Value[shift.TimeContext()];
+                    if (employee.ScheduleExceptions.ContainsKey(shift.Date.DayOfWeek) && employee.ScheduleExceptions[shift.Date.DayOfWeek].ContainsKey(shift.TimeContext()))
+                    {
+                        earliestClockIn = employee.ScheduleExceptions[shift.Date.DayOfWeek][shift.TimeContext()];
+                    }
+                    if (shift.ClockIn.CompareTo(earliestClockIn) < 0)
+                    {
+                        if (shift.ClockOut.CompareTo(earliestClockIn) < 0)
+                        {
+                            //something is going on but it's probably not an early punch in
+                            continue;
+                        }
+                        var originalClockIn = shift.ClockIn;
+                        TimeSpan difference = earliestClockIn - shift.ClockIn;
+
+                        if (shift.BusNumber != 0)
+                        {
+                            int totalShiftsForContext = employee.BusShiftTotals[shift.Date.DayOfWeek][shift.TimeContext()];
+                            if (employee.ShiftsByBusNumber[shift.Date.DayOfWeek][shift.TimeContext()][shift.BusNumber] < totalShiftsForContext / 2)
+                            {
+                                Log("Not docking time for " + employee.Name + " because this bus was not used a majority of the time for this context.\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + earliestClockIn.ToString());
+                                continue;
+                            }
+                        }
+
+
+
+                        shift.ModifyClockIn(earliestClockIn);
+
+                        if (originalClockIn.CompareTo(shift.ClockIn) == 0)
+                        {
+                            Log("Shift invalidated for " + employee.Name + ".\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString());
+                        }
+                        if (difference.CompareTo(new TimeSpan(0, 25, 0)) > 0)
+                        {
+                            if (shift.TimeContext() == RouteTimeContext.MORNING)
+                            {
+                                continue;
+                            }
+
+                            Log("Modifying clock in for " + employee.Name + " by " + difference.ToString() + "\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString(), !LoggedEmployees.Contains(employee.IdNumber));
+                            LoggedEmployees.Add(employee.IdNumber);
+                            continue; //for breakpoint
+                        }
+                    }
+                }
+            }
         }
 
         public void ReadCoachesPayroll()
@@ -1030,6 +1180,100 @@ namespace PayrollProcessor
             //Marshal.ReleaseComObject(excelApp);
         }
 
+        public Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> LoadEmployeeScheduleData()
+        {
+            Log("Please check that Driver-Para-Schedule.xlsx is synced with OneDrive.", true);
+            Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> employeeScheduleData = new();
+
+            Excel.Application xlApp = new();
+            String path = "C:/Users/User/valleybusllc.com/Admin Team - Payroll - Payroll/Payroll/Driver-Para-Schedule.xlsx";
+            Excel.Workbook workBook = xlApp.Workbooks.Open(path);
+
+            foreach (Excel.Worksheet workSheet in workBook.Worksheets)
+            {
+                Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["Z400"]];
+                var cellData = (Object[,])range.Value2;
+                int rows = range.Value2.GetLength(0) + 1;
+                for (int row = 1; row < rows; ++row)
+                {
+                    int employeeNameColumn = 1;
+                    int employeeNumberColumn = 2;
+                    int exceptionColumn = 6;
+                    int columnOffset = employeeNumberColumn + 1;
+                    if (TryGetIntFromCell(cellData[row, employeeNumberColumn], out int employeeNumber))
+                    {
+                        if (TryGetStringFromCell(cellData[row, employeeNameColumn], out string nameFromSheet))
+                        {
+                            if (!EmployeeDictionary.ContainsKey(employeeNumber))
+                            {
+                                Log("Problem in attendance schedule! , " + employeeNumber.ToString() + " isn't an employee");
+                                continue;
+                            }
+                            Log("From attendance schedule, " + nameFromSheet + "(" + EmployeeDictionary[employeeNumber].Name + ")");
+                        }
+                        for (int column = 0; column <= (int)RouteTimeContext.AFTERNOON; column++)
+                        {
+                            if (TryGetDateFromCell(cellData[row, column + columnOffset], out DateTime dateTime))
+                            {
+                                TimeSpan timeSpan = dateTime.TimeOfDay;
+                                if ((RouteTimeContext)column == RouteTimeContext.AFTERNOON && timeSpan.CompareTo(new TimeSpan(11, 59, 59)) < 0)
+                                {
+                                    //time wasn't put in as 24 hour
+                                    timeSpan = timeSpan.Add(new TimeSpan(12, 0, 0));
+                                }
+                                if (!employeeScheduleData.ContainsKey(employeeNumber))
+                                {
+                                    employeeScheduleData.Add(employeeNumber, new());
+                                }
+                                employeeScheduleData[employeeNumber][(RouteTimeContext)column] = timeSpan;
+                            }
+                        }
+
+                        if (TryGetStringFromCell(cellData[row, exceptionColumn], out string exceptionInstructions))
+                        {
+                            Employee employee = EmployeeDictionary[employeeNumber];
+                            columnOffset = exceptionColumn + 1;
+                            DayOfWeek dayOfWeek = DayOfWeek.Sunday;
+                            if (StringSearch(exceptionInstructions, "wed"))
+                            {
+                                dayOfWeek = DayOfWeek.Wednesday;
+                            }
+                            else
+                            {
+                                Log("Can't determine day for exception: " +  exceptionInstructions, true);
+                            }
+                            for (int column = 0; column <= (int)RouteTimeContext.AFTERNOON; column++)
+                            {
+                                if (TryGetDateFromCell(cellData[row, column + columnOffset], out DateTime dateTime))
+                                {
+                                    TimeSpan timeSpan = dateTime.TimeOfDay;
+                                    if ((RouteTimeContext)column == RouteTimeContext.AFTERNOON && timeSpan.CompareTo(new TimeSpan(11, 59, 59)) < 0)
+                                    {
+                                        //time wasn't put in as 24 hour
+                                        timeSpan = timeSpan.Add(new TimeSpan(12, 0, 0));
+                                    }
+                                    if (!employee.ScheduleExceptions.ContainsKey(dayOfWeek))
+                                    {
+                                        employee.ScheduleExceptions.Add(dayOfWeek, new());
+                                    }
+                                    if (!employee.ScheduleExceptions[dayOfWeek].ContainsKey((RouteTimeContext)column))
+                                    {
+                                        employee.ScheduleExceptions[dayOfWeek].Add((RouteTimeContext)column, new());
+                                    }
+                                    employee.ScheduleExceptions[dayOfWeek][(RouteTimeContext)column] = timeSpan;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            workBook.Close();
+            xlApp.Quit();
+
+            return employeeScheduleData;
+        }
+
         public void WritePayrollImports()
         {
             Excel.Application xlApp = new();
@@ -1089,8 +1333,9 @@ namespace PayrollProcessor
                 int rowCounter = 0;
                 foreach (var emp in SortedEmployees)
                 {
-                    if (emp.IdNumber == 1768)
+                    if (emp.IdNumber == 1768 && emp.Shifts.Count > 0)
                     {
+                        Log("Eddie Peltier is being ignored by payroll", true);
                         continue;
                     }
                     if (emp != null)
@@ -1129,6 +1374,10 @@ namespace PayrollProcessor
                                         {
                                             foreach (Shift shift in shifts)
                                             {
+                                                if (!shift.IsValid(emp))
+                                                {
+                                                    continue;
+                                                }
                                                 if (shift.CompanyName == (Company)company && shift.IsValid(emp))
                                                 {
                                                     if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars + shift.PerDiem > 0f)
@@ -1219,7 +1468,6 @@ namespace PayrollProcessor
                 }
             };
             p.Start();
-
         }
 
         public void WriteEmployeeImports()
@@ -1243,10 +1491,12 @@ namespace PayrollProcessor
             foreach (var employeeEntry in ImportEmployees)
             {
                 var employee = EmployeeDictionary[employeeEntry.Key];
-                if (employee.IdNumber == 2161)
+                if (/*!employee.WasCreatedFromEmployeeExport && */(employee.Shifts.Count == 0/* || employeeEntry.Value.ImportFields.ContainsKey("SSN")*/))
                 {
-                    Log("");
+                    //don't update employees who aren't currently active.
+                    continue;
                 }
+
                 if (!employee.HasAnyDirectDepositAccount)
                 {
                     if (employeeEntry.Value.ImportFields.Count > 0)
@@ -1255,10 +1505,6 @@ namespace PayrollProcessor
                         {
                             if (accountInfo.Count > 0)
                             {
-                                if (!employee.WasCreatedFromEmployeeExport)
-                                {
-                                    Log("Adding Direct Deposit for " + employee.Name + "(" + employee.IdNumber + ") and employee.WasCreatedFromEmployeeExport == false");
-                                }
                                 if (employee.WasAlreadyInPayroll)
                                 {
                                     Log("Adding Direct Deposit for " + employee.Name + "(" + employee.IdNumber + ") and employee.WasAlreadyInPayroll == true");
@@ -1275,11 +1521,6 @@ namespace PayrollProcessor
                         }
                     }
                 }
-                if (!employee.WasCreatedFromEmployeeExport && (employee.Shifts.Count == 0/* || employeeEntry.Value.ImportFields.ContainsKey("SSN")*/))
-                {
-                    //don't update employees who aren't currently active. (payrates, etc..)
-                    continue;
-                }
                 if (employee.WasAlreadyInPayroll && !employee.NeedsUpdateInPayroll)
                 {
                     continue;
@@ -1290,9 +1531,20 @@ namespace PayrollProcessor
                     {
                         for (int columnNumber = 0; columnNumber < ImportedEmployee.EmployeeImportHeaders.Count; columnNumber++)
                         {
-                            if (employeeEntry.Value.ImportFields.ContainsKey(ImportedEmployee.EmployeeImportHeaders[columnNumber]))
+                            string fieldName = ImportedEmployee.EmployeeImportHeaders[columnNumber];
+                            if (employee.WasAlreadyInPayroll)
                             {
-                                employeeMatrix[employeeRowNumber + 1, columnNumber] = employeeEntry.Value.ImportFields[ImportedEmployee.EmployeeImportHeaders[columnNumber]];
+                                if (!FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(fieldName))
+                                {
+                                    if (!StringSearch(fieldName, "rate"))
+                                    {
+                                        continue;
+                                    }
+                                }
+                            }
+                            if (employeeEntry.Value.ImportFields.ContainsKey(fieldName))
+                            {
+                                employeeMatrix[employeeRowNumber + 1, columnNumber] = employeeEntry.Value.ImportFields[fieldName];
                             }
                         }
                         employeeRowNumber++;
@@ -1483,7 +1735,7 @@ namespace PayrollProcessor
 
                 object[,] employeeMatrix = new string[Program.EmployeeDictionary.Count + 1, 52];
 
-                int employeeRowNumber = 0;
+                int employeeRowNumber = 1;
                 Dictionary<DateTime, List<String>> birthDates = new();
                 foreach (var employeeEntry in EmployeeDictionary)
                 {
@@ -1493,7 +1745,7 @@ namespace PayrollProcessor
                         continue;
                     }
 
-                    if (employee.BirthDate.Month != DateTime.Now.AddMonths(1).Month)
+                    if (employee.BirthDate.Month != DateTime.Now.Month && employee.BirthDate.Month != DateTime.Now.AddMonths(1).Month)
                     {
                         continue;
                     }
@@ -1508,10 +1760,17 @@ namespace PayrollProcessor
                     .OrderBy(kvp => kvp.Key.Day)
                     .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
+                employeeMatrix[1, 0] = DateTime.Now.Month.ToString() + ":";
+                bool bNextMonthWasStarted = false;
                 foreach (var kvp in sortedByDay)
                 {
                     foreach (var employeeName in kvp.Value)
                     {
+                        if (kvp.Key.Month != DateTime.Now.Month)
+                        {
+                            bNextMonthWasStarted = true;
+                            employeeMatrix[employeeRowNumber + 1, 0] = kvp.Key.Month.ToString() + ":";
+                        }
                         employeeMatrix[employeeRowNumber + 1, 0] = employeeName;
                         employeeMatrix[employeeRowNumber + 1, 1] = kvp.Key.ToShortDateString();
                         employeeRowNumber++;
@@ -1819,7 +2078,7 @@ namespace PayrollProcessor
             return columnNumber;
         }
 
-        private void TryParseTimeSpan(Object cellData, out TimeSpan timeSpan)
+        private bool TryParseTimeSpan(Object cellData, out TimeSpan timeSpan)
         {
             timeSpan = new TimeSpan();
             if (cellData != null && cellData.ToString() != null)
@@ -1828,7 +2087,7 @@ namespace PayrollProcessor
                 if (DateTime.TryParse(cellData.ToString(), out dt))
                 {
                     timeSpan = dt.TimeOfDay;
-                    return;
+                    return true;
                 }
 
                 double oaDate;
@@ -1837,11 +2096,12 @@ namespace PayrollProcessor
                     timeSpan = TimeSpan.FromHours(oaDate);
                     TimeSpan t2 = DateTime.FromOADate(oaDate).TimeOfDay;
                     DelayedLog("Check time span parsing.", true);
-                    return;
+                    return true;
                 }
 
                 DelayedLog("Warning: Couldn't parse TimeSpan for " + cellData.ToString());
             }
+            return false;
         }
 
 

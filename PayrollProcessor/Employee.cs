@@ -1,5 +1,6 @@
 ﻿using DocumentFormat.OpenXml.Spreadsheet;
 using System.Data;
+using System.Windows.Forms.VisualStyles;
 using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
@@ -14,12 +15,11 @@ namespace PayrollProcessor
         public float[] OverTimeHours = new float[3];
         public bool IsSalaried;
         public float AnnualSalaryAmount;
-        public bool IsGrandForksEmployee;
+        public bool IsAGrandForksEmployee;
         public string SocialSecurityNumber;
         public DateTime HireDate = DateTime.Now;
         public string EmploymentCategory;
         public string PhoneNumber;
-        public bool WasCreatedFromEmployeeExport;
         public bool NeedsUpdateInPayroll;
         public bool HadHoursInTimesheets; //means they have been confirmed to have hours in Timesheets.xlsx
         public bool HasAnActiveDirectDepositAccount;
@@ -32,7 +32,14 @@ namespace PayrollProcessor
         public DateTime BirthDate;
         public bool IsTerminated;
         public bool WasReportedForPartialEntry;
-        public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/,3/*0-has hours,1-has dollars,2-has both*/];
+        public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/, 3/*0-has hours,1-has dollars,2-has both*/];
+
+        //for schedule matching
+        //public Dictionary<int/*bus number*/, Dictionary<RouteTimeContext, List<DayOfWeek>>> RoutesByBusNumber = new();
+        public Dictionary<DayOfWeek, Dictionary<RouteTimeContext, int>> BusShiftTotals = new();
+        public Dictionary<DayOfWeek, Dictionary<RouteTimeContext, Dictionary<int/*BusNumber*/, int/*count*/>>> ShiftsByBusNumber = new();
+        public Dictionary<DayOfWeek, Dictionary<RouteTimeContext, TimeSpan>> ScheduleExceptions = new();
+
 
 
 
@@ -124,14 +131,36 @@ namespace PayrollProcessor
             }
             else
             {
-                if ((IsGrandForksEmployee || shift.IsAGrandForksShift) && PayRates.ContainsKey(Jobs.DRIVER_SCHOOL) && PayRates[Jobs.DRIVER_SCHOOL] < GrandForksDefaultRates[Jobs.DRIVER_SCHOOL])
+                if (shift.IsAGrandForksShift && !IsAGrandForksEmployee)
                 {
-                    rate = GrandForksDefaultRates[Jobs.DRIVER_SCHOOL];
+                    if (PayRates.ContainsKey(shift.JobType) && FargoDefaultRates.ContainsKey(shift.JobType))
+                    {
+                        var preUpdate = PayRates.GetValueOrDefault(shift.JobType, 0f);
+                        //float badRate = preUpdate + PayRates[shift.JobType] - FargoDefaultRates[shift.JobType];
+                        rate = GrandForksDefaultRates[shift.JobType] + PayRates[shift.JobType] - FargoDefaultRates[shift.JobType];
+                        //if (rate != badRate)
+                        //{
+                        //    Log("breakpoint");
+                        //}
+                        if (rate > preUpdate)
+                        {
+                            Log("Upgraded special GF payrate for " + shift.JobType.ToString() + " from " + preUpdate + " to " + rate);
+                        }
+                        else if (YearsOfService > 0)
+                        {
+                            Log("Expected there to be a rate increase for special GF rate for " + Name + " because years of service == " + YearsOfService + " but there was no increase.");
+                        }
+                    }
                 }
                 rate = Math.Max(rate, PayRates.GetValueOrDefault(shift.JobType, 0f));
             }
-            
-            return Math.Max(Math.Max(PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f), PayRates.GetValueOrDefault(Jobs.WASH_BAY)), rate);
+
+            var finalRate = Math.Max(Math.Max(PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f), PayRates.GetValueOrDefault(Jobs.WASH_BAY)), rate);
+            if (finalRate < FargoDefaultRates[Jobs.NON_CDL_DRIVER])
+            {
+                Log("Warning! Final rate for driver shift for " + Name + " == " +  rate);
+            }
+            return finalRate;
         }
 
         private float NonCdlRate(bool bIsForGrandForks)
@@ -151,7 +180,7 @@ namespace PayrollProcessor
 
         public bool IsANonCdlDriver()
         {
-            float baseRate = GetBasePayRateForEmployee(Jobs.DRIVER_SCHOOL, this, IsGrandForksEmployee);
+            float baseRate = GetBasePayRateForEmployee(Jobs.DRIVER_SCHOOL, this, IsAGrandForksEmployee);
             float newRate = TimeInServiceAdjustment(baseRate, this, Jobs.DRIVER_SCHOOL, true);
             return !PayRates.ContainsKey(Jobs.DRIVER_SCHOOL) && (!PayRates.ContainsKey(Jobs.MECHANIC) || PayRates[Jobs.MECHANIC] < newRate);
         }
