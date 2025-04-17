@@ -952,11 +952,25 @@ namespace PayrollProcessor
             workBook.Close();
             excelApp.Quit();
 
+            LogSchedulingData();
             //Marshal.ReleaseComObject(workBook);
             //Marshal.ReleaseComObject(excelApp);
         }
 
         static HashSet<int> LoggedEmployees = new();
+        static Dictionary<string, List<string>> SchedulingLogMessages = new();
+        void LogSchedulingData()
+        {
+            foreach (var kvp in SchedulingLogMessages)
+            {
+                Log("");
+                foreach (var message in kvp.Value)
+                {
+                    Log(message);
+                }
+            }
+        }
+        static HashSet<string> EarlyOutSignals = new();
         static void CheckShiftAgainstSchedule(Shift shift, Employee employee, Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> employeeScheduleData)
         {
             if (!shift.IsASchoolRouteShift())
@@ -987,6 +1001,21 @@ namespace PayrollProcessor
                         var originalClockIn = shift.ClockIn;
                         TimeSpan difference = earliestClockIn - shift.ClockIn;
 
+                        if (difference.CompareTo(new TimeSpan(1, 30, 0)) > 0 && shift.Date.DayOfWeek == DayOfWeek.Wednesday && shift.IsAGrandForksShift)
+                        {
+                            Log("Skipping shift because it is probably an early out on Wednesday in GF");
+                            continue;
+                        }
+
+                        if (difference.CompareTo(new TimeSpan(1, 30, 0)) > 0 && shift.TimeContext() == RouteTimeContext.AFTERNOON)
+                        {
+                            if (EarlyOutSignals.Contains(shift.Date.ToShortDateString()))
+                            {
+                                Log("Was there an early out on this day: " + shift.Date.ToShortDateString(), true);
+                            }
+                            EarlyOutSignals.Add(shift.Date.ToShortDateString());
+                        }
+
                         if (shift.BusNumber != 0)
                         {
                             int totalShiftsForContext = employee.BusShiftTotals[shift.Date.DayOfWeek][shift.TimeContext()];
@@ -996,8 +1025,6 @@ namespace PayrollProcessor
                                 continue;
                             }
                         }
-
-
 
                         shift.ModifyClockIn(earliestClockIn);
 
@@ -1012,9 +1039,19 @@ namespace PayrollProcessor
                                 continue;
                             }
 
-                            Log("Modifying clock in for " + employee.Name + " by " + difference.ToString() + "\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString(), !LoggedEmployees.Contains(employee.IdNumber));
+                            Log("Modifying clock in for " + employee.Name + " by " + difference.ToString() + "\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString(), false/*!LoggedEmployees.Contains(employee.IdNumber)*/);
                             LoggedEmployees.Add(employee.IdNumber);
-                            continue; //for breakpoint
+                        }
+
+                        if (difference.CompareTo(new TimeSpan(0, 15, 0)) > 0)
+                        {
+                            if (!SchedulingLogMessages.ContainsKey(employee.Name))
+                            {
+                                SchedulingLogMessages.Add(employee.Name, new());
+                            }
+                            string message = "For " + employee.Name + " on " + shift.Date.ToShortDateString() + " changing clock in time from " + originalClockIn.ToString() + " to " + shift.ClockIn.ToString();
+                            SchedulingLogMessages[employee.Name].Add(message);
+                            LoggedEmployees.Add(employee.IdNumber);
                         }
                     }
                 }
@@ -1194,6 +1231,16 @@ namespace PayrollProcessor
                 Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["Z400"]];
                 var cellData = (Object[,])range.Value2;
                 int rows = range.Value2.GetLength(0) + 1;
+                HashSet<int> employeesWhoseIdsHaveBeenChecked = new();
+                if (TryGetStringFromCell(cellData[400, 26], out String cellString))
+                {
+                    employeesWhoseIdsHaveBeenChecked = cellString
+                        .Split(',')
+                        .Select(int.Parse)
+                        .ToHashSet();
+                }
+
+
                 for (int row = 1; row < rows; ++row)
                 {
                     int employeeNameColumn = 1;
@@ -1209,7 +1256,11 @@ namespace PayrollProcessor
                                 Log("Problem in attendance schedule! , " + employeeNumber.ToString() + " isn't an employee");
                                 continue;
                             }
-                            Log("From attendance schedule, " + nameFromSheet + "(" + EmployeeDictionary[employeeNumber].Name + ")");
+                            if (!employeesWhoseIdsHaveBeenChecked.Contains(employeeNumber))
+                            {
+                                Log("From attendance schedule, " + nameFromSheet + "(" + EmployeeDictionary[employeeNumber].Name + ")");
+                                employeesWhoseIdsHaveBeenChecked.Add(employeeNumber);
+                            }
                         }
                         for (int column = 0; column <= (int)RouteTimeContext.AFTERNOON; column++)
                         {
@@ -1264,6 +1315,11 @@ namespace PayrollProcessor
                                 }
                             }
                         }
+
+
+                        Object[,] employeesWhoseIdsHaveBeenCheckedObject = new String[1, 1];
+                        employeesWhoseIdsHaveBeenCheckedObject[0, 0] = String.Join(",", employeesWhoseIdsHaveBeenChecked);
+                        workSheet.Range["Z" + 400].Value = employeesWhoseIdsHaveBeenCheckedObject;
                     }
                 }
             }
@@ -1735,8 +1791,7 @@ namespace PayrollProcessor
 
                 object[,] employeeMatrix = new string[Program.EmployeeDictionary.Count + 1, 52];
 
-                int employeeRowNumber = 1;
-                Dictionary<DateTime, List<String>> birthDates = new();
+                Dictionary<DateTime, List<string>>[] birthDates = new Dictionary<DateTime, List<string>>[2] { new(), new() };
                 foreach (var employeeEntry in EmployeeDictionary)
                 {
                     var employee = employeeEntry.Value;
@@ -1745,35 +1800,37 @@ namespace PayrollProcessor
                         continue;
                     }
 
-                    if (employee.BirthDate.Month != DateTime.Now.Month && employee.BirthDate.Month != DateTime.Now.AddMonths(1).Month)
+                    int index = employee.BirthDate.Month == DateTime.Now.Month ? 0 : employee.BirthDate.Month == DateTime.Now.AddMonths(1).Month ? 1 : 2;
+                    if (index > 1)
                     {
                         continue;
                     }
-                    if (!birthDates.ContainsKey(employee.BirthDate))
+                    if (!birthDates[index].ContainsKey(employee.BirthDate))
                     {
-                        birthDates.Add(employee.BirthDate, new());
+                        birthDates[index].Add(employee.BirthDate, new());
                     }
-                    birthDates[employee.BirthDate].Add(employee.Name);
+                    birthDates[index][employee.BirthDate].Add(employee.Name);
                 }
-
-                var sortedByDay = birthDates
+                Dictionary<DateTime, List<string>>[] sortedBirthDates = new Dictionary<DateTime, List<string>>[2];
+                sortedBirthDates[0] = birthDates[0]
+                    .OrderBy(kvp => kvp.Key.Day)
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                sortedBirthDates[1] = birthDates[1]
                     .OrderBy(kvp => kvp.Key.Day)
                     .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
-                employeeMatrix[1, 0] = DateTime.Now.Month.ToString() + ":";
-                bool bNextMonthWasStarted = false;
-                foreach (var kvp in sortedByDay)
+                int employeeRowNumber = 1;
+                for (int i = 0; i < 2; i++)
                 {
-                    foreach (var employeeName in kvp.Value)
+                    employeeMatrix[employeeRowNumber++, 0] = DateTime.Now.AddMonths(i).Month.ToString("MMMM") + ":";
+                    foreach (var kvp in sortedBirthDates[i])
                     {
-                        if (kvp.Key.Month != DateTime.Now.Month)
+                        foreach (var employeeName in kvp.Value)
                         {
-                            bNextMonthWasStarted = true;
-                            employeeMatrix[employeeRowNumber + 1, 0] = kvp.Key.Month.ToString() + ":";
+                            employeeMatrix[employeeRowNumber, 0] = employeeName;
+                            employeeMatrix[employeeRowNumber, 1] = kvp.Key.ToShortDateString();
+                            employeeRowNumber++;
                         }
-                        employeeMatrix[employeeRowNumber + 1, 0] = employeeName;
-                        employeeMatrix[employeeRowNumber + 1, 1] = kvp.Key.ToShortDateString();
-                        employeeRowNumber++;
                     }
                 }
 
