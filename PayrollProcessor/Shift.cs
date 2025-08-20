@@ -3,12 +3,11 @@ using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
 {
-    //uriel time 6:25 - 4:30
     public class Shift
     {
         public const int WEST_FARGO_BUS_PLACE_HOLDER = int.MaxValue;
-        private static readonly int[] BigBusNumbers = new int[] { WEST_FARGO_BUS_PLACE_HOLDER, 14, 26, 28, 29, 32, 33, 37, 38, 39, 40, 41, 44, 45, 46, 48, 49, 52, 53, 55, 56, 57, 58, 59, 60, 61, 63, 64, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 100, 105, 109, 111, 113, 301, 302, 306, 308, 309, 310, 311, 312, 313, 314, 315, 317, 321, 322, 329, 330, 333 };
-        private static readonly int[] SpedBusNumbers = new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 30, 31, 34, 35, 36, 42, 43, 47, 50, 51, 54, 62, 65, 99, 101, 102, 103, 104, 106, 107, 108, 110, 112, 114, 115, 116, 117, 118, 119, 502, 503, 504, 505, 303, 304, 305, 307, 316, 318, 319, 320, 323, 324, 325, 326, 327, 328, 331, 332 };
+        private static readonly int[] BigBusNumbers = new int[] { WEST_FARGO_BUS_PLACE_HOLDER, 14, 26, 28, 29, 32, 33, 37, 38, 39, 40, 41, 43, 44, 45, 46, 48, 49, 52, 53, 55, 56, 57, 58, 59, 60, 61, 63, 64, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 100, 101, 105, 109, 111, 113, 301, 302, 306, 308, 309, 310, 311, 312, 313, 314, 315, 317, 321, 322, 329, 330, 333 };
+        private static readonly int[] SpedBusNumbers = new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 30, 31, 34, 35, 36, 42, 47, 50, 51, 54, 62, 65, 99, 102, 103, 104, 106, 107, 108, 110, 112, 114, 115, 116, 117, 118, 119, 120, 502, 503, 504, 505, 303, 304, 305, 307, 316, 318, 319, 320, 323, 324, 325, 326, 327, 328, 331, 332 };
         private const int TJ_MAX_BUS = 799;
         private const int TJ_MIN_BUS = 700;
         private const int BusStartingDailyBonus = 10;
@@ -143,16 +142,18 @@ namespace PayrollProcessor
                 }
                 if (IsASchoolRouteShift())
                 {
-                    if (!Shift.WereThereSchoolRoutesOnThisDay(ShiftLocation, Date.Day))
-                    {
-                        return 0f;
-                    }
 
                     var shiftTime = shiftsInRouteTimeContext == null ? ShiftTime : shiftsInRouteTimeContext.Sum(shift => shift.ShiftTime);
 
                     if (null != shiftsInRouteTimeContext && shiftTime < 0.08)
                     {
                         DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
+                        return 0f;
+                    }
+
+                    if (!Shift.WereThereSchoolRoutesOnThisDay(ShiftLocation, Date.Day))
+                    {
+                        Log("No mg for " + employee.Name + " because it was determined that there were no school shifts happening in " +  ShiftLocation + " on " + this.Date.DayOfWeek + " at " + this.Date.ToShortTimeString());
                         return 0f;
                     }
 
@@ -360,9 +361,9 @@ namespace PayrollProcessor
             return GetLaborCode(JobType, isOvertime);
         }
 
-        private bool IsASummerRoute()
+        public bool IsASummerRoute()
         {
-            return Date.CompareTo(new DateTime(Date.Year, 6, 1)) > 0 && Date.CompareTo(new DateTime(Date.Year, 8, 20)) < 0;
+            return IsSummerDate(this.Date, this.ShiftLocation);
         }
 
         public RouteTimeContext TimeContext()
@@ -405,7 +406,14 @@ namespace PayrollProcessor
                     {
                         if (newRate < 2)
                         {
-                            newRate = GetBasePayRateForEmployee(JobType, emp);
+                            if (JobType == Jobs.CLEANING || JobType == Jobs.WASH_BAY)
+                            {
+                                newRate = GetBasePayRateForEmployee(Jobs.AIDE_SCHOOL, emp);
+                            }
+                            else
+                            {
+                                newRate = GetBasePayRateForEmployee(JobType, emp);
+                            }
                             if (newRate < 2)
                             {
                                 Log("Assigning default rate failed", true);
@@ -514,7 +522,9 @@ namespace PayrollProcessor
 
         public static bool WereThereSchoolRoutesOnThisDay(Location location, int dayNumber)
         {
-            return DailySchoolRouteCounter[(int)location, (int)dayNumber] > 5;
+            return DailySchoolRouteCounter[(int)location, (int)dayNumber] > 4
+                || (location == Location.GRAND_FORKS && DailySchoolRouteCounter[(int)location, (int)dayNumber] > 2)
+                ;
         }
     }
 

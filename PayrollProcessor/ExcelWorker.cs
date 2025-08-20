@@ -127,10 +127,10 @@ namespace PayrollProcessor
                         TryGetStringFromCell(cellData[rowNumber, SSN_COLUMN], out employee.SocialSecurityNumber);
                         TryGetDateFromCell(cellData[rowNumber, HIRE_DATE_COLUMN], out employee.HireDate);
                         TryGetDateFromCell(cellData[rowNumber, BIRTH_DATE_COLUMN], out employee.BirthDate);
-                        if (TryGetDateFromCell(cellData[rowNumber, TERM_DATE_COLUMN], out DateTime TermDate))
+                        if (TryGetDateFromCell(cellData[rowNumber, TERM_DATE_COLUMN], out employee.TerminationDate))
                         {
                             TryGetDateFromCell(cellData[rowNumber, REHIRE_DATE_COLUMN], out DateTime rehireDate);
-                            if (TermDate.CompareTo(employee.HireDate) >= 0 && TermDate.CompareTo(rehireDate) >= 0)
+                            if (employee.TerminationDate.CompareTo(employee.HireDate) >= 0 && employee.TerminationDate.CompareTo(rehireDate) >= 0)
                             {
                                 employee.IsTerminated = true;
                             }
@@ -335,7 +335,6 @@ namespace PayrollProcessor
                     }
                 }
             }
-
             workBook.Close();
             excelApp.Quit();
 
@@ -364,7 +363,7 @@ namespace PayrollProcessor
             const int EMP_LAST_NAME_COLUMN = 7;
             const int EMPLOYEE_GROUPS = 44;
 
-            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups" };
+            List<string> headers = new() { "Start Date", "Employee #", "Employee #", "SSN", "First Name", "Middle Name", "Last Name", "Email", "Street", "Apt/Suite/Unit", "Zip", "City", "State", "Birthdate", "Phone", "Date Received (Form I-9)", "Citizenship Designation (Form I-9)", "Gender", "Position", "Zip", "Filing Status (W4)", "Deductions (W4)", "Total Dependents Withholding (W4)", "Extra Withholding (W4)", "Exempt Status (W4)", "Account 1", "Account 1 - $ Specific Deposit Amount", "Account 1 - % Net Amount", "Account 1 - Account Number", "Account 1 - Deposit Instructions", "Account 1 - Routing Number", "Account 1 - Type", "Account 2", "Account 2 - $ Specific Deposit Amount", "Account 2 - % Net Amount", "Account 2 - Account Number", "Account 2 - Deposit Instructions", "Account 2 - Routing Number", "Account 2 - Type", "Account 3", "Account 3 - Account Number", "Account 3 - Routing Number", "Account 3 - Type", "Employee Groups", "Date Received (Direct Deposit Authorization )" };
 
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
@@ -420,6 +419,8 @@ namespace PayrollProcessor
                     string[] socialSecurityNumberEntries = new string[2] { "", "" };
                     string[] birthDateEntries = new string[2] { "", "" };
 
+
+                    if (employee.IsTerminated) ;
                     foreach (var header in headers)
                     {
                         Object? cell = null;
@@ -433,11 +434,39 @@ namespace PayrollProcessor
                         }
                         if (cell != null)
                         {
-                            if (employee.WasAlreadyInPayroll && !FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(header))
+                            if (!TryGetStringFromCell(cell, out string cellString))
                             {
                                 continue;
                             }
-                            TryGetStringFromCell(cell, out string cellString);
+                            switch (header)
+                            {
+                                case "Date Received (Direct Deposit Authorization )":
+
+                                    if (TryGetDateFromCell(cell, out employee.DateOfDirectDepositUpdateInWorkBright))
+                                    {
+                                        if (employee.WasAlreadyInPayroll && !FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(header))
+                                        {
+                                            if (employee.DateOfDirectDepositUpdateInWorkBright.AddDays(14).CompareTo(DateTime.Today) > 0)
+                                            {
+                                                Log("Direct deposit should be imported for " + employee.Name + "?", true);
+                                            }
+                                        }
+                                    }
+                                    break;
+                            }
+                            if (employee.WasAlreadyInPayroll && !FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(header))
+                            {
+                                continue;
+                                //employee.TerminationDate.AddMonths();
+                                //if (!employee.IsTerminated)
+                                //{
+                                //    continue;
+                                //}
+                                //else
+                                //{
+                                //    Log("Re-importing " + employee.Name + " because they are terminated in payroll.");
+                                //}
+                            }
                             switch (header)
                             {
                                 case "Start Date":
@@ -711,6 +740,12 @@ namespace PayrollProcessor
                                         employee.PayRates[Jobs.DRIVER_CHARTER] = payRate;
                                     }
                                     break;
+                                case "Date Received (Direct Deposit Authorization )":
+
+                                    if (TryGetDateFromCell(cell, out employee.DateOfDirectDepositUpdateInWorkBright))
+                                    {
+                                    }
+                                    break;
                             }
                         }
                     }
@@ -821,7 +856,8 @@ namespace PayrollProcessor
                             continue;
                         }
 
-                        Shift shift = new(Company.VALLEY_BUS_LLC);
+                        Company company = employeeNumber == 1734 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
+                        Shift shift = new(company);
                         shift.ShiftTime = time;
                         shift.Date = date;
 
@@ -849,6 +885,10 @@ namespace PayrollProcessor
                         if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out shift.JobInt))
                         {
                             shift.JobType = GetJobTypeFromCode(shift.JobInt);
+                            if (employeeNumber == 1983/*chris clark*/ && (Jobs)shift.JobInt == Jobs.MECHANIC)
+                            {
+                                shift.JobInt = (int)Jobs.DRIVER_SCHOOL;
+                            }
                             if (shift.JobType == Jobs.DRIVER_SCHOOL && !employee.PayRates.ContainsKey(shift.JobType))
                             {
                                 shift.JobType = Jobs.NON_CDL_DRIVER;
@@ -973,6 +1013,10 @@ namespace PayrollProcessor
         static HashSet<string> EarlyOutSignals = new();
         static void CheckShiftAgainstSchedule(Shift shift, Employee employee, Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> employeeScheduleData)
         {
+            if (shift.IsASummerRoute())
+            {
+                return;
+            }
             if (!shift.IsASchoolRouteShift())
             {
                 return;
@@ -1016,7 +1060,7 @@ namespace PayrollProcessor
                             EarlyOutSignals.Add(shift.Date.ToShortDateString());
                         }
 
-                        if (shift.BusNumber != 0)
+                        if (shift.BusNumber != 0 && shift.BusNumber != Shift.WEST_FARGO_BUS_PLACE_HOLDER)
                         {
                             int totalShiftsForContext = employee.BusShiftTotals[shift.Date.DayOfWeek][shift.TimeContext()];
                             if (employee.ShiftsByBusNumber[shift.Date.DayOfWeek][shift.TimeContext()][shift.BusNumber] < totalShiftsForContext / 2)
@@ -1039,7 +1083,7 @@ namespace PayrollProcessor
                                 continue;
                             }
 
-                            Log("Modifying clock in for " + employee.Name + " by " + difference.ToString() + "\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString(), false/*!LoggedEmployees.Contains(employee.IdNumber)*/);
+                            //Log("Modifying clock in for " + employee.Name + " by " + difference.ToString() + "\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString(), false/*!LoggedEmployees.Contains(employee.IdNumber)*/);
                             LoggedEmployees.Add(employee.IdNumber);
                         }
 
@@ -1317,13 +1361,14 @@ namespace PayrollProcessor
                         }
 
 
-                        Object[,] employeesWhoseIdsHaveBeenCheckedObject = new String[1, 1];
-                        employeesWhoseIdsHaveBeenCheckedObject[0, 0] = String.Join(",", employeesWhoseIdsHaveBeenChecked);
-                        workSheet.Range["Z" + 400].Value = employeesWhoseIdsHaveBeenCheckedObject;
+                        //Object[,] employeesWhoseIdsHaveBeenCheckedObject = new String[1, 1];
+                        //employeesWhoseIdsHaveBeenCheckedObject[0, 0] = String.Join(",", employeesWhoseIdsHaveBeenChecked);
+                        //workSheet.Range["Z" + 400].Value = employeesWhoseIdsHaveBeenCheckedObject;
+
+                        //SaveWorkBook(workBook, path);
                     }
                 }
             }
-
             workBook.Close();
             xlApp.Quit();
 

@@ -31,7 +31,9 @@ namespace PayrollProcessor
         public bool IsPartialEntry = false;
         public DateTime BirthDate;
         public bool IsTerminated;
+        public DateTime TerminationDate;
         public bool WasReportedForPartialEntry;
+        public DateTime DateOfDirectDepositUpdateInWorkBright;
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/, 3/*0-has hours,1-has dollars,2-has both*/];
 
         //for schedule matching
@@ -138,13 +140,9 @@ namespace PayrollProcessor
                         var preUpdate = PayRates.GetValueOrDefault(shift.JobType, 0f);
                         //float badRate = preUpdate + PayRates[shift.JobType] - FargoDefaultRates[shift.JobType];
                         rate = GrandForksDefaultRates[shift.JobType] + PayRates[shift.JobType] - FargoDefaultRates[shift.JobType];
-                        //if (rate != badRate)
-                        //{
-                        //    Log("breakpoint");
-                        //}
                         if (rate > preUpdate)
                         {
-                            Log("Upgraded special GF payrate for " + shift.JobType.ToString() + " from " + preUpdate + " to " + rate);
+                            //Log("Upgraded special GF payrate for " + shift.JobType.ToString() + " from " + preUpdate + " to " + rate);
                         }
                         else if (YearsOfService > 0)
                         {

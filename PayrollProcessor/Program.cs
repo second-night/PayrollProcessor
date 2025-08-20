@@ -22,7 +22,7 @@ namespace PayrollProcessor
         public const float TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 70f;
         public const float DRIVER_CHARTER_RATE = 17.5f;
         public const float TRAINING_RATE= 12.5f;
-        public const float STARTING_WASH_BAY_RATE = 16f;
+        public const float STARTING_WASH_BAY_RATE = 17f;
         public const float COACH_HOURLY_RATE_ESTIMATE = 19f;
         public const float GF_HOCKEY_PAY = 100f;
         public const float GF_HOCKEY_BAND_PAY = 120f;
@@ -110,6 +110,16 @@ namespace PayrollProcessor
         public static void DelayedLog(string text, bool bShouldDisplayForm = false)
         {
             DelayedLogMessages[text] = bShouldDisplayForm;
+        }
+
+        public static bool IsSummerDate(DateTime dateTime, Location shiftLocation)
+        {
+            DateTime SummerStart = new DateTime(DateTime.Now.Year, 6, 1);
+            if (shiftLocation == Location.FARGO)
+            {
+                SummerStart = new DateTime(DateTime.Now.Year, 6, 6);
+            }
+            return dateTime.CompareTo(SummerStart) > 0 && dateTime.CompareTo(new DateTime(DateTime.Now.Year, 8, 20)) < 0;
         }
 
         public static bool StringSearch(string? str, string subStr)
