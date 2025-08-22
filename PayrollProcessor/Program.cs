@@ -15,18 +15,19 @@ namespace PayrollProcessor
     public static class Program
     {
         public static Dictionary<int, Employee> EmployeeDictionary = new();
-        public const float OUT_OF_TOWN_CHARTER_RATE = 18f;
-        public const float T_AND_J_CHARTER_RATE = 19f;
-        public const float PRIVATE_OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
-        public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 72f;
-        public const float TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 70f;
-        public const float DRIVER_CHARTER_RATE = 17.5f;
-        public const float TRAINING_RATE= 12.5f;
-        public const float STARTING_WASH_BAY_RATE = 17f;
-        public const float COACH_HOURLY_RATE_ESTIMATE = 19f;
         public const float GF_HOCKEY_PAY = 100f;
         public const float GF_HOCKEY_BAND_PAY = 120f;
+        public const float PRIVATE_OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
+        public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 70f;
+        public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 50f;
+
+        public const float DRIVER_CHARTER_RATE = 18f;
+        public const float OUT_OF_TOWN_CHARTER_RATE = 18.5f;
+        public const float T_AND_J_CHARTER_RATE = 19.5f;
+        public const float TRAINING_RATE= 13f;
+        public const float COACH_HOURLY_RATE_ESTIMATE = 19f;
         public const float TEN_YEAR_RATE_BUMP = 0.5f;
+        public const float FARGO_SPED_CDL_DRIVER_RATE_BUMP = 0.5f;
         public static string LogString = "";
         public static HashSet<int> BusStartingDays = new();
         private static ExcelWorker ExcelWorker;
@@ -39,24 +40,23 @@ namespace PayrollProcessor
         public static HashSet<Employee> NonCdlDrivers = new();
         private static Dictionary<int, Dictionary<Jobs, float>> ApprenticeMechanicHours = new();
 
-
         public static Dictionary<Jobs, float> FargoDefaultRates = new()
         {
-            {Jobs.DRIVER_SCHOOL, 21.5f },
+            {Jobs.DRIVER_SCHOOL, 22.3f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
             {Jobs.COACH_PUBLIC_DRIVING, OUT_OF_TOWN_CHARTER_RATE },
-            {Jobs.AIDE_SCHOOL, 18f },
-            {Jobs.AIDE_CHARTER, 16f },
-            {Jobs.NON_CDL_DRIVER, 18.5f },
+            {Jobs.AIDE_SCHOOL, 18.5f },
+            {Jobs.AIDE_CHARTER, 16.5f },
+            {Jobs.NON_CDL_DRIVER, 19f },
             {Jobs.TRAINING, TRAINING_RATE }
         };
         public static Dictionary<Jobs, float> GrandForksDefaultRates = new()
         {
-            {Jobs.DRIVER_SCHOOL, 23f },
+            {Jobs.DRIVER_SCHOOL, 23.7f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
-            {Jobs.AIDE_SCHOOL, 18.5f },
-            {Jobs.AIDE_CHARTER, 17.5f },
-            {Jobs.NON_CDL_DRIVER, 19f },
+            {Jobs.AIDE_SCHOOL, 19f },
+            {Jobs.AIDE_CHARTER, 18f },
+            {Jobs.NON_CDL_DRIVER, 19.7f },
             {Jobs.TRAINING, TRAINING_RATE }
         };
 

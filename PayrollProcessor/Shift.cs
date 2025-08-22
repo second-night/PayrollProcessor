@@ -260,7 +260,7 @@ namespace PayrollProcessor
                     else if (Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
                     {
                         sourceOfMg = BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS ? MgSource.T_AND_J_CHARTER : MgSource.WEEKEND_CHARTER;
-                        float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? TJ_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
+                        float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
                         return weekendMinimum / CalculateCharterRate(employee);
                     }
                     else
@@ -270,6 +270,11 @@ namespace PayrollProcessor
                 }
             }
             return 0f;
+        }
+
+        public bool IsASpedBusShift()
+        {
+            return SpedBusNumbers.Contains(this.BusNumber);
         }
 
         static bool TAndJMessageWasDisplayed = false;
@@ -456,9 +461,10 @@ namespace PayrollProcessor
                 case Jobs.WASH_BAY_OT:
                     if (!emp.PayRates.ContainsKey(Jobs.WASH_BAY))
                     {
-                        Log("ERROR: Employee using washbay OT but they don't have a washbay rate.", true);
+                        Log("ERROR: Employee using washbay OT but they don't have a washbay rate. Using starting washbay rate.", true);
                     }
-                    return emp.PayRates.GetValueOrDefault(Jobs.WASH_BAY, STARTING_WASH_BAY_RATE) * 1.5f;
+                    float STARTING_WASH_BAY_RATE = emp.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.WASH_BAY] : FargoDefaultRates[Jobs.WASH_BAY];
+                    return STARTING_WASH_BAY_RATE * 1.5f;
                 case Jobs.HOLIDAY:
                 case Jobs.VACATION:
                     return emp.PayRates.Values.Max();

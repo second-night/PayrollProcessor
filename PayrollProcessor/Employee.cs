@@ -151,6 +151,10 @@ namespace PayrollProcessor
                     }
                 }
                 rate = Math.Max(rate, PayRates.GetValueOrDefault(shift.JobType, 0f));
+                if (!shift.IsAGrandForksShift && shift.IsASpedBusShift())
+                {
+                    rate += FARGO_SPED_CDL_DRIVER_RATE_BUMP;
+                }
             }
 
             var finalRate = Math.Max(Math.Max(PayRates.GetValueOrDefault(Jobs.MECHANIC, 0f), PayRates.GetValueOrDefault(Jobs.WASH_BAY)), rate);
