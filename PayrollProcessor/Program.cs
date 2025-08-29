@@ -32,6 +32,7 @@ namespace PayrollProcessor
         public static HashSet<int> BusStartingDays = new();
         private static ExcelWorker ExcelWorker;
         private static bool DoMedhusDeferredPayment;
+        private static bool DoJeffShawVacation = true;
         public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, DoMedhusDeferredPayment ? 1657 : 0/*Bob Medhus*/};
 
         //fields for logging
@@ -348,90 +349,94 @@ namespace PayrollProcessor
         {
             foreach (var emp in EmployeeDictionary.Values)
             {
-                if (emp != null)
+                if (emp != null && emp.Shifts.Count > 0)
                 {
-                    if (emp.Shifts.Count > 0)
+                    float[,] dailyRunningTotal = new float[2, 32]; //first index:1-working hours,2-all hours second index: dayNumber
+                    Shift[] shiftForDay = new Shift[32];
+                    bool[] bDriverOrAideShiftWasFoundForDay = new bool[32];
+                    foreach (var shift in emp.Shifts)
                     {
-                        float[,] dailyRunningTotal = new float[2, 32]; //first index:1-working hours,2-all hours second index: dayNumber
-                        Shift[] shiftForDay = new Shift[32];
-                        bool[] bDriverOrAideShiftWasFoundForDay = new bool[32];
-                        foreach (var shift in emp.Shifts)
+                        if (shift.IsValid(emp))
                         {
-                            if (shift.IsValid(emp))
+                            SpecialEmployeeHandler.GetInstance().CheckForTimeFrameException(emp, shift);
+                            DoBusStartingBonusAndMg(shift, emp);
+                            CheckForMechanicHoursForShift(shift, emp);
+
+                            float? payRate = shift.PayRate;
+                            if (shift.Type() == Type.HOURS && null == payRate)
                             {
-                                SpecialEmployeeHandler.GetInstance().CheckForTimeFrameException(emp, shift);
-                                DoBusStartingBonusAndMg(shift, emp);
-                                CheckForMechanicHoursForShift(shift, emp);
+                                payRate = emp.GetPayRateForShift(shift);
+                                shift.PayRate = payRate;
+                            }
+                            else if (shift.ShiftTime > 0.01f && shift.JobType != Jobs.DRIVER_COACH)
+                            {
+                                Log("Check here 131312321", true);
+                            }
 
-                                float? payRate = shift.PayRate;
-                                if (shift.Type() == Type.HOURS && null == payRate)
-                                {
-                                    payRate = emp.GetPayRateForShift(shift);
-                                    shift.PayRate = payRate;
-                                }
-                                else if (shift.ShiftTime > 0.01f && shift.JobType != Jobs.DRIVER_COACH)
-                                {
-                                    Log("Check here 131312321", true);
-                                }
+                            FindOrMakeMatchingShiftTotalShift(shift, emp, out Shift shiftTotalShift);
+                            shiftTotalShift.PayRate = payRate;
 
-                                FindOrMakeMatchingShiftTotalShift(shift, emp, out Shift shiftTotalShift);
-                                shiftTotalShift.PayRate = payRate;
+                            //sum all hours
+                            shiftTotalShift.AddAll(shift);
 
-                                //sum all hours
-                                shiftTotalShift.AddAll(shift);
-
-                                dailyRunningTotal[0, shift.Date.Day] += shift.WorkingHours();
-                                dailyRunningTotal[1, shift.Date.Day] += shift.AllHours(true);
-                                if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL)
-                                {
-                                    bDriverOrAideShiftWasFoundForDay[shift.Date.Day] = true;
-                                    shiftForDay[shift.Date.Day] = shiftTotalShift;
-                                }
+                            dailyRunningTotal[0, shift.Date.Day] += shift.WorkingHours();
+                            dailyRunningTotal[1, shift.Date.Day] += shift.AllHours(true);
+                            if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.AIDE_SCHOOL)
+                            {
+                                bDriverOrAideShiftWasFoundForDay[shift.Date.Day] = true;
+                                shiftForDay[shift.Date.Day] = shiftTotalShift;
                             }
                         }
+                    }
 
-                        float[,,] medhusCounter = new float[3, 6, 2]; // week, hours/dollar/bonus/per diem/ot hours/ot dollars, company number
-                        //total up weeks
-                        float[,] weeklyRunnningTotal = new float[2, 3]; //first index:0-working hours,1-all hours second index: weekNumber
-                        for (int company = 0; company < 2; ++company)
+                    float[,,] medhusCounter = new float[3, 6, 2]; // week, hours/dollar/bonus/per diem/ot hours/ot dollars, company number
+                    float jeffShawHours = 0f;
+                    //total up weeks
+                    float[,] weeklyRunnningTotal = new float[2, 3]; //first index:0-working hours,1-all hours second index: weekNumber
+                    for (int company = 0; company < 2; ++company)
+                    {
+                        for (int shiftType = 0; shiftType < 3; ++shiftType)
                         {
-                            for (int shiftType = 0; shiftType < 3; ++shiftType)
+                            if (null != emp.ShiftTotals[company, shiftType])
                             {
-                                if (null != emp.ShiftTotals[company, shiftType])
+                                foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
                                 {
-                                    foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
+                                    foreach (var shifts in pair.Values)
                                     {
-                                        foreach (var shifts in pair.Values)
+                                        foreach (var shift in shifts)
                                         {
-                                            foreach (var shift in shifts)
+                                            if (shift.IsValid(emp))
                                             {
-                                                if (shift.IsValid(emp))
+                                                weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
+                                                weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
+
+
+                                                //bob medhus
+                                                if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
                                                 {
-                                                    weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
-                                                    weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
-
-
-                                                    //bob medhus
-                                                    if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
+                                                    medhusCounter[shift.WeekNumber, 0, company] += shift.WorkingHours();
+                                                    float dollarAmount = shift.DollarAmount;
+                                                    if (dollarAmount < 0.0001f)
                                                     {
-                                                        medhusCounter[shift.WeekNumber, 0, company] += shift.WorkingHours();
-                                                        float dollarAmount = shift.DollarAmount;
-                                                        if (dollarAmount < 0.0001f)
+                                                        float payRate = emp.GetPayRateForShift(shift);
+                                                        if (payRate < 0.1f)
                                                         {
-                                                            float payRate = emp.GetPayRateForShift(shift);
-                                                            if (payRate < 0.1f)
-                                                            {
-                                                                Log("Problem getting payrate for totaling up bob medhus's hours", true);
-                                                            }
-                                                            else
-                                                            {
-                                                                dollarAmount = shift.WorkingHours() * emp.PayRates[shift.JobType];
-                                                            }
+                                                            Log("Problem getting payrate for totaling up bob medhus's hours", true);
                                                         }
-                                                        medhusCounter[shift.WeekNumber, 1, company] += dollarAmount;
-                                                        medhusCounter[shift.WeekNumber, 2, company] += shift.BonusDollars;
-                                                        medhusCounter[shift.WeekNumber, 3, company] += shift.PerDiem;
+                                                        else
+                                                        {
+                                                            dollarAmount = shift.WorkingHours() * emp.PayRates[shift.JobType];
+                                                        }
                                                     }
+                                                    medhusCounter[shift.WeekNumber, 1, company] += dollarAmount;
+                                                    medhusCounter[shift.WeekNumber, 2, company] += shift.BonusDollars;
+                                                    medhusCounter[shift.WeekNumber, 3, company] += shift.PerDiem;
+                                                }
+
+                                                //jeff shaw
+                                                if (DoJeffShawVacation && emp.IdNumber == 876)
+                                                {
+                                                    jeffShawHours += shift.AllHours(true);
                                                 }
                                             }
                                         }
@@ -439,92 +444,111 @@ namespace PayrollProcessor
                                 }
                             }
                         }
+                    }
 
-                        //daily min
-                        foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.DailyMgExceptions)
+                    //daily min
+                    foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.DailyMgExceptions)
+                    {
+                        if (entry.IdNumber == emp.IdNumber)
+                        {
+                            List<float> dailyMgList = new();
+                            for (int dayNumber = 0; dayNumber < 32; ++dayNumber)
+                            {
+                                if (bDriverOrAideShiftWasFoundForDay[dayNumber])
+                                {
+                                    if (entry.Hours > dailyRunningTotal[1, dayNumber])
+                                    {
+                                        float dailyMg = entry.Hours - dailyRunningTotal[1, dayNumber];
+                                        shiftForDay[dayNumber].MinimumGuaranteeHours += (float)Math.Round(dailyMg, 2);
+                                        dailyMgList.Add((float)Math.Round(dailyMg, 2));
+                                    }
+                                }
+                            }
+                            if (dailyMgList.Count > 0)
+                            {
+                                DelayedLog("Giving a total of " + dailyMgList.Sum() + " daily MG hours to " + emp.Name + " for a total of " + dailyMgList.Count + " days.");
+                                SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + dailyMgList.Sum();
+                            }
+                        }
+                    }
+
+                    for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
+                    {
+                        //weekly min 
+                        foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.WeeklyMgExceptions)
                         {
                             if (entry.IdNumber == emp.IdNumber)
                             {
-                                List<float> dailyMgList = new();
-                                for (int dayNumber = 0; dayNumber < 32; ++dayNumber)
+                                if (entry.Hours > weeklyRunnningTotal[1, weekNumber])
                                 {
-                                    if (bDriverOrAideShiftWasFoundForDay[dayNumber])
+                                    float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
+                                    var shift = emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType(), false);
+                                    if (shift != null)
                                     {
-                                        if (entry.Hours > dailyRunningTotal[1, dayNumber])
+                                        if (shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.VACATION)
                                         {
-                                            float dailyMg = entry.Hours - dailyRunningTotal[1, dayNumber];
-                                            shiftForDay[dayNumber].MinimumGuaranteeHours += (float)Math.Round(dailyMg, 2);
-                                            dailyMgList.Add((float)Math.Round(dailyMg, 2));
-                                        }
+                                            shift.MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
+                                            DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
+                                            SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
+                                        }    
                                     }
                                 }
-                                if (dailyMgList.Count > 0)
-                                {
-                                    DelayedLog("Giving a total of " + dailyMgList.Sum() + " daily MG hours to " + emp.Name + " for a total of " + dailyMgList.Count + " days.");
-                                    SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + dailyMgList.Sum();
-                                }
+                                break;
                             }
                         }
 
-                        for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
+                        //ot
+                        if (weeklyRunnningTotal[0, weekNumber] > 40f)
                         {
-                            //weekly min 
-                            foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.WeeklyMgExceptions)
+                            emp.OverTimeHours[weekNumber] = weeklyRunnningTotal[0, weekNumber] - 40f;
+                            //bob medhus
+                            if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
                             {
-                                if (entry.IdNumber == emp.IdNumber)
-                                {
-                                    if (entry.Hours > weeklyRunnningTotal[1, weekNumber])
-                                    {
-                                        float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
-                                        var shift = emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType(), false);
-                                        if (shift != null)
-                                        {
-                                            if (shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.VACATION)
-                                            {
-                                                shift.MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
-                                                DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
-                                                SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
-                                            }    
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-
-                            //ot
-                            if (weeklyRunnningTotal[0, weekNumber] > 40f)
-                            {
-                                emp.OverTimeHours[weekNumber] = weeklyRunnningTotal[0, weekNumber] - 40f;
-                                //bob medhus
-                                if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
-                                {
-                                    medhusCounter[weekNumber, 4, 0] = emp.OverTimeHours[weekNumber];
-                                    medhusCounter[weekNumber, 5, 0] = (medhusCounter[weekNumber, 1, 0] / medhusCounter[weekNumber, 0, 0]) * medhusCounter[weekNumber, 4, 0] * 0.5f;
-                                }
+                                medhusCounter[weekNumber, 4, 0] = emp.OverTimeHours[weekNumber];
+                                medhusCounter[weekNumber, 5, 0] = (medhusCounter[weekNumber, 1, 0] / medhusCounter[weekNumber, 0, 0]) * medhusCounter[weekNumber, 4, 0] * 0.5f;
                             }
                         }
+                    }
 
-                        //bob medhus
-                        if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
+                    //bob medhus
+                    if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
+                    {
+                        string message = "\nFor Bob Medhus, payroll run on " + DateTime.Now.ToShortDateString() + ":";
+                        for (int i = 0; i < 2; i++)
                         {
-                            string message = "\nFor Bob Medhus, payroll run on " + DateTime.Now.ToShortDateString() + ":";
-                            for (int i = 0; i < 2; i++)
+                            message += "\nFor " + (i == 0 ? "Valley Bus, LLC:" : "Valley Bus Coaches:");
+                            message += "\nHours week 1:\n" + Math.Round(medhusCounter[1, 0, i], 2).ToString();
+                            message += "\nHours week 2:\n" + Math.Round(medhusCounter[2, 0, i], 2).ToString();
+                            message += "\nDollars week 1:\n" + Math.Round(medhusCounter[1, 1, i], 2).ToString();
+                            message += "\nDollars week 2:\n" + Math.Round(medhusCounter[2, 1, i], 2).ToString();
+                            message += "\nBonus Dollars week 1:\n" + Math.Round(medhusCounter[1, 2, i], 2).ToString();
+                            message += "\nBonus Dollars week 2:\n" + Math.Round(medhusCounter[2, 2, i], 2).ToString();
+                            message += "\nPer Diem Dollars week 1:\n" + Math.Round(medhusCounter[1, 3, i], 2).ToString();
+                            message += "\nPer Diem Dollars week 2:\n" + Math.Round(medhusCounter[2, 3, i], 2).ToString();
+                            message += "\nOvertime Hours week 1:\n" + Math.Round(medhusCounter[1, 4, i], 2).ToString();
+                            message += "\nOvertime Hours week 2:\n" + Math.Round(medhusCounter[2, 4, i], 2).ToString();
+                            message += "\nOvertime Dollars week 1:\n" + Math.Round(medhusCounter[1, 5, i], 2).ToString();
+                            message += "\nOvertime Dollars week 2:\n" + Math.Round(medhusCounter[2, 5, i], 2).ToString();
+                        }
+                        Log(message);
+                    }
+
+                    //jeff shaw
+                    if (DoJeffShawVacation && emp.IdNumber == 876 && jeffShawHours < 80)
+                    {
+                        if (emp.VacationHours > 70)
+                        {
+                            float hours = Math.Min(80 - jeffShawHours, emp.VacationHours - 70);
+                            Shift newShift = new()
                             {
-                                message += "\nFor " + (i == 0 ? "Valley Bus, LLC:" : "Valley Bus Coaches:");
-                                message += "\nHours week 1:\n" + Math.Round(medhusCounter[1, 0, i], 2).ToString();
-                                message += "\nHours week 2:\n" + Math.Round(medhusCounter[2, 0, i], 2).ToString();
-                                message += "\nDollars week 1:\n" + Math.Round(medhusCounter[1, 1, i], 2).ToString();
-                                message += "\nDollars week 2:\n" + Math.Round(medhusCounter[2, 1, i], 2).ToString();
-                                message += "\nBonus Dollars week 1:\n" + Math.Round(medhusCounter[1, 2, i], 2).ToString();
-                                message += "\nBonus Dollars week 2:\n" + Math.Round(medhusCounter[2, 2, i], 2).ToString();
-                                message += "\nPer Diem Dollars week 1:\n" + Math.Round(medhusCounter[1, 3, i], 2).ToString();
-                                message += "\nPer Diem Dollars week 2:\n" + Math.Round(medhusCounter[2, 3, i], 2).ToString();
-                                message += "\nOvertime Hours week 1:\n" + Math.Round(medhusCounter[1, 4, i], 2).ToString();
-                                message += "\nOvertime Hours week 2:\n" + Math.Round(medhusCounter[2, 4, i], 2).ToString();
-                                message += "\nOvertime Dollars week 1:\n" + Math.Round(medhusCounter[1, 5, i], 2).ToString();
-                                message += "\nOvertime Dollars week 2:\n" + Math.Round(medhusCounter[2, 5, i], 2).ToString();
-                            }
-                            Log(message);
+                                JobType = Jobs.VACATION,
+                                ShiftTime = hours,
+                                CompanyName = Company.VALLEY_BUS_LLC,
+                                WeekNumber = 1
+                            };
+                            FindOrMakeMatchingShiftTotalShift(newShift, emp, out Shift shiftTotalShift);
+                            shiftTotalShift.ShiftTime = hours;
+                            shiftTotalShift.PayRate = emp.GetPayRateForShift(newShift);
                         }
                     }
                 }

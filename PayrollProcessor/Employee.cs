@@ -34,6 +34,7 @@ namespace PayrollProcessor
         public DateTime TerminationDate;
         public bool WasReportedForPartialEntry;
         public DateTime DateOfDirectDepositUpdateInWorkBright;
+        public float VacationHours;
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/, 3/*0-has hours,1-has dollars,2-has both*/];
 
         //for schedule matching
