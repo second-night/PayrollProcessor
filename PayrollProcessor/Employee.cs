@@ -12,7 +12,7 @@ namespace PayrollProcessor
         public string Name { get; protected set; }
         public Dictionary<Jobs, float> PayRates { get; private set; } = new();
         public List<Shift> Shifts = new();
-        public float[] OverTimeHours = new float[3];
+        public float[,] OverTimeHours = new float[2,3]; //[company, week number]
         public bool IsSalaried;
         public float AnnualSalaryAmount;
         public bool IsAGrandForksEmployee;
@@ -34,6 +34,7 @@ namespace PayrollProcessor
         public DateTime TerminationDate;
         public bool WasReportedForPartialEntry;
         public DateTime DateOfDirectDepositUpdateInWorkBright;
+        public bool needsDDImported;
         public float VacationHours;
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/, 3/*0-has hours,1-has dollars,2-has both*/];
 
@@ -44,12 +45,20 @@ namespace PayrollProcessor
         public Dictionary<DayOfWeek, Dictionary<RouteTimeContext, TimeSpan>> ScheduleExceptions = new();
 
 
-
+        public void fixIdNumber(int newNumber)
+        {
+            IdNumber = newNumber;
+        }
 
         public Employee(int idNumber, string name)
         {
             this.IdNumber = idNumber;
             this.Name = name;
+        }
+
+        public float OverTimeHoursForAllCompaniesForWeek(int weekNumber)
+        {
+            return OverTimeHours[0, weekNumber] + OverTimeHours[1, weekNumber];
         }
 
         public void SetPayRate(Jobs job, float rate)
@@ -79,7 +88,33 @@ namespace PayrollProcessor
                     }
                     if (PayRates.ContainsKey((Jobs)entry.OverridingJobType))
                     {
-                        return PayRates[(Jobs)entry.OverridingJobType];
+                        Shift tempShift = new(Company.VALLEY_BUS_LLC)
+                        {
+                            JobType = (Jobs)entry.OverridingJobType,
+                            IsAGrandForksShift = shift.IsAGrandForksShift,
+                            BusNumber = shift.BusNumber,
+                            ShiftTime = shift.ShiftTime,
+                            ClockIn = shift.ClockIn,
+                            ClockOut = shift.ClockOut,
+                            Date = shift.Date
+                        };
+                        float payRate = GetPayRateForShift(tempShift);
+
+                        //weird exception due to sped rate pay bump
+                        if (shift.ShiftTime > 2.5f && shift.IsASpedBusShift() && !shift.IsAGrandForksShift && (Jobs)entry.OverridingJobType == Jobs.DRIVER_SCHOOL)
+                        {
+                            float payBumpTime = shift.ShiftTime - (shift.ShiftTime > 6f ? 3f : 1.5f); //try to figure out if they drove 1 shift or 2
+                            float weightedRate1 = (shift.ShiftTime - payBumpTime) * (payRate - FARGO_SPED_CDL_DRIVER_RATE_BUMP);
+                            float weightedRate2 = payBumpTime * payRate;
+                            payRate = (weightedRate1 + weightedRate2) / shift.ShiftTime;
+                            Log("Applied partial sped rate pay bump for " + Name + " for " + shift.Date.ToShortDateString() + " for " + shift.ShiftTime + " hours. New payrate is " + payRate + ".");
+                        }
+
+                        if (payRate < PayRates[(Jobs)entry.OverridingJobType])
+                        {
+                            Log("Check payrate substitution for " + Name + " because payrate for " + ((Jobs)entry.OverridingJobType).ToString() + " is lower than expected.", true);
+                        }
+                        return Math.Max(PayRates[(Jobs)entry.OverridingJobType], payRate);
                     }
                     else if ((Jobs)entry.OverridingJobType == Jobs.NON_CDL_DRIVER)
                     {
@@ -188,6 +223,19 @@ namespace PayrollProcessor
             return !PayRates.ContainsKey(Jobs.DRIVER_SCHOOL) && (!PayRates.ContainsKey(Jobs.MECHANIC) || PayRates[Jobs.MECHANIC] < newRate);
         }
 
+        public float VacationHoursUsedThisPayPeriod()
+        {
+            float total = 0f;
+            foreach (var shift in Shifts)
+            {
+                if (shift.JobType == Jobs.VACATION && !shift.IsATotalsShift)
+                {
+                    total += shift.ShiftTime;
+                }
+            }
+            return total;
+        }
+
         public List<Shift> SchoolRouteShifts()
         {
             return Shifts.FindAll(shift => shift.IsASchoolRouteShift());
@@ -253,7 +301,7 @@ namespace PayrollProcessor
         }
 
         //only use this for weekly MG excpetions - otherwise make sure it will work properly if used for another purpose.
-        public Shift? FindShiftForWeek(int week, Jobs jobType, bool bShouldCreateNewShiftIfShiftIsNotFound)
+        public Shift? FindShiftForWeek(int week, Jobs jobType, Company company, bool bShouldCreateNewShiftIfShiftIsNotFound)
         {
             for (int shiftType = 0; shiftType <= (int)Type.DOLLAR_AMOUNT; ++ shiftType)
             {
@@ -265,7 +313,7 @@ namespace PayrollProcessor
                         {
                             foreach (Shift shift in shiftList)
                             {
-                                if (shift.WeekNumber == week && shift.JobType == jobType)
+                                if (shift.WeekNumber == week && shift.JobType == jobType && shift.CompanyName == company)
                                 {
                                     return shift;
                                 }

@@ -1,3 +1,4 @@
+using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.ExtendedProperties;
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -17,15 +18,14 @@ namespace PayrollProcessor
         public static Dictionary<int, Employee> EmployeeDictionary = new();
         public const float GF_HOCKEY_PAY = 100f;
         public const float GF_HOCKEY_BAND_PAY = 120f;
-        public const float PRIVATE_OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS = 120f;
+        public const float PRIVATE_CHARTERS_MG_IN_DOLLARS = 120f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 70f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 50f;
-
         public const float DRIVER_CHARTER_RATE = 18f;
-        public const float OUT_OF_TOWN_CHARTER_RATE = 18.5f;
+        public const float OUT_OF_TOWN_CHARTER_RATE = 19.5f;
         public const float T_AND_J_CHARTER_RATE = 19.5f;
         public const float TRAINING_RATE= 13f;
-        public const float COACH_HOURLY_RATE_ESTIMATE = 19f;
+        public const float COACH_HOURLY_RATE_ESTIMATE = 20f;
         public const float TEN_YEAR_RATE_BUMP = 0.5f;
         public const float FARGO_SPED_CDL_DRIVER_RATE_BUMP = 0.5f;
         public static string LogString = "";
@@ -45,6 +45,7 @@ namespace PayrollProcessor
         {
             {Jobs.DRIVER_SCHOOL, 22.3f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
+            {Jobs.DRIVER_CHARTER_PUBLIC, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.COACH_PUBLIC_DRIVING, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 18.5f },
             {Jobs.AIDE_CHARTER, 16.5f },
@@ -55,6 +56,7 @@ namespace PayrollProcessor
         {
             {Jobs.DRIVER_SCHOOL, 23.7f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
+            {Jobs.DRIVER_CHARTER_PUBLIC, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 19f },
             {Jobs.AIDE_CHARTER, 18f },
             {Jobs.NON_CDL_DRIVER, 19.7f },
@@ -392,7 +394,7 @@ namespace PayrollProcessor
                     float[,,] medhusCounter = new float[3, 6, 2]; // week, hours/dollar/bonus/per diem/ot hours/ot dollars, company number
                     float jeffShawHours = 0f;
                     //total up weeks
-                    float[,] weeklyRunnningTotal = new float[2, 3]; //first index:0-working hours,1-all hours second index: weekNumber
+                    float[,,] weeklyRunnningTotal = new float[2, 2, 3]; //first index:company; second index: 0-working hours,1-all hours ;third index: weekNumber
                     for (int company = 0; company < 2; ++company)
                     {
                         for (int shiftType = 0; shiftType < 3; ++shiftType)
@@ -407,8 +409,8 @@ namespace PayrollProcessor
                                         {
                                             if (shift.IsValid(emp))
                                             {
-                                                weeklyRunnningTotal[0, shift.WeekNumber] += shift.WorkingHours();
-                                                weeklyRunnningTotal[1, shift.WeekNumber] += shift.AllHours(true);
+                                                weeklyRunnningTotal[company, 0, shift.WeekNumber] += shift.WorkingHours();
+                                                weeklyRunnningTotal[company, 1, shift.WeekNumber] += shift.AllHours(true);
 
 
                                                 //bob medhus
@@ -479,18 +481,21 @@ namespace PayrollProcessor
                         {
                             if (entry.IdNumber == emp.IdNumber)
                             {
-                                if (entry.Hours > weeklyRunnningTotal[1, weekNumber])
+                                for (int company = 0; company < 2; ++company)
                                 {
-                                    float weeklyMg = entry.Hours - weeklyRunnningTotal[1, weekNumber];
-                                    var shift = emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType(), false);
-                                    if (shift != null)
+                                    if (entry.Hours > weeklyRunnningTotal[company, 1, weekNumber])
                                     {
-                                        if (shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.VACATION)
+                                        float weeklyMg = entry.Hours - weeklyRunnningTotal[company, 1, weekNumber];
+                                        var shift = emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType(), (Company)company, false);
+                                        if (shift != null)
                                         {
-                                            shift.MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
-                                            DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
-                                            SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
-                                        }    
+                                            if (shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.VACATION)
+                                            {
+                                                shift.MinimumGuaranteeHours += (float)Math.Round(weeklyMg, 2);
+                                                DelayedLog("Giving " + weeklyMg + " weekly MG hours to " + emp.Name);
+                                                SpecialEmployeeHandler.SpecialMgNonShiftTotals[emp.IdNumber] = SpecialEmployeeHandler.SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + weeklyMg;
+                                            }
+                                        }
                                     }
                                 }
                                 break;
@@ -498,14 +503,17 @@ namespace PayrollProcessor
                         }
 
                         //ot
-                        if (weeklyRunnningTotal[0, weekNumber] > 40f)
+                        for (int company = 0; company < 2; ++company)
                         {
-                            emp.OverTimeHours[weekNumber] = weeklyRunnningTotal[0, weekNumber] - 40f;
-                            //bob medhus
-                            if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
+                            if (weeklyRunnningTotal[company, 0, weekNumber] > 40f)
                             {
-                                medhusCounter[weekNumber, 4, 0] = emp.OverTimeHours[weekNumber];
-                                medhusCounter[weekNumber, 5, 0] = (medhusCounter[weekNumber, 1, 0] / medhusCounter[weekNumber, 0, 0]) * medhusCounter[weekNumber, 4, 0] * 0.5f;
+                                emp.OverTimeHours[company, weekNumber] = weeklyRunnningTotal[company, 0, weekNumber] - 40f;
+                                //bob medhus
+                                if (DoMedhusDeferredPayment && emp.IdNumber == 1657 && company == (int)Company.VALLEY_BUS_LLC)
+                                {
+                                    medhusCounter[weekNumber, 4, 0] = emp.OverTimeHours[company, weekNumber];
+                                    medhusCounter[weekNumber, 5, 0] = (medhusCounter[weekNumber, 1, 0] / medhusCounter[weekNumber, 0, 0]) * medhusCounter[weekNumber, 4, 0] * 0.5f;
+                                }
                             }
                         }
                     }
@@ -549,6 +557,31 @@ namespace PayrollProcessor
                             FindOrMakeMatchingShiftTotalShift(newShift, emp, out Shift shiftTotalShift);
                             shiftTotalShift.ShiftTime = hours;
                             shiftTotalShift.PayRate = emp.GetPayRateForShift(newShift);
+                        }
+                    }
+                    if (IsLastPayPeriodOfTheYear(ExcelWorker.FirstDayWeek2))
+                    {
+                        float vacationHours = emp.VacationHours;
+                        float hoursAlreadyRequestedForThisPayPeriod = emp.VacationHoursUsedThisPayPeriod();
+                        vacationHours -= hoursAlreadyRequestedForThisPayPeriod;
+                        if (vacationHours > 76)
+                        {
+                            float extraVacationHours = (float)Math.Round(vacationHours - 75, 2);
+
+                            if (PrintForm.InputBool("Should we use up " + extraVacationHours + " vacation hours for " + emp.Name + " (in addition to the " + hoursAlreadyRequestedForThisPayPeriod + " hours requested)?"))
+                            {
+                                Log("Using " + extraVacationHours + " vacation hours for " + emp.Name + " (in addition to the " + hoursAlreadyRequestedForThisPayPeriod + " hours requested).");
+                                Shift newShift = new()
+                                {
+                                    JobType = Jobs.VACATION,
+                                    ShiftTime = extraVacationHours,
+                                    CompanyName = Company.VALLEY_BUS_LLC,
+                                    WeekNumber = 1
+                                };
+                                FindOrMakeMatchingShiftTotalShift(newShift, emp, out Shift shiftTotalShift);
+                                shiftTotalShift.ShiftTime = extraVacationHours;
+                                shiftTotalShift.PayRate = emp.GetPayRateForShift(newShift);
+                            }
                         }
                     }
                 }
@@ -671,6 +704,10 @@ namespace PayrollProcessor
 
         private static void FindOrMakeMatchingShiftTotalShift(Shift shiftToMatch, Employee emp, out Shift shiftTotalShift)
         {
+            if (shiftToMatch.WeekNumber == 0)
+            {
+                shiftToMatch.WeekNumber = 1;
+            }
             if (null == emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()])
             {
                 emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()] = new();
@@ -796,6 +833,10 @@ namespace PayrollProcessor
 
         public static void GiveRaiseToEmployee(Employee employee, Jobs job, float rate)
         {
+            if (Jobs.DRIVER_CHARTER_PUBLIC == job)
+            {
+                return;
+            }
             employee.NeedsUpdateInPayroll = true;
             employee.PayRates[job] = rate;
             if (!ExcelWorker.ImportEmployees.ContainsKey(employee.IdNumber))
@@ -880,6 +921,14 @@ namespace PayrollProcessor
 
         public static void CheckForVacationCutOff(DateTime firstDayWeekTwo)
         {
+           if (IsLastPayPeriodOfTheYear(firstDayWeekTwo))
+            {
+                Log("This is the last pay period for the year. Please check accrual cut-offs", true);
+            }
+        }
+
+        public static bool IsLastPayPeriodOfTheYear(DateTime firstDayWeekTwo)
+        {
             DateTime payDate = firstDayWeekTwo.AddDays(12);
 
             if (payDate.Month == 1 && payDate.Day == 1)
@@ -889,10 +938,7 @@ namespace PayrollProcessor
 
             DateTime nextPayDate = payDate.AddDays(7);
 
-            if (nextPayDate.Year > payDate.Year)
-            {
-                Log("This is the last pay period for the year. Please check accrual cut-offs", true);
-            }
+            return nextPayDate.Year > payDate.Year;
         }
 
         public static string DesktopPath()
@@ -1030,7 +1076,7 @@ namespace PayrollProcessor
 
     public enum Jobs
     {
-        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
+        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, DRIVER_CHARTER_PUBLIC = 3, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
         VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, 
         AIDE_SCHOOL = 25, DRIVER_COACH, OUT_OF_TOWN_CHARTER, NON_CDL_DRIVER, 
         

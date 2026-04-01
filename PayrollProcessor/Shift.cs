@@ -229,6 +229,11 @@ namespace PayrollProcessor
 
                     return maxMg;
                 }
+                else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+                {
+                    sourceOfMg = MgSource.STANDARD_CHARTER;
+                    return OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
+                }
                 else if (JobType == Jobs.DRIVER_CHARTER || JobType == Jobs.AIDE_CHARTER || JobType == Jobs.COACH_PUBLIC_DRIVING)
                 {
                     if (StringSearch(Notes, "Hock"))
@@ -252,14 +257,14 @@ namespace PayrollProcessor
                     }
 
                     sourceOfMg = MgSource.STANDARD_CHARTER;
-                    if ((null != Notes && StringSearch(Notes, "private")) || JobType == Jobs.COACH_PUBLIC_DRIVING)
+                    if ((null != Notes && StringSearch(Notes, "private")) || JobType == Jobs.COACH_PUBLIC_DRIVING || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
                     {
-                        sourceOfMg = MgSource.PRIVATE_CHARTER;
-                        return PRIVATE_OUT_OF_TOWN_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
+                        sourceOfMg = BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS ? MgSource.T_AND_J_CHARTER : MgSource.PRIVATE_CHARTER;
+                        return PRIVATE_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
                     }
-                    else if (Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
+                    else if (Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday)
                     {
-                        sourceOfMg = BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS ? MgSource.T_AND_J_CHARTER : MgSource.WEEKEND_CHARTER;
+                        sourceOfMg = MgSource.WEEKEND_CHARTER;
                         float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
                         return weekendMinimum / CalculateCharterRate(employee);
                     }
@@ -296,6 +301,11 @@ namespace PayrollProcessor
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), T_AND_J_CHARTER_RATE);
             }
 
+            if (JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+            {
+                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), T_AND_J_CHARTER_RATE);
+            }
+
             if (JobType == Jobs.COACH_PUBLIC_DRIVING || Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday)
             {
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), OUT_OF_TOWN_CHARTER_RATE);
@@ -314,6 +324,7 @@ namespace PayrollProcessor
             switch (jobType)
             {
                 case Jobs.DRIVER_CHARTER:
+                case Jobs.DRIVER_CHARTER_PUBLIC:
                 case Jobs.COACH_PUBLIC_DRIVING:
                 case Jobs.OUT_OF_TOWN_CHARTER:
                     return "DrvrSchool";
@@ -459,11 +470,12 @@ namespace PayrollProcessor
                 case Jobs.COACH_PUBLIC_DRIVING:
                     return Math.Max(specialRate, CalculateCharterRate(emp));
                 case Jobs.WASH_BAY_OT:
-                    if (!emp.PayRates.ContainsKey(Jobs.WASH_BAY))
+                    if (emp.PayRates.ContainsKey(Jobs.WASH_BAY))
                     {
-                        Log("ERROR: Employee using washbay OT but they don't have a washbay rate. Using starting washbay rate.", true);
+                        return emp.PayRates[Jobs.WASH_BAY] * 1.5f;
                     }
-                    float STARTING_WASH_BAY_RATE = emp.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.WASH_BAY] : FargoDefaultRates[Jobs.WASH_BAY];
+                    Log("ERROR: Employee using washbay OT but they don't have a washbay rate. Using starting washbay rate.", true);
+                    float STARTING_WASH_BAY_RATE = emp.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.AIDE_SCHOOL] : FargoDefaultRates[Jobs.AIDE_SCHOOL];
                     return STARTING_WASH_BAY_RATE * 1.5f;
                 case Jobs.HOLIDAY:
                 case Jobs.VACATION:

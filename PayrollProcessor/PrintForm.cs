@@ -134,6 +134,7 @@ namespace PayrollProcessor
             PrintForm form = new PrintForm(message);
             form.dateTimePicker1.Visible = true;
             form.button2.Text = "Yes";
+            form.button1.Text = "No";
             form.button1.Visible = true;
             Application.Run(form);
             dateTime = new(form.DateTime.Year, form.DateTime.Month, form.DateTime.Day);
@@ -144,6 +145,17 @@ namespace PayrollProcessor
         {
             PrintForm form = new PrintForm(message);
             form.button2.Text = "Yes";
+            form.button1.Text = "No";
+            form.button1.Visible = true;
+            Application.Run(form);
+            return form.YesNoButton;
+        }
+
+        public static bool InputBool(string message, string yesButtonText, string noButtonText)
+        {
+            PrintForm form = new PrintForm(message);
+            form.button2.Text = yesButtonText;
+            form.button1.Text = noButtonText;
             form.button1.Visible = true;
             Application.Run(form);
             return form.YesNoButton;
@@ -153,6 +165,7 @@ namespace PayrollProcessor
         {
             PrintForm form = new PrintForm(message);
             form.button2.Text = "Yes";
+            form.button1.Text = "No";
             form.button1.Visible = true;
             form.textBox1.Visible = true;
             Application.Run(form);

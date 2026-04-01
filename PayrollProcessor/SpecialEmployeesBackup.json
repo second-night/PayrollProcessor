@@ -12,6 +12,12 @@
       "IdNumber": 1448,
       "Hours": 35,
       "Notes":""
+    },
+    {
+      "Name":"Sandra Devereaux",
+      "IdNumber": 100,
+      "Hours": 30,
+      "Notes":""
     }
   ],
   
@@ -87,6 +93,12 @@
       "IdNumber": 941,
       "Hours": 2,
       "Notes":""
+    },
+    {
+      "Name":"Bhim Dahal",
+      "IdNumber": 1545,
+      "Hours": 3,
+      "Notes":"3 hour MG"
     }
   ],
 
@@ -121,34 +133,27 @@
     {
       "Name":"Pat Riley",
       "IdNumber": 602,
-      "OverriddenJobType": 1,
-      "OverridingJobType": 13,
-      "Notes":"When Pat clocks in as driver, his rate is switched to his admin rate."
-    },
-    {
-      "Name":"Pat Riley",
-      "IdNumber": 602,
-      "OverriddenJobType": 28,
-      "OverridingJobType": 13,
-      "Notes":"When Pat clocks in as non-cdl driver, his rate is switched to his admin rate."
-    },
-    {
-      "Name":"Williamae Choloh",
-      "IdNumber": 2203,
-      "OverriddenJobType": 28,
-      "OverridingJobType": 13,
-      "Notes":"When Williamae clocks in as non-cdl driver, her rate is switched to her admin rate."
-    },
-    {
-      "Name":"Williamae Choloh",
-      "IdNumber": 2203,
-      "OverriddenJobType": 1,
-      "OverridingJobType": 13,
-      "Notes":"When Williamae clocks in as driver, her rate is switched to her admin rate."
+      "OverriddenJobType": 13,
+      "OverridingJobType": 1,
+      "Notes":"When Pat clocks in as admin, his rate is switched to his driver rate."
     },
     {
       "Name":"Ali Omar",
       "IdNumber": 1248,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Ali Omar clocks in as mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Nathaniel Kohler",
+      "IdNumber": 1688,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Nathaniel Kohler clocks in as mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Thane Johnson",
+      "IdNumber": 1799,
       "OverriddenJobType": 7,
       "OverridingJobType": 1,
       "Notes":"When Ali Omar clocks in as mechanic, his rate is switched to his driver rate."
@@ -159,13 +164,6 @@
       "OverriddenJobType": 1,
       "OverridingJobType": 13,
       "Notes":"When MMM clocks in as driver, his rate is switched to his admin rate."
-    },
-    {
-      "Name":"Merthom Wuo",
-      "IdNumber": 2259,
-      "OverriddenJobType": 25,
-      "OverridingJobType": 13,
-      "Notes":"When Merthom clocks in as para/aide, her rate is switched to her admin rate."
     },
     {
       "Name":"Hussein Shallal",
@@ -187,13 +185,6 @@
       "OverriddenJobType": 7,
       "OverridingJobType": 1,
       "Notes":"When Berehaji clocks in as Mechanic, his rate is switched to his driver rate."
-    },
-    {
-      "Name":"Karin Thompson-Carlin",
-      "IdNumber": 1886,
-      "OverriddenJobType": 13,
-      "OverridingJobType": 1,
-      "Notes":"When Karin clocks in as Admin, her rate is switched to her driver rate."
     },
     {
       "Name":"Alan Munson",
@@ -259,6 +250,13 @@
       "Notes":"When Kenny clocks in as Mechanic, his rate is switched to his driver rate."
     },
     {
+      "Name":"Paul Templeton",
+      "IdNumber": 1804,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Kenny clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Roger Trulson",
       "IdNumber": 672,
       "OverriddenJobType": 7,
@@ -307,11 +305,25 @@
       "Notes":"moved up to $21.00/hour with 2 years of service when starting rate was 20.00"
     },
     {
+      "Name":"Kassim Bitar",
+      "IdNumber": 1756,
+      "JobType": 1,
+      "Rate": 0.45,
+      "Notes":""
+    },
+    {
       "Name":"Enos Washington",
       "IdNumber": 1610,
       "JobType": 1,
       "Rate": 1.75,
       "Notes":"moved up to $23.00/hour with 5 years of service when starting rate was 20.00"
+    },
+    {
+      "Name":"Ivette Daubenspeck",
+      "IdNumber": 2595,
+      "JobType": 1,
+      "Rate": 0.20,
+      "Notes":"started at 22.50 when starting was 22.30"
     }
   ],
   
@@ -327,9 +339,9 @@
 
   "BusStartingBonusDollars" : [
     {
-      "Name":"Bob Medhus",
-      "IdNumber": 1657,
-      "Dollars": 20,
+      "Name":"Brye Zimmer",
+      "IdNumber": 2580,
+      "Dollars": 10,
       "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,
       "Notes":""
