@@ -215,7 +215,7 @@ namespace PayrollProcessor
             const int PUNCH_OUT_COLUMN = 10;
             const int ROUNDED_TIME_COLUMN = 14;
             const int JOB_TYPE_COLUMN = 15;
-            const int NOTES_COLUMN = 17;
+            const int NOTES_COLUMN = 18;
             const int BUS_NUMBER_COLUMN = 34;
 
             if (!CheckForExcelFileOnDesktop("Timesheets.xlsx", out string filePath))
@@ -2173,8 +2173,8 @@ namespace PayrollProcessor
             }
             else
             {
-                if (shift.PerDiem < 0.1f)
-                { //some shifts are just a per diem entry
+                if (shift.AllHours(false) > 0.01)
+                { //some shifts are just a per diem or bonus entry
                     Log("No Payrate or Dollar amount found for shift for " + emp.Name + ".", true);
                 }
             }

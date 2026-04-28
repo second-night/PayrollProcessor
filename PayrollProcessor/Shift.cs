@@ -229,13 +229,13 @@ namespace PayrollProcessor
 
                     return maxMg;
                 }
-                else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+                else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC || JobType == Jobs.DRIVER_CHARTER || JobType == Jobs.AIDE_CHARTER || JobType == Jobs.COACH_PUBLIC_DRIVING)
                 {
                     sourceOfMg = MgSource.STANDARD_CHARTER;
-                    return OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
-                }
-                else if (JobType == Jobs.DRIVER_CHARTER || JobType == Jobs.AIDE_CHARTER || JobType == Jobs.COACH_PUBLIC_DRIVING)
-                {
+                    if (JobType == Jobs.COACH_PUBLIC_DRIVING)
+                    {
+                        return OUT_OF_TOWN_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
+                    }
                     if (StringSearch(Notes, "Hock"))
                     {
                         if (StringSearch(Notes, "Hockey"))
@@ -256,16 +256,19 @@ namespace PayrollProcessor
                         }
                     }
 
-                    sourceOfMg = MgSource.STANDARD_CHARTER;
-                    if ((null != Notes && StringSearch(Notes, "private")) || JobType == Jobs.COACH_PUBLIC_DRIVING || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
+                    if ((null != Notes && StringSearch(Notes, "private")) || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
                     {
                         sourceOfMg = BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS ? MgSource.T_AND_J_CHARTER : MgSource.PRIVATE_CHARTER;
-                        return PRIVATE_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
+                        return T_AND_J_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
+                    }
+                    else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+                    {
+                        return PRIVATE_CHARTER_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
                     }
                     else if (Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday)
                     {
                         sourceOfMg = MgSource.WEEKEND_CHARTER;
-                        float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
+                        float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
                         return weekendMinimum / CalculateCharterRate(employee);
                     }
                     else
@@ -303,10 +306,10 @@ namespace PayrollProcessor
 
             if (JobType == Jobs.DRIVER_CHARTER_PUBLIC)
             {
-                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), T_AND_J_CHARTER_RATE);
+                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), PRIVATE_CHARTER_RATE);
             }
 
-            if (JobType == Jobs.COACH_PUBLIC_DRIVING || Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday)
+            if (JobType == Jobs.COACH_PUBLIC_DRIVING)
             {
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), OUT_OF_TOWN_CHARTER_RATE);
             }

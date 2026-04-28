@@ -18,12 +18,15 @@ namespace PayrollProcessor
         public static Dictionary<int, Employee> EmployeeDictionary = new();
         public const float GF_HOCKEY_PAY = 100f;
         public const float GF_HOCKEY_BAND_PAY = 120f;
-        public const float PRIVATE_CHARTERS_MG_IN_DOLLARS = 120f;
-        public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 70f;
+        public const float T_AND_J_CHARTERS_MG_IN_DOLLARS = 120f;
+        public const float OUT_OF_TOWN_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 120f;
+        public const float PRIVATE_CHARTER_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 120f;
+        public const float WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 70f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 50f;
-        public const float DRIVER_CHARTER_RATE = 18f;
-        public const float OUT_OF_TOWN_CHARTER_RATE = 19.5f;
-        public const float T_AND_J_CHARTER_RATE = 19.5f;
+        public const float DRIVER_CHARTER_RATE = 18f; 
+        public const float OUT_OF_TOWN_CHARTER_RATE = 18.5f;
+        public const float PRIVATE_CHARTER_RATE = 19f;
+        public const float T_AND_J_CHARTER_RATE = 19.5f; //this shouldn't be used I think, Sarah provides the pay for these drivers.
         public const float TRAINING_RATE= 13f;
         public const float COACH_HOURLY_RATE_ESTIMATE = 20f;
         public const float TEN_YEAR_RATE_BUMP = 0.5f;
@@ -45,7 +48,7 @@ namespace PayrollProcessor
         {
             {Jobs.DRIVER_SCHOOL, 22.3f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
-            {Jobs.DRIVER_CHARTER_PUBLIC, OUT_OF_TOWN_CHARTER_RATE },
+            {Jobs.DRIVER_CHARTER_PUBLIC, PRIVATE_CHARTER_RATE },
             {Jobs.COACH_PUBLIC_DRIVING, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 18.5f },
             {Jobs.AIDE_CHARTER, 16.5f },
@@ -56,7 +59,7 @@ namespace PayrollProcessor
         {
             {Jobs.DRIVER_SCHOOL, 23.7f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
-            {Jobs.DRIVER_CHARTER_PUBLIC, OUT_OF_TOWN_CHARTER_RATE },
+            {Jobs.DRIVER_CHARTER_PUBLIC, PRIVATE_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 19f },
             {Jobs.AIDE_CHARTER, 18f },
             {Jobs.NON_CDL_DRIVER, 19.7f },
@@ -751,18 +754,24 @@ namespace PayrollProcessor
         {
             if (BusStartingDays.Contains(shift.Date.Day))
             {
-                if (shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0 || StringSearch(shift.Notes, "bonus"))
+                if (shift.ClockIn.CompareTo(new TimeSpan(6, 10, 0)) < 0 || StringSearch(shift.Notes, "starting"))
                 {
+                    bool foundBusStartingException = false;
                     foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.BusStartingBonusDollars)
                     {
                         if (entry.IdNumber == emp.IdNumber && (Jobs)entry.JobType == shift.JobType)
                         {
+                            foundBusStartingException = true;
                             shift.BonusDollars += entry.Dollars;
                             if (entry.ReceivesBusStartingMinimumGuarantee && shift.ShiftTime < 2)
                             {
                                 shift.MinimumGuaranteeHours += 2f - shift.ShiftTime;
                             }
                         }
+                    }
+                    if (!foundBusStartingException)
+                    {
+                        Log("Warning: No bus starting exception found for employee " + emp.Name + " for shift on " + shift.Date.ToShortDateString() + " with job type " + shift.JobType.ToString() + ".\n(Shift notes: " + shift.Notes + ")");
                     }
                 }
             }
@@ -1078,7 +1087,7 @@ namespace PayrollProcessor
     {
         DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, DRIVER_CHARTER_PUBLIC = 3, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
         VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, 
-        AIDE_SCHOOL = 25, DRIVER_COACH, OUT_OF_TOWN_CHARTER, NON_CDL_DRIVER, 
+        AIDE_SCHOOL = 25, DRIVER_COACH = 26, OUT_OF_TOWN_CHARTER = 27, NON_CDL_DRIVER = 28, 
         
         SALARY = 99
     }
