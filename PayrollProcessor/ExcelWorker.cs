@@ -1615,6 +1615,218 @@ namespace PayrollProcessor
             p.Start();
         }
 
+
+        private static readonly List<string> AdpNewHireImportHeaders = new()
+        {
+            "Associate ID",
+            "Position ID",
+            "Change Effective On",
+            "Is Paid By WFN",
+            "Position Uses Time ",
+            "Co Code",
+            "File #",
+            "Worked In Country",
+            " Tax ID Type",
+            "Tax ID Number",
+            "First Name",
+            "Last Name",
+            "Gender",
+            "Hire Date",
+            "Position Start Date",
+            "Increase Type",
+            "Rate Type",
+            "Rate 1 Amount",
+            "Rate Currency",
+            "Pay Frequency Code",
+            "Standard Hours",
+            "Home Department",
+            "Birth Date",
+            "Federal Tax Form Year",
+            "Federal Tax Non-Resident Alien",
+            "Federal Tax Filing Status",
+            "Federal Tax Multiple Jobs",
+            "Federal Tax Dependents Amount",
+            "Federal Tax Other Income Amount",
+            "Federal Tax Deductions Amount",
+            "Federal Tax Additional Amount",
+            "Federal Tax Exemptions",
+            "Worked State Tax Code",
+            "State Marital Status",
+            "SUI/SDI Tax Jurisdiction Code",
+            "Assign Onboarding Experience",
+            "Business Unit",
+            "Job Title",
+            "Address 1 Country",
+            "Address 1 Line 1",
+            "Address 1 Line 2",
+            "Address 1 City",
+            "Address 1 State Postal Code",
+            "Address 1 Zip Code",
+            "Will Worker Complete Form I-9",
+            "E-Verify Work Location"
+        };
+
+        private static string GetImportField(ImportedEmployee importedEmployee, string fieldName)
+        {
+            return importedEmployee.ImportFields.TryGetValue(fieldName, out object? value) && value != null ? value.ToString() ?? "" : "";
+        }
+
+        private static string GetEmployeeNumberAsSixDigits(int employeeNumber)
+        {
+            return employeeNumber.ToString("D6");
+        }
+
+        private static string GetAdpFederalFilingStatus(string isolvedStatus)
+        {
+            return isolvedStatus switch
+            {
+                "FDS2" => "S",
+                "FDH" => "H",
+                "FDM2" => "M",
+                _ => ""
+            };
+        }
+
+        private static string GetAdpStateMaritalStatus(string isolvedStatus)
+        {
+            return isolvedStatus switch
+            {
+                "NDS" => "S",
+                "NDH" => "H",
+                "NDM" => "M",
+                _ => ""
+            };
+        }
+
+        private static string GetAdpJobTitle(ImportedEmployee importedEmployee)
+        {
+            string job = GetImportField(importedEmployee, "Job");
+            if (int.TryParse(job, out int jobNumber) && Enum.IsDefined(typeof(Jobs), jobNumber))
+            {
+                return ((Jobs)jobNumber).ToString().Replace("_", " ");
+            }
+            return job;
+        }
+
+        private static string GetAdpRateAmount(ImportedEmployee importedEmployee)
+        {
+            string[] preferredRateFields =
+            {
+                "Rate_DrvrDlySchool",
+                "Rate_AidDlySchool",
+                "Rate_Mechanic",
+                "Rate_Wash Bay",
+                "Rate_Body Shop",
+                "Rate_Admin",
+                "Rate_Cleaning",
+                "Rate_Training"
+            };
+
+            foreach (string fieldName in preferredRateFields)
+            {
+                string value = GetImportField(importedEmployee, fieldName);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return "";
+        }
+
+        private object[,] BuildAdpNewHireImportMatrix()
+        {
+            object[,] adpMatrix = new string[ImportEmployees.Count + 1, AdpNewHireImportHeaders.Count];
+
+            for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
+            {
+                adpMatrix[0, columnNumber] = AdpNewHireImportHeaders[columnNumber];
+            }
+
+            int rowNumber = 1;
+            foreach (var employeeEntry in ImportEmployees)
+            {
+                Employee employee = EmployeeDictionary[employeeEntry.Key];
+                ImportedEmployee importedEmployee = employeeEntry.Value;
+
+                if (employee.WasAlreadyInPayroll)
+                {
+                    continue;
+                }
+                if (employee.Shifts.Count == 0)
+                {
+                    continue;
+                }
+                if (importedEmployee.ImportFields.Count == 0 || string.IsNullOrWhiteSpace(employee.SocialSecurityNumber))
+                {
+                    continue;
+                }
+
+                string sixDigitEmployeeNumber = GetEmployeeNumberAsSixDigits(employee.IdNumber);
+                string hireDate = GetImportField(importedEmployee, "HireDate");
+                string state = GetImportField(importedEmployee, "State");
+                if (string.IsNullOrWhiteSpace(state))
+                {
+                    state = "ND";
+                }
+
+                Dictionary<string, string> adpFields = new()
+                {
+                    ["Change Effective On"] = hireDate,
+                    ["Is Paid By WFN"] = "Y",
+                    ["Co Code"] = "MMF",
+                    ["File #"] = sixDigitEmployeeNumber,
+                    [" Tax ID Type"] = "SSN",
+                    ["Tax ID Number"] = GetImportField(importedEmployee, "SSN"),
+                    ["First Name"] = GetImportField(importedEmployee, "FirstName"),
+                    ["Last Name"] = GetImportField(importedEmployee, "LastName"),
+                    ["Gender"] = GetImportField(importedEmployee, "Gender"),
+                    ["Hire Date"] = hireDate,
+                    ["Position Start Date"] = hireDate,
+                    ["Increase Type"] = "New Hire",
+                    ["Rate Type"] = "H",
+                    ["Rate 1 Amount"] = GetAdpRateAmount(importedEmployee),
+                    ["Rate Currency"] = "USD",
+                    ["Pay Frequency Code"] = "B",
+                    ["Home Department"] = GetImportField(importedEmployee, "Organization"),
+                    ["Birth Date"] = GetImportField(importedEmployee, "BirthDate"),
+                    ["Federal Tax Form Year"] = DateTime.Today.Year.ToString(),
+                    ["Federal Tax Non-Resident Alien"] = "N",
+                    ["Federal Tax Filing Status"] = GetAdpFederalFilingStatus(GetImportField(importedEmployee, "FedFilingStatus")),
+                    ["Federal Tax Multiple Jobs"] = "N",
+                    ["Federal Tax Dependents Amount"] = GetImportField(importedEmployee, "FedDependentsAmt"),
+                    ["Federal Tax Other Income Amount"] = "0",
+                    ["Federal Tax Deductions Amount"] = GetImportField(importedEmployee, "FedDeductions"),
+                    ["Federal Tax Additional Amount"] = GetImportField(importedEmployee, "FedAddlAmount"),
+                    ["Federal Tax Exemptions"] = GetImportField(importedEmployee, "FedExemptions"),
+                    ["Worked State Tax Code"] = "ND",
+                    ["State Marital Status"] = GetAdpStateMaritalStatus(GetImportField(importedEmployee, "StateFilingStatus")),
+                    ["SUI/SDI Tax Jurisdiction Code"] = state,
+                    ["Assign Onboarding Experience"] = "",
+                    ["Job Title"] = GetAdpJobTitle(importedEmployee),
+                    ["Address 1 Country"] = "United States",
+                    ["Address 1 Line 1"] = GetImportField(importedEmployee, "Address1"),
+                    ["Address 1 Line 2"] = GetImportField(importedEmployee, "Address2"),
+                    ["Address 1 City"] = GetImportField(importedEmployee, "City"),
+                    ["Address 1 State Postal Code"] = state,
+                    ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode"),
+                };
+
+                for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
+                {
+                    string header = AdpNewHireImportHeaders[columnNumber];
+                    if (adpFields.TryGetValue(header, out string? value))
+                    {
+                        adpMatrix[rowNumber, columnNumber] = value;
+                    }
+                }
+
+                rowNumber++;
+            }
+
+            return adpMatrix;
+        }
+
         public void WriteEmployeeImports()
         {
             object[,] employeeMatrix = new string[ImportEmployees.Count + 1, 52];
@@ -1719,17 +1931,21 @@ namespace PayrollProcessor
                 MessageBox.Show("Excel is not properly installed!!");
                 return;
             }
+            object[,] adpNewHireMatrix = BuildAdpNewHireImportMatrix();
+
             List<string> paths = new()
             {
                 { DesktopPath() + "EmployeeImport.xlsx" },
                 //{ DesktopPath() + "RaiseImport.xlsx" },
-                { DesktopPath() + "DirectDepositImport.xlsx" }
+                { DesktopPath() + "DirectDepositImport.xlsx" },
+                { DesktopPath() + "ADP_NewHireImport.xlsx" }
             };
             List<object[,]> matricis = new()
             {
-                {employeeMatrix },
+                { employeeMatrix },
                 //{raiseMatrix },
-                {directDepositMatrix }
+                { directDepositMatrix },
+                { adpNewHireMatrix }
             };
             for (int i = 0; i < matricis.Count; i++)
             {
@@ -1749,7 +1965,9 @@ namespace PayrollProcessor
                 ((Excel.Worksheet)workBook.Worksheets.get_Item(2)).Delete();
                 //Marshal.ReleaseComObject(workSheet2);
 
-                Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["AZ" + matricis[0].GetLength(0)]];
+                int columnCount = matricis[i].GetLength(1);
+                string lastColumn = GetExcelColumnName(columnCount);
+                Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range[lastColumn + matricis[i].GetLength(0)]];
                 range.Value = matricis[i];
 
                 SaveWorkBook(workBook, paths[i]);
@@ -2062,6 +2280,18 @@ namespace PayrollProcessor
                     break;
                 }
             }
+        }
+
+        private static string GetExcelColumnName(int columnNumber)
+        {
+            string columnName = "";
+            while (columnNumber > 0)
+            {
+                int modulo = (columnNumber - 1) % 26;
+                columnName = Convert.ToChar('A' + modulo) + columnName;
+                columnNumber = (columnNumber - modulo) / 26;
+            }
+            return columnName;
         }
 
         private void SaveWorkBook(Excel.Workbook workBook, string filePath)
