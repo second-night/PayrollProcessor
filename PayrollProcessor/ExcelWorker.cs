@@ -156,10 +156,13 @@ namespace PayrollProcessor
                         if (TryGetFloatFromCell(cellData[rowNumber, SALARY_COLUMN], out float salary) && salary > 50)
                         {
                             employee.IsSalaried = true;
+                            employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary);
                         }
                         else if (TryGetFloatFromCell(cellData[rowNumber, BI_WEEKLY_SALARY_COLUMN], out float salary2) && salary2 > 50)
                         {
+                            Log("Bi-weekly salary found for " + employee.Name + ". Converting to annual salary.", true);
                             employee.IsSalaried = true;
+                            employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary2 * 26f);
                         }
                         if (!employee.IsAGrandForksEmployee)
                         {
@@ -1616,55 +1619,271 @@ namespace PayrollProcessor
         }
 
 
-        private static readonly List<string> AdpNewHireImportHeaders = new()
+        public void WriteWfnPayrollImports()
         {
-            "Associate ID",
-            "Position ID",
-            "Change Effective On",
-            "Is Paid By WFN",
-            "Position Uses Time ",
+            List<Employee> sortedEmployees = EmployeeDictionary
+                .OrderBy(kvp => kvp.Key)
+                .Select(kvp => kvp.Value)
+                .ToList();
+
+            string batchId = MakeWfnBatchId();
+
+            for (int company = (int)Company.VALLEY_BUS_LLC; company <= (int)Company.VALLEY_BUS_COACHES; ++company)
+            {
+                List<Dictionary<string, string>> rows = new();
+
+                foreach (Employee emp in sortedEmployees)
+                {
+                    if (emp == null || EmployeeIdsToIgnore.Contains(emp.IdNumber) || emp.Shifts.Count == 0)
+                    {
+                        continue;
+                    }
+                    if (emp.IsPartialEntry)
+                    {
+                        if (!emp.WasReportedForPartialEntry)
+                        {
+                            emp.WasReportedForPartialEntry = true;
+                            Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
+                        }
+                        continue;
+                    }
+                    if (string.IsNullOrWhiteSpace(emp.SocialSecurityNumber))
+                    {
+                        if (!emp.WasReportedForPartialEntry)
+                        {
+                            emp.WasReportedForPartialEntry = true;
+                            Log(emp.Name + " (" + emp.IdNumber + ") is not getting paid because they do not have a social security number in workbright.", true);
+                        }
+                        continue;
+                    }
+
+                    bool employeeHasWfnPayRowsForThisCompany = false;
+
+                    for (int shiftType = 0; shiftType < 3; ++shiftType)
+                    {
+                        if (emp.ShiftTotals[company, shiftType] == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
+                        {
+                            foreach (var shifts in pair.Values)
+                            {
+                                foreach (Shift shift in shifts)
+                                {
+                                    if (shift.CompanyName != (Company)company || !shift.IsValid(emp))
+                                    {
+                                        continue;
+                                    }
+
+                                    if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars + shift.PerDiem > 0f)
+                                    {
+                                        if (shift.JobType == Jobs.VACATION)
+                                        {
+                                            AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, "VAC");
+                                        }
+                                        else if (shift.JobType == Jobs.HOLIDAY)
+                                        {
+                                            AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, "HOL");
+                                        }
+                                        else
+                                        {
+                                            AddWfnRegularRow(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, shift.DollarAmount);
+                                        }
+                                        employeeHasWfnPayRowsForThisCompany = true;
+                                    }
+
+                                    if (shift.MinimumGuaranteeHours > 0f)
+                                    {
+                                        AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.MinimumGuaranteeHours, "MNG");
+                                        employeeHasWfnPayRowsForThisCompany = true;
+                                    }
+                                    if (shift.SummerGuaranteeHours > 0f)
+                                    {
+                                        AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.SummerGuaranteeHours, "BON");
+                                        employeeHasWfnPayRowsForThisCompany = true;
+                                    }
+
+                                    if (!shift.ExtrasWereWrittenToExport)
+                                    {
+                                        shift.ExtrasWereWrittenToExport = true;
+                                        if (shift.BonusDollars > 0f)
+                                        {
+                                            AddWfnEarnings3Row(rows, emp, (Company)company, batchId, shift, shift.BonusDollars, "BON");
+                                            employeeHasWfnPayRowsForThisCompany = true;
+                                        }
+                                        if (shift.PerDiem > 0f)
+                                        {
+                                            Log("WFN payroll import does not currently include per diem for " + emp.Name + " (" + emp.IdNumber + ") because no WFN per-diem code/header was provided. Amount: " + Math.Round(shift.PerDiem, 2), true);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
+                    {
+                        if (emp.OverTimeHours[company, weekNumber] > 0f)
+                        {
+                            AddWfnOvertimeRow(rows, emp, (Company)company, batchId, emp.OverTimeHours[company, weekNumber], weekNumber);
+                            employeeHasWfnPayRowsForThisCompany = true;
+                        }
+                    }
+
+                    if (employeeHasWfnPayRowsForThisCompany && emp.IsSalaried)
+                    {
+                        AddWfnSalaryRow(rows, emp, (Company)company, batchId);
+                    }
+                }
+
+                string path = DesktopPath() + ((Company)company == Company.VALLEY_BUS_LLC ? "WFN_ValleyBus_TimeCardImport.csv" : "WFN_Coaches_TimeCardImport.csv");
+                WriteCsv(path, WfnPayrollImportHeaders, rows);
+
+                var p = new Process
+                {
+                    StartInfo = new ProcessStartInfo(path)
+                    {
+                        UseShellExecute = true
+                    }
+                };
+                p.Start();
+            }
+        }
+
+        private static readonly List<string> WfnPayrollImportHeaders = new()
+        {
             "Co Code",
+            "Batch ID",
             "File #",
-            "Worked In Country",
-            " Tax ID Type",
-            "Tax ID Number",
-            "First Name",
-            "Last Name",
-            "Gender",
-            "Hire Date",
-            "Position Start Date",
-            "Increase Type",
-            "Rate Type",
-            "Rate 1 Amount",
-            "Rate Currency",
-            "Pay Frequency Code",
-            "Standard Hours",
-            "Home Department",
-            "Birth Date",
-            "Federal Tax Form Year",
-            "Federal Tax Non-Resident Alien",
-            "Federal Tax Filing Status",
-            "Federal Tax Multiple Jobs",
-            "Federal Tax Dependents Amount",
-            "Federal Tax Other Income Amount",
-            "Federal Tax Deductions Amount",
-            "Federal Tax Additional Amount",
-            "Federal Tax Exemptions",
-            "Worked State Tax Code",
-            "State Marital Status",
-            "SUI/SDI Tax Jurisdiction Code",
-            "Assign Onboarding Experience",
-            "Business Unit",
-            "Job Title",
-            "Address 1 Country",
-            "Address 1 Line 1",
-            "Address 1 Line 2",
-            "Address 1 City",
-            "Address 1 State Postal Code",
-            "Address 1 Zip Code",
-            "Will Worker Complete Form I-9",
-            "E-Verify Work Location"
+            "Reg Hours",
+            "Reg Earnings",
+            "O/T Hours",
+            "Hours 3 Amount",
+            "Hours 3 Code",
+            "Earnings 3 Amount",
+            "Earnings 3 Code",
+            "FLSA Workweek",
+            "Temp Rate"
         };
+
+        private static string GetWfnCompanyCode(Company company)
+        {
+            return company == Company.VALLEY_BUS_COACHES ? "MKZ" : "MMF";
+        }
+
+        private static string MakeWfnBatchId()
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            Random random = new();
+            return new string(Enumerable.Range(0, 8).Select(_ => chars[random.Next(chars.Length)]).ToArray());
+        }
+
+        private static Dictionary<string, string> MakeBaseWfnRow(Employee emp, Company company, string batchId)
+        {
+            Dictionary<string, string> row = WfnPayrollImportHeaders.ToDictionary(header => header, _ => "");
+            row["Co Code"] = GetWfnCompanyCode(company);
+            row["Batch ID"] = batchId;
+            row["File #"] = emp.IdNumber.ToString();
+            return row;
+        }
+
+        private static void AddWfnRegularRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float hours, float dollars)
+        {
+            Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            if (hours > 0.001f)
+            {
+                row["Reg Hours"] = FormatWfnNumber(hours);
+            }
+            if (dollars > 0.001f)
+            {
+                row["Reg Earnings"] = FormatWfnNumber(dollars);
+            }
+            else if (shift.PayRate > 0f)
+            {
+                row["Temp Rate"] = FormatWfnNumber(shift.PayRate.Value);
+            }
+            else if (hours > 0.01f)
+            {
+                Log("No payrate or dollar amount found for WFN regular row for " + emp.Name + ".", true);
+            }
+            rows.Add(row);
+        }
+
+        private static void AddWfnOvertimeRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, float hours, int weekNumber)
+        {
+            Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            row["O/T Hours"] = FormatWfnNumber(hours);
+            row["FLSA Workweek"] = weekNumber.ToString();
+            rows.Add(row);
+        }
+
+        private static void AddWfnHours3Row(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float hours, string code)
+        {
+            if (hours < 0.001f)
+            {
+                return;
+            }
+            Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            row["Hours 3 Amount"] = FormatWfnNumber(hours);
+            row["Hours 3 Code"] = code;
+            if (shift.PayRate > 0f)
+            {
+                row["Temp Rate"] = FormatWfnNumber(shift.PayRate.Value);
+            }
+            rows.Add(row);
+        }
+
+        private static void AddWfnEarnings3Row(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float dollars, string code)
+        {
+            if (dollars < 0.001f)
+            {
+                return;
+            }
+            Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            row["Earnings 3 Amount"] = FormatWfnNumber(dollars);
+            row["Earnings 3 Code"] = code;
+            rows.Add(row);
+        }
+
+        private static void AddWfnSalaryRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId)
+        {
+            if (emp.AnnualSalaryAmount <= 0.001f)
+            {
+                Log("Cannot add WFN salary row for salaried employee " + emp.Name + " (" + emp.IdNumber + ") because AnnualSalaryAmount is missing.", true);
+                return;
+            }
+
+            Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            row["Reg Earnings"] = FormatWfnNumber(emp.AnnualSalaryAmount / 26f);
+            rows.Add(row);
+        }
+
+        private static string FormatWfnNumber(float value)
+        {
+            return Math.Round(value, 2).ToString("0.##");
+        }
+
+        private static void WriteCsv(string path, List<string> headers, List<Dictionary<string, string>> rows)
+        {
+            using StreamWriter writer = new(path, false, new System.Text.UTF8Encoding(false));
+            writer.WriteLine(string.Join(",", headers.Select(EscapeCsv)));
+            foreach (Dictionary<string, string> row in rows)
+            {
+                writer.WriteLine(string.Join(",", headers.Select(header => EscapeCsv(row.GetValueOrDefault(header, "")))));
+            }
+        }
+
+        private static string EscapeCsv(string? value)
+        {
+            value ??= "";
+            if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+            {
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            }
+            return value;
+        }
 
         private static string GetImportField(ImportedEmployee importedEmployee, string fieldName)
         {
@@ -1680,9 +1899,9 @@ namespace PayrollProcessor
         {
             return isolvedStatus switch
             {
-                "FDS2" => "S",
+                "FDS2" => "D",
                 "FDH" => "H",
-                "FDM2" => "M",
+                "FDM2" => "J",
                 _ => ""
             };
         }
@@ -1698,13 +1917,47 @@ namespace PayrollProcessor
             };
         }
 
+        private static string GetAdpHomeDepartment(string jobString)
+        {
+            if (StringSearch(jobString, "driver") || StringSearch(jobString, "drvr"))
+            {
+                return "000001";
+            }
+            if (StringSearch(jobString, "aid") || StringSearch(jobString, "para"))
+            {
+                return "000025";
+            }
+            Log("Problem determining ADP home department for job string: " + jobString, true);
+            return "";
+        }
+
+        private static string GetAdpStateCode(string state)
+        {
+            string result = state switch
+            {
+                "ND" => "38",
+                "MN" => "27",
+                _ => ""
+            };
+            if (result == "")
+            {
+                Log("Problem determining ADP state code for state: " + state, true);
+            }
+            return result;
+        }
+
         private static string GetAdpJobTitle(ImportedEmployee importedEmployee)
         {
             string job = GetImportField(importedEmployee, "Job");
-            if (int.TryParse(job, out int jobNumber) && Enum.IsDefined(typeof(Jobs), jobNumber))
+            if (job == "1" || StringSearch(job, "Driver") || StringSearch(job, "drvr"))
             {
-                return ((Jobs)jobNumber).ToString().Replace("_", " ");
+                return "DRDLYSC";
             }
+            if (job == "25" || StringSearch(job, "aid") || StringSearch(job, "para"))
+            {
+                return "PARA";
+            }
+            Log("Couldn't find a job title for this employee, defaulting to job title of 'Employee': " + GetImportField(importedEmployee, "FirstName") + " " + GetImportField(importedEmployee, "LastName") + ", job field: " + job, true);
             return job;
         }
 
@@ -1733,6 +1986,49 @@ namespace PayrollProcessor
 
             return "";
         }
+
+
+        private static readonly List<string> AdpNewHireImportHeaders = new()
+        {
+            "Associate ID",
+            "Position ID",
+            "Change Effective On",
+            "Is Paid By WFN",
+            "Position Uses Time ",
+            "Tax ID Type",
+            "Tax ID Number",
+            "First Name",
+            "Middle Name",
+            "Last Name",
+            "Gender",
+            "Hire Date",
+            "Position Start Date",
+            "Rate Type",
+            "Rate 1 Amount",
+            "Pay Frequency Code",
+            "Standard Hours",
+            "Home Department",
+            "Birth Date",
+            "Federal Tax Form Year",
+            "Federal Tax Filing Status",
+            "Federal Tax Multiple Jobs",
+            "Federal Tax Dependents Amount",
+            "Federal Tax Other Income Amount",
+            "Federal Tax Deductions Amount",
+            "Federal Tax Additional Amount",
+            "Federal Tax Exemptions",
+            "Worked State Tax Code",
+            "State Marital Status",
+            "SUI/SDI Tax Jurisdiction Code",
+            "Assign Onboarding Experience",
+            "Job Title",
+            "Address 1 Line 1",
+            "Address 1 Line 2",
+            "Address 1 City",
+            "Address 1 State Postal Code",
+            "Address 1 Zip Code"
+            //"Will Worker Complete Form I-9"
+        };
 
         private object[,] BuildAdpNewHireImportMatrix()
         {
@@ -1772,26 +2068,29 @@ namespace PayrollProcessor
 
                 Dictionary<string, string> adpFields = new()
                 {
+                    ["Associate ID"] = "",
+                    ["Position ID"] = "MMF" + sixDigitEmployeeNumber,
                     ["Change Effective On"] = hireDate,
                     ["Is Paid By WFN"] = "Y",
-                    ["Co Code"] = "MMF",
-                    ["File #"] = sixDigitEmployeeNumber,
-                    [" Tax ID Type"] = "SSN",
+                    ["Position Uses Time"] = "N",
+                    ["Tax ID Type"] = "SSN",
                     ["Tax ID Number"] = GetImportField(importedEmployee, "SSN"),
                     ["First Name"] = GetImportField(importedEmployee, "FirstName"),
+                    ["Middle Name"] = GetImportField(importedEmployee, "MiddleName"),
                     ["Last Name"] = GetImportField(importedEmployee, "LastName"),
-                    ["Gender"] = GetImportField(importedEmployee, "Gender"),
                     ["Hire Date"] = hireDate,
                     ["Position Start Date"] = hireDate,
-                    ["Increase Type"] = "New Hire",
-                    ["Rate Type"] = "H",
-                    ["Rate 1 Amount"] = GetAdpRateAmount(importedEmployee),
-                    ["Rate Currency"] = "USD",
+                    ["Employee Status"] = "A",    // Need ADP validation table values/codes
+                    ["Employee Type"] = "P",
+                    ["Gender"] = employee.IsMale ? "M" : "F",
+                    ["Rate Type"] = "",
+                    ["Rate 1 Amount"] = "",
                     ["Pay Frequency Code"] = "B",
-                    ["Home Department"] = GetImportField(importedEmployee, "Organization"),
+                    ["Standard Hours"] = "",
+                    ["Home Department"] = GetAdpHomeDepartment(GetImportField(importedEmployee, "Organization")),
+                    ["Reports To Position ID"] = "No one",
                     ["Birth Date"] = GetImportField(importedEmployee, "BirthDate"),
                     ["Federal Tax Form Year"] = DateTime.Today.Year.ToString(),
-                    ["Federal Tax Non-Resident Alien"] = "N",
                     ["Federal Tax Filing Status"] = GetAdpFederalFilingStatus(GetImportField(importedEmployee, "FedFilingStatus")),
                     ["Federal Tax Multiple Jobs"] = "N",
                     ["Federal Tax Dependents Amount"] = GetImportField(importedEmployee, "FedDependentsAmt"),
@@ -1801,15 +2100,16 @@ namespace PayrollProcessor
                     ["Federal Tax Exemptions"] = GetImportField(importedEmployee, "FedExemptions"),
                     ["Worked State Tax Code"] = "ND",
                     ["State Marital Status"] = GetAdpStateMaritalStatus(GetImportField(importedEmployee, "StateFilingStatus")),
-                    ["SUI/SDI Tax Jurisdiction Code"] = state,
+                    ["SUI/SDI Tax Jurisdiction Code"] ="92",
                     ["Assign Onboarding Experience"] = "",
                     ["Job Title"] = GetAdpJobTitle(importedEmployee),
-                    ["Address 1 Country"] = "United States",
+                    ["Personal E-mail Address"] = GetImportField(importedEmployee, "EmailAddress"),
                     ["Address 1 Line 1"] = GetImportField(importedEmployee, "Address1"),
                     ["Address 1 Line 2"] = GetImportField(importedEmployee, "Address2"),
                     ["Address 1 City"] = GetImportField(importedEmployee, "City"),
                     ["Address 1 State Postal Code"] = state,
-                    ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode"),
+                    ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode")
+                    //["Will Worker Complete Form I-9"] = "Y"
                 };
 
                 for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
@@ -1938,7 +2238,7 @@ namespace PayrollProcessor
                 { DesktopPath() + "EmployeeImport.xlsx" },
                 //{ DesktopPath() + "RaiseImport.xlsx" },
                 { DesktopPath() + "DirectDepositImport.xlsx" },
-                { DesktopPath() + "ADP_NewHireImport.xlsx" }
+                { DesktopPath() + "ADP_NewHireImport.csv" }
             };
             List<object[,]> matricis = new()
             {
@@ -2298,8 +2598,19 @@ namespace PayrollProcessor
         {
             try
             {
-                object misValue = System.Reflection.Missing.Value;
-                workBook.SaveAs(filePath, Excel.XlFileFormat.xlWorkbookDefault, misValue, misValue, misValue, misValue, Excel.XlSaveAsAccessMode.xlExclusive, misValue, misValue, misValue, misValue, misValue);
+                if (filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    workBook.SaveAs(
+                        filePath,
+                        Excel.XlFileFormat.xlCSV
+                    );
+                }
+                else
+                {
+                    workBook.SaveAs(filePath);
+                }
+                //object misValue = System.Reflection.Missing.Value;
+                //workBook.SaveAs(filePath, Excel.XlFileFormat.xlWorkbookDefault, misValue, misValue, misValue, misValue, Excel.XlSaveAsAccessMode.xlExclusive, misValue, misValue, misValue, misValue, misValue);
             }
             catch (Exception e)
             {

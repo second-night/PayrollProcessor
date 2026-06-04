@@ -1,4 +1,5 @@
 ﻿using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Vml.Office;
 using System.Data;
 using System.Windows.Forms.VisualStyles;
 using static PayrollProcessor.Program;
@@ -66,6 +67,8 @@ namespace PayrollProcessor
             PayRates[job] = Math.Max(PayRates.GetValueOrDefault(job, 0f), rate);
         }
 
+
+        private static Dictionary<Employee, List<Jobs>> PayrateMessages = new();
         public float GetPayRateForShift(Shift shift)
         {
             foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.PayRateExceptions)
@@ -130,6 +133,72 @@ namespace PayrollProcessor
             if (shift.JobType == Jobs.DRIVER_SCHOOL || shift.JobType == Jobs.NON_CDL_DRIVER)
             {
                 return GetDriverRateForSchoolRouteShift(shift);
+            }
+
+            if (shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+            {
+                float defaultRate = GetBasePayRateForEmployee(Jobs.DRIVER_CHARTER_PUBLIC, this, shift.IsAGrandForksShift);
+                if (defaultRate < 19f)
+                {
+                    Log("Problem finding PayRate for employee " + Name + " for DRIVER_CHARTER_PUBLIC", true);
+                }
+                return TimeInServiceAdjustment(defaultRate, this, Jobs.DRIVER_CHARTER_PUBLIC, shift.IsAGrandForksShift);
+            }
+            if (!PayRates.ContainsKey(shift.JobType) &&
+                shift.JobType != Jobs.NON_CDL_DRIVER && shift.JobType != Jobs.VACATION && shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.WASH_BAY_OT && shift.JobType != Jobs.COACH_PUBLIC_DRIVING && shift.JobType != Jobs.DRIVER_COACH)
+            {
+                if (SocialSecurityNumber == "" || IsPartialEntry)
+                {
+                    return 0f;
+                }
+                if (!PayrateMessages.ContainsKey(this) || !PayrateMessages[this].Contains(shift.JobType))
+                {
+                    string specialString = shift.JobType == Jobs.WASH_BAY && IsAGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
+                    float newRate = PrintForm.InputNumber("Warninig: Employee " + Name + (IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + shift.JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate", out string nonNumberInput);
+                    if (newRate > 0)
+                    {
+                        if (newRate < 2)
+                        {
+                            //if (shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+                            //{
+                            //    Log("");
+                            //}
+                            if (shift.JobType == Jobs.CLEANING || shift.JobType == Jobs.WASH_BAY)
+                            {
+                                newRate = GetBasePayRateForEmployee(Jobs.AIDE_SCHOOL, this);
+                            }
+                            else
+                            {
+                                newRate = GetBasePayRateForEmployee(shift.JobType, this);
+                            }
+                            if (newRate < 2)
+                            {
+                                Log("Assigning default rate failed", true);
+                            }
+                        }
+                        GiveRaiseToEmployee(this, shift.JobType, newRate);
+                    }
+                    else
+                    {
+                        if (null != nonNumberInput && nonNumberInput != "")
+                        {
+                            for (int i = 0; i <= (int)Jobs.NON_CDL_DRIVER; ++i)
+                            {
+                                if ("" != ((Jobs)i).ToString() && StringSearch(((Jobs)i).ToString(), nonNumberInput))
+                                {
+                                    shift.JobType = (Jobs)i;
+                                    return GetPayRateForShift(shift);
+                                }
+                            }
+                        }
+                        if (!PayrateMessages.ContainsKey(this))
+                        {
+                            PayrateMessages[this] = new();
+                        }
+                        PayrateMessages[this].Add(shift.JobType);
+                        DelayedLog("Warninig: Employee " + Name + " ( " + IdNumber + " )" + (IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + "doesn't have a payrate for " + shift.JobType.ToString());
+                    }
+                }
             }
 
             float specialRate = shift.SpecialRate(this);

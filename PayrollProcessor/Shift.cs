@@ -363,6 +363,48 @@ namespace PayrollProcessor
             return "";
         }
 
+        public static string GetDepartmentCode(Jobs jobType)
+        {
+            switch (jobType)
+            {
+                case Jobs.DRIVER_SCHOOL:
+                    return "000001";
+                case Jobs.DRIVER_CHARTER:
+                case Jobs.DRIVER_CHARTER_PUBLIC:
+                case Jobs.COACH_PUBLIC_DRIVING:
+                case Jobs.OUT_OF_TOWN_CHARTER:
+                    return "000002";
+                case Jobs.MECHANIC:
+                    return "000007";
+                case Jobs.WASH_BAY:
+                    return "000009";
+                case Jobs.WASH_BAY_OT:
+                    return "000010";
+                case Jobs.TRAINING:
+                    return "000011";
+                case Jobs.BODY_SHOP:
+                    return "000012";
+                case Jobs.ADMIN:
+                    return "000013";
+                case Jobs.CLEANING:
+                    return "000014";
+                case Jobs.HOLIDAY:
+                    return "000015";
+                case Jobs.VACATION:
+                    return "000016";
+                case Jobs.AIDE_CHARTER:
+                    return "000024";
+                case Jobs.AIDE_SCHOOL:
+                    return "000025";
+                case Jobs.DRIVER_COACH:
+                    return "000026";
+                case Jobs.NON_CDL_DRIVER:
+                    return "000028";
+            }
+            DelayedLog("Failed to find labor code for " + jobType.ToString(), true);
+            return "";
+        }
+
         public void CheckWashbayOT(Employee employee)
         {
             if (JobType == Jobs.WASH_BAY_OT)

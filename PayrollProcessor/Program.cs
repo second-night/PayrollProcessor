@@ -23,11 +23,11 @@ namespace PayrollProcessor
         public const float PRIVATE_CHARTER_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 120f;
         public const float WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 70f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 50f;
-        public const float DRIVER_CHARTER_RATE = 18f; 
+        public const float DRIVER_CHARTER_RATE = 18f;
         public const float OUT_OF_TOWN_CHARTER_RATE = 18.5f;
         public const float PRIVATE_CHARTER_RATE = 19f;
         public const float T_AND_J_CHARTER_RATE = 19.5f; //this shouldn't be used I think, Sarah provides the pay for these drivers.
-        public const float TRAINING_RATE= 13f;
+        public const float TRAINING_RATE = 13f;
         public const float COACH_HOURLY_RATE_ESTIMATE = 20f;
         public const float TEN_YEAR_RATE_BUMP = 0.5f;
         public const float FARGO_SPED_CDL_DRIVER_RATE_BUMP = 0.5f;
@@ -72,6 +72,8 @@ namespace PayrollProcessor
         [STAThread]
         static void Main()
         {
+            //new RetirementEligibilityWorker().Run();
+            //return;
             Console.SetOut(new ToDebugWriter());
             ApplicationConfiguration.Initialize();
             ExcelWorker = new();
@@ -85,7 +87,7 @@ namespace PayrollProcessor
             CalculateMinimumGuarantees();
             TotalUpShiftsForEmployees();
             ExcelWorker.WriteEmployeeImports();
-            ExcelWorker.WritePayrollImports();
+            ExcelWorker.WriteWfnPayrollImports();
             ExcelWorker.WriteBirthDates();
             ExcelWorker.WriteOverTimeReport();
             FinalLogging();
@@ -154,7 +156,7 @@ namespace PayrollProcessor
                 if (emp.Shifts.Count > 0)
                 {
                     emp.Shifts = emp.Shifts.OrderBy(shift => shift.Date).ToList();
-                    
+
                     CalculateMgForSchoolRouteShifts(emp, emp.SchoolRouteShifts());
                     CalculateMgForNonSchoolRouteShifts(emp, emp.NonSchoolRouteShiftsWithAPotentialMinimumGuarantee());
                     if (emp.IdNumber == 1354)
@@ -656,27 +658,27 @@ namespace PayrollProcessor
                     }
                 }
 
-                // Calculate and display average pay rates
-                foreach (var job in payRates.Keys)
-                {
-                    float averagePayRate = CalculateAveragePayRate(payRates[job], hours[job], job, (Location)location, shifts[job]);
-                }
+                //// Calculate and display average pay rates
+                //foreach (var job in payRates.Keys)
+                //{
+                //    float averagePayRate = CalculateAveragePayRate(payRates[job], hours[job], job, (Location)location, shifts[job]);
+                //}
 
                 // Calculate average pay rate by employee
-                foreach (var jobType in payRatesByEmployee.Keys)
-                {
-                    var totalPayRate = payRatesByEmployee[jobType].Sum(); // Sum of unique pay rates
-                    var employeeCount = employeesPerJob[jobType].Count;   // Count of unique employees
-                    if (employeeCount > 0)
-                    {
-                        float averagePayRate = totalPayRate / employeeCount;
-                        averagePayRateByEmployee[jobType] = averagePayRate;
-                        if (jobType == Jobs.NON_CDL_DRIVER || jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.AIDE_SCHOOL)
-                        {
-                            Log($"{jobType}: " + $"{(Location)location}: Average Pay Rate by employee = {averagePayRate:F2} and employee count == " + employeeCount.ToString());
-                        }
-                    }
-                }
+                //foreach (var jobType in payRatesByEmployee.Keys)
+                //{
+                //    var totalPayRate = payRatesByEmployee[jobType].Sum(); // Sum of unique pay rates
+                //    var employeeCount = employeesPerJob[jobType].Count;   // Count of unique employees
+                //    if (employeeCount > 0)
+                //    {
+                //        float averagePayRate = totalPayRate / employeeCount;
+                //        averagePayRateByEmployee[jobType] = averagePayRate;
+                //        if (jobType == Jobs.NON_CDL_DRIVER || jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.AIDE_SCHOOL)
+                //        {
+                //            Log($"{jobType}: " + $"{(Location)location}: Average Pay Rate by employee = {averagePayRate:F2} and employee count == " + employeeCount.ToString());
+                //        }
+                //    }
+                //}
             }
         }
 
@@ -800,7 +802,7 @@ namespace PayrollProcessor
                 {
                     continue;
                 }
-                for (int jobOrdinal = 0;  jobOrdinal <= (int)Jobs.AIDE_SCHOOL; ++jobOrdinal)
+                for (int jobOrdinal = 0; jobOrdinal <= (int)Jobs.AIDE_SCHOOL; ++jobOrdinal)
                 {
                     Jobs jobType = (Jobs)jobOrdinal;
                     if (employee.PayRates.ContainsKey(jobType) && employee.PayRates[jobType] > 0)
@@ -832,7 +834,7 @@ namespace PayrollProcessor
                         }
                     }
                 }
-                if (employee.YearsOfService > 9 && (jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.NON_CDL_DRIVER || jobType == Jobs.DRIVER_CHARTER || jobType == Jobs.AIDE_SCHOOL || jobType == Jobs.AIDE_CHARTER))
+                if (employee.YearsOfService > 9 && (jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.NON_CDL_DRIVER || jobType == Jobs.DRIVER_CHARTER || jobType == Jobs.DRIVER_CHARTER_PUBLIC || jobType == Jobs.AIDE_SCHOOL || jobType == Jobs.AIDE_CHARTER))
                 {
                     newRate += TEN_YEAR_RATE_BUMP;
                 }
@@ -930,7 +932,7 @@ namespace PayrollProcessor
 
         public static void CheckForVacationCutOff(DateTime firstDayWeekTwo)
         {
-           if (IsLastPayPeriodOfTheYear(firstDayWeekTwo))
+            if (IsLastPayPeriodOfTheYear(firstDayWeekTwo))
             {
                 Log("This is the last pay period for the year. Please check accrual cut-offs", true);
             }
@@ -1085,11 +1087,23 @@ namespace PayrollProcessor
 
     public enum Jobs
     {
-        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, DRIVER_CHARTER_PUBLIC = 3, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
-        VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, 
-        AIDE_SCHOOL = 25, DRIVER_COACH = 26, OUT_OF_TOWN_CHARTER = 27, NON_CDL_DRIVER = 28, 
-        
+        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, DRIVER_CHARTER_PUBLIC = 3, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15,
+        VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24,
+        AIDE_SCHOOL = 25, DRIVER_COACH = 26, OUT_OF_TOWN_CHARTER = 27, NON_CDL_DRIVER = 28,
+
         SALARY = 99
     }
+
+    //order of payrates in WFN
+    //DRIVER_SCHOOL, 
+    //DRIVER_CHARTER,
+    //MECHANIC,
+    //WASH_BAY,
+    //BODY_SHOP, 
+    //ADMIN, 
+    //CLEANING,
+    //AIDE_CHARTER, 
+    //AIDE_SCHOOL
+
     //  taskkill /f /im excel.exe
 }
