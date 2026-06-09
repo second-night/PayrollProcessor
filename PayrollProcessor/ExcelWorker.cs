@@ -1762,6 +1762,7 @@ namespace PayrollProcessor
             "Reg Hours",
             "Reg Earnings",
             "O/T Hours",
+            "Overtime Earnings",
             "Hours 3 Code",
             "Hours 3 Amount",
             "Earnings 3 Code",
@@ -1834,10 +1835,96 @@ namespace PayrollProcessor
 
         private static void AddWfnOvertimeRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, float hours, int weekNumber)
         {
+            if (hours < 0.001f)
+            {
+                return;
+            }
+
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
             row["O/T Hours"] = FormatWfnNumber(hours);
+
+            float overtimeEarnings = CalculateWfnBlendedOvertimeEarnings(emp, company, weekNumber, hours);
+            if (overtimeEarnings > 0.001f)
+            {
+                row["Overtime Earnings"] = FormatWfnNumber(overtimeEarnings);
+            }
+
             row["FLSA Workweek"] = weekNumber.ToString();
             rows.Add(row);
+        }
+
+        private static float CalculateWfnBlendedOvertimeEarnings(Employee emp, Company company, int weekNumber, float overtimeHours)
+        {
+            float regularHours = 0f;
+            float regularEarnings = 0f;
+
+            for (int shiftType = 0; shiftType < 3; ++shiftType)
+            {
+                if (emp.ShiftTotals[(int)company, shiftType] == null)
+                {
+                    continue;
+                }
+
+                foreach (var pair in emp.ShiftTotals[(int)company, shiftType].Values)
+                {
+                    foreach (var weekEntry in pair)
+                    {
+                        if (weekEntry.Key != weekNumber)
+                        {
+                            continue;
+                        }
+
+                        foreach (Shift shift in weekEntry.Value)
+                        {
+                            if (shift.CompanyName != company || !shift.IsValid(emp))
+                            {
+                                continue;
+                            }
+
+                            if (shift.JobType == Jobs.VACATION || shift.JobType == Jobs.HOLIDAY)
+                            {
+                                continue;
+                            }
+
+                            // Blended overtime only uses regular hours and regular earnings.
+                            // Do not include minimum guarantee hours, summer guarantee hours, vacation, holiday,
+                            // bonus dollars, per diem, or any other non-regular compensation.
+                            float shiftRegularHours = shift.ShiftTime;
+                            if (shiftRegularHours < 0.001f)
+                            {
+                                continue;
+                            }
+
+                            float shiftRegularEarnings = 0f;
+                            if (shift.DollarAmount > 0.001f)
+                            {
+                                shiftRegularEarnings = shift.DollarAmount;
+                            }
+                            else if (shift.PayRate > 0f)
+                            {
+                                shiftRegularEarnings = shiftRegularHours * shift.PayRate.Value;
+                            }
+                            else
+                            {
+                                Log("Cannot calculate blended overtime earnings for " + emp.Name + " because a regular shift has hours but no payrate or dollar amount.", true);
+                                continue;
+                            }
+
+                            regularHours += shiftRegularHours;
+                            regularEarnings += shiftRegularEarnings;
+                        }
+                    }
+                }
+            }
+
+            if (regularHours < 0.001f)
+            {
+                Log("Cannot calculate blended overtime earnings for " + emp.Name + " because regular hours are zero.", true);
+                return 0f;
+            }
+
+            float blendedRegularRate = regularEarnings / regularHours;
+            return (float)Math.Round(blendedRegularRate * overtimeHours * 0.5f, 2);
         }
 
         private static void AddWfnHours3Row(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float hours, string code)
