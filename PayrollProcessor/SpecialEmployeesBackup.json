@@ -145,6 +145,13 @@
       "Notes":"When Ali Omar clocks in as mechanic, his rate is switched to his driver rate."
     },
     {
+      "Name":"Ivette Daubenspeck",
+      "IdNumber": 1248,
+      "OverriddenJobType": 14,
+      "OverridingJobType": 1,
+      "Notes":"When Ivette Daubenspeck clocks in as cleaning, her rate is switched to her driver rate."
+    },
+    {
       "Name":"Nathaniel Kohler",
       "IdNumber": 1688,
       "OverriddenJobType": 7,

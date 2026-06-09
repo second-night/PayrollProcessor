@@ -6,6 +6,7 @@ using System;
 using System.Data;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using static PayrollProcessor.ExcelWorker;
 using static PayrollProcessor.Program;
 using Excel = Microsoft.Office.Interop.Excel;
@@ -855,7 +856,7 @@ namespace PayrollProcessor
             var fInfo = new FileInfo(filePath);
             Excel.Workbook workBook = excelApp.Workbooks.Open(filePath);
 
-            var employeeScheduleData = LoadEmployeeScheduleData();
+            //var employeeScheduleData = LoadEmployeeScheduleData();
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
                 Excel.Range range = sheet.Range[sheet.Range["A6"], sheet.Range["B8"]];
@@ -1027,10 +1028,10 @@ namespace PayrollProcessor
                             }
                         }
 
-                        if (shift.IsASchoolRouteShift())
-                        {
-                            CheckShiftAgainstSchedule(shift, employee, employeeScheduleData);
-                        }
+                        //if (shift.IsASchoolRouteShift())
+                        //{
+                        //    CheckShiftAgainstSchedule(shift, employee, employeeScheduleData);
+                        //}
 
                         employee.Shifts.Add(shift);
                     }
@@ -1715,7 +1716,8 @@ namespace PayrollProcessor
                                         }
                                         if (shift.PerDiem > 0f)
                                         {
-                                            Log("WFN payroll import does not currently include per diem for " + emp.Name + " (" + emp.IdNumber + ") because no WFN per-diem code/header was provided. Amount: " + Math.Round(shift.PerDiem, 2), true);
+                                            AddWfnAdjustmentRow(rows, emp, (Company)company, batchId, shift, shift.PerDiem, "PDM");
+                                            employeeHasWfnPayRowsForThisCompany = true;
                                         }
                                     }
                                 }
@@ -1734,11 +1736,11 @@ namespace PayrollProcessor
 
                     if (employeeHasWfnPayRowsForThisCompany && emp.IsSalaried)
                     {
-                        AddWfnSalaryRow(rows, emp, (Company)company, batchId);
+                        AddWfnSalaryRows(rows, emp, (Company)company, batchId);
                     }
                 }
 
-                string path = DesktopPath() + ((Company)company == Company.VALLEY_BUS_LLC ? "WFN_ValleyBus_TimeCardImport.csv" : "WFN_Coaches_TimeCardImport.csv");
+                string path = DesktopPath() + ((Company)company == Company.VALLEY_BUS_LLC ? "EPIMMFAA.csv" : "EPIMKZAA.csv");
                 WriteCsv(path, WfnPayrollImportHeaders, rows);
 
                 var p = new Process
@@ -1760,11 +1762,14 @@ namespace PayrollProcessor
             "Reg Hours",
             "Reg Earnings",
             "O/T Hours",
-            "Hours 3 Amount",
             "Hours 3 Code",
-            "Earnings 3 Amount",
+            "Hours 3 Amount",
             "Earnings 3 Code",
+            "Earnings 3 Amount",
+            "Adjust Ded Code",
+            "Adjust Ded Amount",
             "FLSA Workweek",
+            "Temp Dept",
             "Temp Rate"
         };
 
@@ -1789,9 +1794,25 @@ namespace PayrollProcessor
             return row;
         }
 
+        private static void SetWfnTempDepartment(Dictionary<string, string> row, Shift shift)
+        {
+            string departmentCode = Shift.GetDepartmentCode(shift.JobType);
+            if (string.IsNullOrWhiteSpace(departmentCode))
+            {
+                Log("string.IsNullOrWhiteSpace(departmentCode)", true);
+            }
+            row["Temp Dept"] = departmentCode.PadLeft(6, '0');
+        }
+        private static void SetWfnFlsaWorkweek(Dictionary<string, string> row, Shift shift)
+        {
+            row["FLSA Workweek"] = shift.WeekNumber.ToString();
+        }
+
         private static void AddWfnRegularRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float hours, float dollars)
         {
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            SetWfnTempDepartment(row, shift);
+            SetWfnFlsaWorkweek(row, shift);
             if (hours > 0.001f)
             {
                 row["Reg Hours"] = FormatWfnNumber(hours);
@@ -1826,12 +1847,14 @@ namespace PayrollProcessor
                 return;
             }
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            SetWfnTempDepartment(row, shift);
             row["Hours 3 Amount"] = FormatWfnNumber(hours);
             row["Hours 3 Code"] = code;
             if (shift.PayRate > 0f)
             {
                 row["Temp Rate"] = FormatWfnNumber(shift.PayRate.Value);
             }
+            SetWfnFlsaWorkweek(row, shift);
             rows.Add(row);
         }
 
@@ -1842,22 +1865,55 @@ namespace PayrollProcessor
                 return;
             }
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            SetWfnTempDepartment(row, shift);
             row["Earnings 3 Amount"] = FormatWfnNumber(dollars);
             row["Earnings 3 Code"] = code;
+            SetWfnFlsaWorkweek(row, shift);
             rows.Add(row);
         }
 
-        private static void AddWfnSalaryRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId)
+        private static void AddWfnAdjustmentRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float dollars, string code)
         {
-            if (emp.AnnualSalaryAmount <= 0.001f)
+            if (dollars < 0.001f)
             {
-                Log("Cannot add WFN salary row for salaried employee " + emp.Name + " (" + emp.IdNumber + ") because AnnualSalaryAmount is missing.", true);
+                Log("Why is dollars < 0.001f?", true);
                 return;
             }
 
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
-            row["Reg Earnings"] = FormatWfnNumber(emp.AnnualSalaryAmount / 26f);
+            SetWfnTempDepartment(row, shift);
+            row["Adjust Ded Amount"] = FormatWfnNumber(dollars);
+            row["Adjust Ded Code"] = code;
             rows.Add(row);
+        }
+
+        private static void AddWfnSalaryRows(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId)
+        {
+            if (emp.AnnualSalaryAmount <= 0.001f)
+            {
+                Log("Cannot add WFN salary rows for salaried employee " + emp.Name + " (" + emp.IdNumber + ") because AnnualSalaryAmount is missing.", true);
+                return;
+            }
+
+            float weeklySalaryAmount = RoundWfnMoneyUp((emp.AnnualSalaryAmount / 26f) / 2f);
+            for (int weekNumber = 1; weekNumber <= 2; weekNumber++)
+            {
+                Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+                row["Reg Hours"] = "40";
+                row["Reg Earnings"] = FormatWfnNumber(weeklySalaryAmount);
+                row["FLSA Workweek"] = weekNumber.ToString();
+                rows.Add(row);
+            }
+        }
+
+        private static float RoundWfnMoneyUp(float value)
+        {
+            float rounded = (float)(Math.Ceiling(value * 100f) / 100f);
+            if (rounded != value)
+            {
+                Log("salary rounded up from " + value + " to " + rounded);
+            }
+            return rounded;
         }
 
         private static string FormatWfnNumber(float value)
@@ -1884,6 +1940,22 @@ namespace PayrollProcessor
             }
             return value;
         }
+
+        //private static void WriteCsv(string path, List<string> headers, List<Dictionary<string, string>> rows)
+        //{
+        //    using StreamWriter writer = new(path, false, new UTF8Encoding(true));
+        //    writer.WriteLine(string.Join(",", headers.Select(EscapeCsv)));
+        //    foreach (var row in rows)
+        //    {
+        //        writer.WriteLine(string.Join(",", headers.Select(header => EscapeCsv(row.GetValueOrDefault(header, "")))));
+        //    }
+        //}
+
+        //private static string EscapeCsv(string value)
+        //{
+        //    value ??= "";
+        //    return "\"" + value.Replace("\"", "\"\"") + "\"";
+        //}
 
         private static string GetImportField(ImportedEmployee importedEmployee, string fieldName)
         {

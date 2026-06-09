@@ -153,50 +153,61 @@ namespace PayrollProcessor
                 }
                 if (!PayrateMessages.ContainsKey(this) || !PayrateMessages[this].Contains(shift.JobType))
                 {
-                    string specialString = shift.JobType == Jobs.WASH_BAY && IsAGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
-                    float newRate = PrintForm.InputNumber("Warninig: Employee " + Name + (IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + shift.JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate", out string nonNumberInput);
-                    if (newRate > 0)
+                    bool bGiveDefault = shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC || shift.JobType == Jobs.AIDE_CHARTER || shift.JobType == Jobs.AIDE_SCHOOL || shift.JobType == Jobs.TRAINING || shift.JobType == Jobs.DRIVER_CHARTER;
+                    if (!bGiveDefault)
                     {
-                        if (newRate < 2)
+                        string specialString = shift.JobType == Jobs.WASH_BAY && IsAGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
+                        float newRate = PrintForm.InputNumber("Warninig: Employee " + Name + (IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + " doesn't have a payrate for " + shift.JobType.ToString() + ". Would you like to assign one now?" + specialString + "\nPut '1' for default rate", out string nonNumberInput);
+                        if (newRate > 0)
                         {
-                            //if (shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC)
-                            //{
-                            //    Log("");
-                            //}
-                            if (shift.JobType == Jobs.CLEANING || shift.JobType == Jobs.WASH_BAY)
+                            if (newRate == 1) //default
                             {
-                                newRate = GetBasePayRateForEmployee(Jobs.AIDE_SCHOOL, this);
+                                bGiveDefault = true;
                             }
                             else
                             {
-                                newRate = GetBasePayRateForEmployee(shift.JobType, this);
-                            }
-                            if (newRate < 2)
-                            {
-                                Log("Assigning default rate failed", true);
+                                GiveRaiseToEmployee(this, shift.JobType, newRate);
                             }
                         }
-                        GiveRaiseToEmployee(this, shift.JobType, newRate);
-                    }
-                    else
-                    {
-                        if (null != nonNumberInput && nonNumberInput != "")
+                        else
                         {
-                            for (int i = 0; i <= (int)Jobs.NON_CDL_DRIVER; ++i)
+                            if (null != nonNumberInput && nonNumberInput != "")
                             {
-                                if ("" != ((Jobs)i).ToString() && StringSearch(((Jobs)i).ToString(), nonNumberInput))
+                                for (int i = 0; i <= (int)Jobs.NON_CDL_DRIVER; ++i)
                                 {
-                                    shift.JobType = (Jobs)i;
-                                    return GetPayRateForShift(shift);
+                                    if ("" != ((Jobs)i).ToString() && StringSearch(((Jobs)i).ToString(), nonNumberInput))
+                                    {
+                                        shift.JobType = (Jobs)i;
+                                        return GetPayRateForShift(shift);
+                                    }
                                 }
                             }
+                            if (!PayrateMessages.ContainsKey(this))
+                            {
+                                PayrateMessages[this] = new();
+                            }
+                            PayrateMessages[this].Add(shift.JobType);
+                            DelayedLog("Warninig: Employee " + Name + " ( " + IdNumber + " )" + (IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + "doesn't have a payrate for " + shift.JobType.ToString());
                         }
-                        if (!PayrateMessages.ContainsKey(this))
+                    }
+
+                    if (bGiveDefault)
+                    {
+                        float newRate = 0f;
+                        if (shift.JobType == Jobs.CLEANING || shift.JobType == Jobs.WASH_BAY)
                         {
-                            PayrateMessages[this] = new();
+                            newRate = GetBasePayRateForEmployee(Jobs.AIDE_SCHOOL, this);
                         }
-                        PayrateMessages[this].Add(shift.JobType);
-                        DelayedLog("Warninig: Employee " + Name + " ( " + IdNumber + " )" + (IsAGrandForksEmployee ? " (GF) " : " (Fargo) ") + "doesn't have a payrate for " + shift.JobType.ToString());
+                        else
+                        {
+                            newRate = GetBasePayRateForEmployee(shift.JobType, this);
+                        }
+                        if (newRate < 1)
+                        {
+                            Log("Assigning default rate failed", true);
+
+                        }
+                        GiveRaiseToEmployee(this, shift.JobType, newRate);
                     }
                 }
             }
