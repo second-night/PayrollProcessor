@@ -1762,7 +1762,6 @@ namespace PayrollProcessor
             "Reg Hours",
             "Reg Earnings",
             "O/T Hours",
-            "Overtime Earnings",
             "Hours 3 Code",
             "Hours 3 Amount",
             "Earnings 3 Code",
@@ -1795,9 +1794,14 @@ namespace PayrollProcessor
             return row;
         }
 
-        private static void SetWfnTempDepartment(Dictionary<string, string> row, Shift shift)
+        private static void SetWfnTempDepartment(Dictionary<string, string> row, Shift? shift, bool bIsOvertime = false)
         {
-            string departmentCode = Shift.GetDepartmentCode(shift.JobType);
+            if (null == shift && !bIsOvertime)
+            {
+                Log("SetWfnTempDepartment was called with a null shift and bIsOvertime is false.", true);
+                return;
+            }
+            string departmentCode = bIsOvertime ? "000029" : Shift.GetDepartmentCode(shift.JobType);
             if (string.IsNullOrWhiteSpace(departmentCode))
             {
                 Log("string.IsNullOrWhiteSpace(departmentCode)", true);
@@ -1843,20 +1847,22 @@ namespace PayrollProcessor
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
             row["O/T Hours"] = FormatWfnNumber(hours);
 
-            float overtimeEarnings = CalculateWfnBlendedOvertimeEarnings(emp, company, weekNumber, hours);
-            if (overtimeEarnings > 0.001f)
+            float blendedRegularRate = CalculateWfnBlendedRegularRate(emp, company, weekNumber);
+            if (blendedRegularRate > 0.001f)
             {
-                row["Overtime Earnings"] = FormatWfnNumber(overtimeEarnings);
+                row["Temp Rate"] = FormatWfnNumber(blendedRegularRate);
             }
+            SetWfnTempDepartment(row, null, true);
 
             row["FLSA Workweek"] = weekNumber.ToString();
             rows.Add(row);
         }
 
-        private static float CalculateWfnBlendedOvertimeEarnings(Employee emp, Company company, int weekNumber, float overtimeHours)
+        private static float CalculateWfnBlendedRegularRate(Employee emp, Company company, int weekNumber)
         {
             float regularHours = 0f;
             float regularEarnings = 0f;
+            float tempDepartmentShiftHours = 0f;
 
             for (int shiftType = 0; shiftType < 3; ++shiftType)
             {
@@ -1906,7 +1912,7 @@ namespace PayrollProcessor
                             }
                             else
                             {
-                                Log("Cannot calculate blended overtime earnings for " + emp.Name + " because a regular shift has hours but no payrate or dollar amount.", true);
+                                Log("Cannot calculate blended regular rate for " + emp.Name + " because a regular shift has hours but no payrate or dollar amount.", true);
                                 continue;
                             }
 
@@ -1919,12 +1925,11 @@ namespace PayrollProcessor
 
             if (regularHours < 0.001f)
             {
-                Log("Cannot calculate blended overtime earnings for " + emp.Name + " because regular hours are zero.", true);
+                Log("Cannot calculate blended regular rate for " + emp.Name + " because regular hours are zero.", true);
                 return 0f;
             }
 
-            float blendedRegularRate = regularEarnings / regularHours;
-            return (float)Math.Round(blendedRegularRate * overtimeHours * 0.5f, 2);
+            return (float)Math.Round(regularEarnings / regularHours, 2);
         }
 
         private static void AddWfnHours3Row(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float hours, string code)
