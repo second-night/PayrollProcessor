@@ -38,6 +38,7 @@ namespace PayrollProcessor
         public Location ShiftLocation; //WARNING: Be wary of using location for any shift that isn't a driver shift. 
         public bool ExtrasWereWrittenToExport = false;
         public int JobInt;
+        public int CoachTripDays = 1;
 
         public Shift()
         {
@@ -114,7 +115,7 @@ namespace PayrollProcessor
                 return 0f;
             }
             
-            if ((null == PayRate || PayRate < 1) && DollarAmount < 0.01f && PerDiem < 0.01f)
+            if ((null == PayRate || PayRate < 1) && DollarAmount < 0.01f && PerDiem < 0.01f && BonusDollars < 0.01f)
             {
                 Log("Issue with shift.TotalCompensation(). It is likely being called before the payrate has been calculated for the shift.", true);
             }

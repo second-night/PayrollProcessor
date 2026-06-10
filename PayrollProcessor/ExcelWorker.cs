@@ -1268,7 +1268,8 @@ namespace PayrollProcessor
                                     PerDiem = date.Equals(dates[0]) ? perDiem : 0,
                                     ShiftTime = hours / dates.Count,
                                     PayRate = payRate > 1 ? payRate : null,
-                                    BusNumber = busNumber
+                                    BusNumber = busNumber,
+                                    CoachTripDays = 1
                                 };
                                 return shift;
                             }).ToList();
@@ -1284,8 +1285,8 @@ namespace PayrollProcessor
                                 PerDiem = perDiem,
                                 ShiftTime = hours,
                                 PayRate = payRate > 1 ? payRate : null,
-                                BusNumber = busNumber
-
+                                BusNumber = busNumber,
+                                CoachTripDays = Math.Max(1, dates.Count)
                             });
 
                         }
@@ -1748,6 +1749,9 @@ namespace PayrollProcessor
                     }
                 }
 
+                //manual entries always go at the end of the .csv file
+                AddManualEntryWfnRows(rows, (Company)company, batchId);
+
                 string path = DesktopPath() + ((Company)company == Company.VALLEY_BUS_LLC ? "EPIMMFAA.csv" : "EPIMKZAA.csv");
                 WriteCsv(path, WfnPayrollImportHeaders, rows);
 
@@ -2084,6 +2088,97 @@ namespace PayrollProcessor
                 row["FLSA Workweek"] = weekNumber.ToString();
                 rows.Add(row);
             }
+        }
+
+        /// <summary>
+        /// Writes all manual entries for the given company to the end of the WFN rows.
+        /// Manual entries never get an FLSA Workweek and are never merged with regular shifts.
+        /// </summary>
+        private static void AddManualEntryWfnRows(List<Dictionary<string, string>> rows, Company company, string batchId)
+        {
+            foreach (ManualEntry entry in ManualEntriesTracker.GetInstance().GetEntries())
+            {
+                if (entry.Company != company || entry.Employee == null)
+                {
+                    continue;
+                }
+
+                Employee emp = entry.Employee;
+                if (string.IsNullOrWhiteSpace(emp.SocialSecurityNumber))
+                {
+                    if (!emp.WasReportedForPartialEntry)
+                    {
+                        emp.WasReportedForPartialEntry = true;
+                        Log(emp.Name + " (" + emp.IdNumber + ") is not getting paid because they do not have a social security number in workbright.", true);
+                    }
+                    continue;
+                }
+
+                float vacationHours = entry.VacationHours + entry.RoundUpVacationHours;
+                if (vacationHours > 0.001f)
+                {
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, Jobs.VACATION);
+                    row["Hours 3 Code"] = "VAC";
+                    row["Hours 3 Amount"] = FormatWfnNumber(vacationHours);
+                    if (entry.VacationPayRate > 0.001f)
+                    {
+                        row["Temp Rate"] = FormatWfnNumber(entry.VacationPayRate);
+                    }
+                    rows.Add(row);
+                }
+
+                if (entry.MgHours > 0.001f && entry.Jobtype.HasValue)
+                {
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype.Value);
+                    row["Hours 3 Code"] = "MNG";
+                    row["Hours 3 Amount"] = FormatWfnNumber(entry.MgHours);
+                    if (entry.JobPayRate > 0.001f)
+                    {
+                        row["Temp Rate"] = FormatWfnNumber(entry.JobPayRate);
+                    }
+                    rows.Add(row);
+                }
+
+                if (entry.BonusDollars > 0.001f)
+                {
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype ?? Jobs.ADMIN);
+                    row["Earnings 3 Code"] = "BON";
+                    row["Earnings 3 Amount"] = FormatWfnNumber(entry.BonusDollars);
+                    rows.Add(row);
+                }
+
+                if (entry.BackpayDollars > 0.001f)
+                {
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype ?? Jobs.ADMIN);
+                    row["Earnings 3 Code"] = "BPY";
+                    row["Earnings 3 Amount"] = FormatWfnNumber(entry.BackpayDollars);
+                    rows.Add(row);
+                }
+
+                if (entry.Expense > 0.001f)
+                {
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype ?? Jobs.ADMIN);
+                    row["Adjust Ded Code"] = "EXP";
+                    row["Adjust Ded Amount"] = FormatWfnNumber(entry.Expense);
+                    rows.Add(row);
+                }
+            }
+        }
+
+        private static Dictionary<string, string> MakeManualEntryWfnRow(Employee emp, Company company, string batchId, Jobs jobType)
+        {
+            Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
+            string departmentCode = Shift.GetDepartmentCode(jobType);
+            if (string.IsNullOrWhiteSpace(departmentCode))
+            {
+                Log("No department code found for manual entry job type " + jobType + " for " + emp.Name + ".", true);
+            }
+            else
+            {
+                row["Temp Dept"] = departmentCode.PadLeft(6, '0');
+            }
+            //FLSA Workweek is intentionally left blank for manual entries
+            return row;
         }
 
         private static float RoundWfnMoneyUp(float value)

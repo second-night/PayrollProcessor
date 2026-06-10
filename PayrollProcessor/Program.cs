@@ -84,8 +84,12 @@ namespace PayrollProcessor
             DoEmployeeRaises();
             ExcelWorker.ReadTimeSheets();
             ExcelWorker.ReadCoachesPayroll();
+            ManualEntriesTracker manualEntriesTracker = ManualEntriesTracker.GetInstance();
+            manualEntriesTracker.Read(ExcelWorker.FirstDayWeek2);
             CalculateMinimumGuarantees();
             TotalUpShiftsForEmployees();
+            manualEntriesTracker.ApplyVacationRoundUp();
+            new VacationTracker().ProcessAndWriteCsv(EmployeeDictionary.Values);
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WriteWfnPayrollImports();
             ExcelWorker.WritePayrollImports();

@@ -37,6 +37,7 @@ namespace PayrollProcessor
         public DateTime DateOfDirectDepositUpdateInWorkBright;
         public bool needsDDImported;
         public float VacationHours;
+        public List<ManualEntry> ManualEntries = new();
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/, 3/*0-has hours,1-has dollars,2-has both*/];
 
         //for schedule matching
