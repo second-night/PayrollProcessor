@@ -88,6 +88,7 @@ namespace PayrollProcessor
             TotalUpShiftsForEmployees();
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WriteWfnPayrollImports();
+            ExcelWorker.WritePayrollImports();
             ExcelWorker.WriteBirthDates();
             ExcelWorker.WriteOverTimeReport();
             FinalLogging();
@@ -747,7 +748,8 @@ namespace PayrollProcessor
 
             shiftTotalShift = new Shift(Company.VALLEY_BUS_LLC, shiftToMatch.JobType)
             {
-                IsATotalsShift = true
+                IsATotalsShift = true,
+                WeekNumber = shiftToMatch.WeekNumber
             };
             emp.ShiftTotals[(int)shiftToMatch.CompanyName, (int)shiftToMatch.Type()][shiftToMatch.GetLaborCode(false)][shiftToMatch.WeekNumber].Add(shiftTotalShift);
         }

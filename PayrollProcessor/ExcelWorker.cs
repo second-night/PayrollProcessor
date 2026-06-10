@@ -1660,75 +1660,83 @@ namespace PayrollProcessor
 
                     bool employeeHasWfnPayRowsForThisCompany = false;
 
-                    for (int shiftType = 0; shiftType < 3; ++shiftType)
+                    for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
                     {
-                        if (emp.ShiftTotals[company, shiftType] == null)
-                        {
-                            continue;
-                        }
+                        int firstRowForThisEmployeeCompanyWeek = rows.Count;
+                        float regularHourCapMultiplier = CalculateWfnRegularHourCapMultiplier(emp, (Company)company, weekNumber);
 
-                        foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
+                        for (int shiftType = 0; shiftType < 3; ++shiftType)
                         {
-                            foreach (var shifts in pair.Values)
+                            if (emp.ShiftTotals[company, shiftType] == null)
                             {
-                                foreach (Shift shift in shifts)
+                                continue;
+                            }
+
+                            foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
+                            {
+                                foreach (var weekEntry in pair)
                                 {
-                                    if (shift.CompanyName != (Company)company || !shift.IsValid(emp))
+                                    if (weekEntry.Key != weekNumber)
                                     {
                                         continue;
                                     }
-
-                                    if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars + shift.PerDiem > 0f)
+                                    foreach (Shift shift in weekEntry.Value)
                                     {
-                                        if (shift.JobType == Jobs.VACATION)
+                                        if (shift.CompanyName != (Company)company || !shift.IsValid(emp))
                                         {
-                                            AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, "VAC");
+                                            continue;
                                         }
-                                        else if (shift.JobType == Jobs.HOLIDAY)
-                                        {
-                                            AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, "HOL");
-                                        }
-                                        else
-                                        {
-                                            AddWfnRegularRow(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, shift.DollarAmount);
-                                        }
-                                        employeeHasWfnPayRowsForThisCompany = true;
-                                    }
 
-                                    if (shift.MinimumGuaranteeHours > 0f)
-                                    {
-                                        AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.MinimumGuaranteeHours, "MNG");
-                                        employeeHasWfnPayRowsForThisCompany = true;
-                                    }
-                                    if (shift.SummerGuaranteeHours > 0f)
-                                    {
-                                        AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.SummerGuaranteeHours, "BON");
-                                        employeeHasWfnPayRowsForThisCompany = true;
-                                    }
-
-                                    if (!shift.ExtrasWereWrittenToExport)
-                                    {
-                                        shift.ExtrasWereWrittenToExport = true;
-                                        if (shift.BonusDollars > 0f)
+                                        if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars + shift.PerDiem > 0f)
                                         {
-                                            AddWfnEarnings3Row(rows, emp, (Company)company, batchId, shift, shift.BonusDollars, "BON");
+                                            if (shift.JobType == Jobs.VACATION)
+                                            {
+                                                AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, "VAC");
+                                            }
+                                            else if (shift.JobType == Jobs.HOLIDAY)
+                                            {
+                                                AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, "HOL");
+                                            }
+                                            else
+                                            {
+                                                AddWfnRegularRow(rows, emp, (Company)company, batchId, shift, shift.ShiftTime, shift.DollarAmount, regularHourCapMultiplier);
+                                            }
                                             employeeHasWfnPayRowsForThisCompany = true;
                                         }
-                                        if (shift.PerDiem > 0f)
+
+                                        if (shift.MinimumGuaranteeHours > 0f)
                                         {
-                                            AddWfnAdjustmentRow(rows, emp, (Company)company, batchId, shift, shift.PerDiem, "PDM");
+                                            AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.MinimumGuaranteeHours, "MNG");
                                             employeeHasWfnPayRowsForThisCompany = true;
+                                        }
+                                        if (shift.SummerGuaranteeHours > 0f)
+                                        {
+                                            AddWfnHours3Row(rows, emp, (Company)company, batchId, shift, shift.SummerGuaranteeHours, "MNG");
+                                            employeeHasWfnPayRowsForThisCompany = true;
+                                        }
+
+                                        if (!shift.ExtrasWereWrittenToExport)
+                                        {
+                                            shift.ExtrasWereWrittenToExport = true;
+                                            if (shift.BonusDollars > 0f)
+                                            {
+                                                AddWfnEarnings3Row(rows, emp, (Company)company, batchId, shift, shift.BonusDollars, "BON");
+                                                employeeHasWfnPayRowsForThisCompany = true;
+                                            }
+                                            if (shift.PerDiem > 0f)
+                                            {
+                                                AddWfnAdjustmentRow(rows, emp, (Company)company, batchId, shift, shift.PerDiem, "PDM");
+                                                employeeHasWfnPayRowsForThisCompany = true;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
-                    {
                         if (emp.OverTimeHours[company, weekNumber] > 0f)
                         {
+                            AdjustFinalRegularRowToExactly40Hours(rows, firstRowForThisEmployeeCompanyWeek);
                             AddWfnOvertimeRow(rows, emp, (Company)company, batchId, emp.OverTimeHours[company, weekNumber], weekNumber);
                             employeeHasWfnPayRowsForThisCompany = true;
                         }
@@ -1813,28 +1821,108 @@ namespace PayrollProcessor
             row["FLSA Workweek"] = shift.WeekNumber.ToString();
         }
 
-        private static void AddWfnRegularRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float hours, float dollars)
+        private static void AddWfnRegularRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, Shift shift, float hours, float dollars, float regularHourCapMultiplier)
         {
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
             SetWfnTempDepartment(row, shift);
             SetWfnFlsaWorkweek(row, shift);
-            if (hours > 0.001f)
+
+            float cappedHours = hours * regularHourCapMultiplier;
+            float cappedDollars = dollars * regularHourCapMultiplier;
+
+            if (cappedHours > 0.001f)
             {
-                row["Reg Hours"] = FormatWfnNumber(hours);
+                row["Reg Hours"] = FormatWfnNumber(cappedHours);
             }
-            if (dollars > 0.001f)
+            if (cappedDollars > 0.001f)
             {
-                row["Reg Earnings"] = FormatWfnNumber(dollars);
+                row["Reg Earnings"] = FormatWfnNumber(cappedDollars);
             }
             else if (shift.PayRate > 0f)
             {
                 row["Temp Rate"] = FormatWfnNumber(shift.PayRate.Value);
             }
-            else if (hours > 0.01f)
+            else if (cappedHours > 0.01f)
             {
                 Log("No payrate or dollar amount found for WFN regular row for " + emp.Name + ".", true);
             }
             rows.Add(row);
+        }
+
+        private static float CalculateWfnRegularHourCapMultiplier(Employee emp, Company company, int weekNumber)
+        {
+            float regularHours = 0f;
+
+            for (int shiftType = 0; shiftType < 3; ++shiftType)
+            {
+                if (emp.ShiftTotals[(int)company, shiftType] == null)
+                {
+                    continue;
+                }
+
+                foreach (var pair in emp.ShiftTotals[(int)company, shiftType].Values)
+                {
+                    foreach (var weekEntry in pair)
+                    {
+                        if (weekEntry.Key != weekNumber)
+                        {
+                            continue;
+                        }
+
+                        foreach (Shift shift in weekEntry.Value)
+                        {
+                            if (shift.CompanyName != company || !shift.IsValid(emp))
+                            {
+                                continue;
+                            }
+
+                            if (shift.JobType == Jobs.VACATION || shift.JobType == Jobs.HOLIDAY)
+                            {
+                                continue;
+                            }
+
+                            regularHours += shift.ShiftTime;
+                        }
+                    }
+                }
+            }
+
+            if (regularHours <= 40.0001f)
+            {
+                return 1f;
+            }
+
+            return 40f / regularHours;
+        }
+
+        private static void AdjustFinalRegularRowToExactly40Hours(
+    List<Dictionary<string, string>> rows,
+    int firstRowIndexForEmployeeCompanyWeek)
+        {
+            float totalRegHours = 0f;
+            int finalRegRowIndex = -1;
+
+            for (int i = firstRowIndexForEmployeeCompanyWeek; i < rows.Count; i++)
+            {
+                if (float.TryParse(rows[i].GetValueOrDefault("Reg Hours", ""), out float regHours) && regHours > 0.001f)
+                {
+                    totalRegHours += regHours;
+                    finalRegRowIndex = i;
+                }
+            }
+
+            if (finalRegRowIndex < 0)
+            {
+                return;
+            }
+
+            float difference = (float)Math.Round(40f - totalRegHours, 2);
+
+            if (Math.Abs(difference) >= 0.01f)
+            {
+                float currentFinalHours = float.Parse(rows[finalRegRowIndex]["Reg Hours"]);
+                rows[finalRegRowIndex]["Reg Hours"] = FormatWfnNumber(currentFinalHours + difference);
+            }
         }
 
         private static void AddWfnOvertimeRow(List<Dictionary<string, string>> rows, Employee emp, Company company, string batchId, float hours, int weekNumber)
