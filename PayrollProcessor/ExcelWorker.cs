@@ -105,7 +105,6 @@ namespace PayrollProcessor
             const int YEARS_OF_SERVICE_COLUMN = 45;
             const int EMPLOYMENT_CATEGORY_COLUMN = 47;
             const int DD_ACCOUNT_1 = 48;
-            const int BI_WEEKLY_SALARY_COLUMN = 54;
             const int VACATION_HOURS_COLUMN = 55;
 
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
@@ -158,12 +157,6 @@ namespace PayrollProcessor
                         {
                             employee.IsSalaried = true;
                             employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary);
-                        }
-                        else if (TryGetFloatFromCell(cellData[rowNumber, BI_WEEKLY_SALARY_COLUMN], out float salary2) && salary2 > 50)
-                        {
-                            Log("Bi-weekly salary found for " + employee.Name + ". Converting to annual salary.", true);
-                            employee.IsSalaried = true;
-                            employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary2 * 26f);
                         }
                         if (!employee.IsAGrandForksEmployee)
                         {
