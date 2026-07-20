@@ -215,10 +215,13 @@ namespace PayrollProcessor
             WriteEligibilitySheet(workbook, "LTPT Eligible",
                 Employees.Values.Where(e => e.IsEligible && e.EligibilityType == "LTPT Eligible"));
 
-            while (workbook.Worksheets.Count > 2)
-            {
-                ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
-            }
+            WriteEligibilitySheet(workbook, "InEligible",
+                Employees.Values.Where(e => !e.IsEligible));
+
+            //while (workbook.Worksheets.Count > 2)
+            //{
+            //    ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
+            //}
 
             workbook.SaveAs(path);
             workbook.Close(true);

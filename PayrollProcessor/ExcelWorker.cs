@@ -19,6 +19,7 @@ namespace PayrollProcessor
         private const int GF_MAX_BUS = 399;
         private const int GF_MIN_BUS = 300;
         public static Dictionary<int, ImportedEmployee> ImportEmployees = new();
+        public static Dictionary<int, (string FirstName, string LastName)> EmployeeExportByNumber = new();
         public DateTime FirstDayWeek2;
         HashSet<string> FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll = new() { "EmployeeNumber", "EmploymentCategory", "SSN" };
 
@@ -352,6 +353,7 @@ namespace PayrollProcessor
 
         public void ReadEmployeeExport()
         {
+            EmployeeExportByNumber.Clear();
             if (!CheckForExcelFileOnDesktop("Employee Export.xlsx", out string filePath))
             {
                 Log("Couldn't find employee export.", true);
@@ -402,6 +404,9 @@ namespace PayrollProcessor
                     {
                         continue;
                     }
+                    string exportFirstName = cellData[rowNumber, EMP_FIRST_NAME_COLUMN]?.ToString()?.Trim() ?? "";
+                    string exportLastName = cellData[rowNumber, EMP_LAST_NAME_COLUMN]?.ToString()?.Trim() ?? "";
+                    EmployeeExportByNumber[employeeNumber] = (exportFirstName, exportLastName);
                     ImportedEmployee importedEmployee = new()
                     {
                         WasOnImployeeExportSheet = true
@@ -1245,6 +1250,9 @@ namespace PayrollProcessor
                         }
 
                         List<Shift> shifts = new();
+
+                        int coachTripDays = hours < 0.01f && dollars + bonus > 0 ? Math.Max(1, dates.Count) : 0;
+
                         if (dates.Count > 1 && dates[0].CompareTo(FirstDayWeek2) != dates[^1].CompareTo(FirstDayWeek2) && dollars + hours > 0)
                         { //multiple shifts and different weeks.
 
@@ -1262,7 +1270,7 @@ namespace PayrollProcessor
                                     ShiftTime = hours / dates.Count,
                                     PayRate = payRate > 1 ? payRate : null,
                                     BusNumber = busNumber,
-                                    CoachTripDays = 1
+                                    CoachTripDays = coachTripDays
                                 };
                                 return shift;
                             }).ToList();
@@ -1279,7 +1287,7 @@ namespace PayrollProcessor
                                 ShiftTime = hours,
                                 PayRate = payRate > 1 ? payRate : null,
                                 BusNumber = busNumber,
-                                CoachTripDays = Math.Max(1, dates.Count)
+                                CoachTripDays = coachTripDays
                             });
 
                         }
@@ -1653,7 +1661,7 @@ namespace PayrollProcessor
                     }
 
                     bool employeeHasWfnPayRowsForThisCompany = false;
-
+                    bool bEmployeeHasShownVacation = false;
                     for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
                     {
                         int firstRowForThisEmployeeCompanyWeek = rows.Count;
@@ -1664,6 +1672,15 @@ namespace PayrollProcessor
                             if (emp.ShiftTotals[company, shiftType] == null)
                             {
                                 continue;
+                            }
+
+                            float vacationHours = emp.VacationHours + emp.NetVacationChangeForPayPeriod;
+                            if (vacationHours != 0f && !bEmployeeHasShownVacation)
+                            {
+                                bEmployeeHasShownVacation = true;
+                                Company com = emp.IdNumber == 1734 || emp.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
+                                Dictionary<string, string> row = MakeBaseWfnRow(emp, com, batchId);
+                                row["VBL"] = vacationHours.ToString();
                             }
 
                             foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
@@ -1775,7 +1792,8 @@ namespace PayrollProcessor
             "Adjust Ded Amount",
             "FLSA Workweek",
             "Temp Dept",
-            "Temp Rate"
+            "Temp Rate",
+            "VBL"
         };
 
         private static string GetWfnCompanyCode(Company company)
@@ -2085,7 +2103,7 @@ namespace PayrollProcessor
 
         /// <summary>
         /// Writes all manual entries for the given company to the end of the WFN rows.
-        /// Manual entries never get an FLSA Workweek and are never merged with regular shifts.
+        /// Most manual entries never get an FLSA Workweek; regular hours are the exception.
         /// </summary>
         private static void AddManualEntryWfnRows(List<Dictionary<string, string>> rows, Company company, string batchId)
         {
@@ -2120,9 +2138,21 @@ namespace PayrollProcessor
                     rows.Add(row);
                 }
 
+                if (entry.RegularHours > 0.001f && entry.Jobtype.HasValue && entry.WeekNumber >= 1 && entry.WeekNumber <= 2)
+                {
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.GetResolvedJobType(emp));
+                    row["Reg Hours"] = FormatWfnNumber(entry.RegularHours);
+                    row["FLSA Workweek"] = entry.WeekNumber.ToString();
+                    if (entry.JobPayRate > 0.001f)
+                    {
+                        row["Temp Rate"] = FormatWfnNumber(entry.JobPayRate);
+                    }
+                    rows.Add(row);
+                }
+
                 if (entry.MgHours > 0.001f && entry.Jobtype.HasValue)
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype.Value);
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.GetResolvedJobType(emp));
                     row["Hours 3 Code"] = "MNG";
                     row["Hours 3 Amount"] = FormatWfnNumber(entry.MgHours);
                     if (entry.JobPayRate > 0.001f)
@@ -2134,23 +2164,27 @@ namespace PayrollProcessor
 
                 if (entry.BonusDollars > 0.001f)
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype ?? Jobs.ADMIN);
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype.HasValue ? entry.GetResolvedJobType(emp) : Jobs.ADMIN);
                     row["Earnings 3 Code"] = "BON";
                     row["Earnings 3 Amount"] = FormatWfnNumber(entry.BonusDollars);
                     rows.Add(row);
                 }
 
-                if (entry.BackpayDollars > 0.001f)
+                if (entry.BackpayHours > 0.001f && entry.Jobtype.HasValue)
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype ?? Jobs.ADMIN);
-                    row["Earnings 3 Code"] = "BPY";
-                    row["Earnings 3 Amount"] = FormatWfnNumber(entry.BackpayDollars);
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.GetResolvedJobType(emp));
+                    row["Hours 3 Code"] = "BPY";
+                    row["Hours 3 Amount"] = FormatWfnNumber(entry.BackpayHours);
+                    if (entry.JobPayRate > 0.001f)
+                    {
+                        row["Temp Rate"] = FormatWfnNumber(entry.JobPayRate);
+                    }
                     rows.Add(row);
                 }
 
                 if (entry.Expense > 0.001f)
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype ?? Jobs.ADMIN);
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype.HasValue ? entry.GetResolvedJobType(emp) : Jobs.ADMIN);
                     row["Adjust Ded Code"] = "EXP";
                     row["Adjust Ded Amount"] = FormatWfnNumber(entry.Expense);
                     rows.Add(row);
@@ -2301,32 +2335,43 @@ namespace PayrollProcessor
             return job;
         }
 
-        private static string GetAdpRateAmount(ImportedEmployee importedEmployee)
+        // Isolved ImportFields rate keys -> ADP_NewHireImport.csv rate column headers
+        private static readonly Dictionary<string, string> IsolvedRateFieldToAdpHeader = new()
         {
-            string[] preferredRateFields =
-            {
-                "Rate_DrvrDlySchool",
-                "Rate_AidDlySchool",
-                "Rate_Mechanic",
-                "Rate_Wash Bay",
-                "Rate_Body Shop",
-                "Rate_Admin",
-                "Rate_Cleaning",
-                "Rate_Training"
-            };
+            ["Rate_Admin"] = "Rate - Admin",
+            ["Rate_AidDlySchool"] = "Rate - Para School",
+            ["Rate_AidDlyChrter"] = "Rate - Para Charter",
+            ["Rate_Body Shop"] = "Rate - Body Shop",
+            ["Rate_Cleaning"] = "Rate - Cleaning",
+            ["Rate_DrvrDlySchool"] = "Rate - Driver School",
+            ["Rate_DrvrSchoolChrtr"] = "Rate - Driver Charter",
+            ["Rate_Mechanic"] = "Rate - Mechanic",
+            ["Rate_Wash Bay"] = "Rate - Wash Bay"
+        };
 
-            foreach (string fieldName in preferredRateFields)
+        private static bool HasAdpRateImportFields(ImportedEmployee importedEmployee)
+        {
+            foreach (string isolvedField in IsolvedRateFieldToAdpHeader.Keys)
             {
-                string value = GetImportField(importedEmployee, fieldName);
-                if (!string.IsNullOrWhiteSpace(value))
+                if (!string.IsNullOrWhiteSpace(GetImportField(importedEmployee, isolvedField)))
                 {
-                    return value;
+                    return true;
                 }
             }
-
-            return "";
+            return false;
         }
 
+        private static void AddAdpRateFields(Dictionary<string, string> adpFields, ImportedEmployee importedEmployee)
+        {
+            foreach (var mapping in IsolvedRateFieldToAdpHeader)
+            {
+                string rateValue = GetImportField(importedEmployee, mapping.Key);
+                if (!string.IsNullOrWhiteSpace(rateValue))
+                {
+                    adpFields[mapping.Value] = rateValue;
+                }
+            }
+        }
 
         private static readonly List<string> AdpNewHireImportHeaders = new()
         {
@@ -2366,7 +2411,17 @@ namespace PayrollProcessor
             "Address 1 Line 2",
             "Address 1 City",
             "Address 1 State Postal Code",
-            "Address 1 Zip Code"
+            "Address 1 Zip Code",
+            "FLSA OVERTIME",
+            "Rate - Admin",
+            "Rate - Para School",
+            "Rate - Para Charter",
+            "Rate - Body Shop",
+            "Rate - Cleaning",
+            "Rate - Driver School",
+            "Rate - Driver Charter",
+            "Rate - Mechanic",
+            "Rate - Wash Bay"
             //"Will Worker Complete Form I-9"
         };
 
@@ -2385,11 +2440,12 @@ namespace PayrollProcessor
                 Employee employee = EmployeeDictionary[employeeEntry.Key];
                 ImportedEmployee importedEmployee = employeeEntry.Value;
 
-                if (employee.WasAlreadyInPayroll)
+                bool isRaiseUpdate = employee.WasAlreadyInPayroll && employee.NeedsUpdateInPayroll && HasAdpRateImportFields(importedEmployee);
+                if (employee.WasAlreadyInPayroll && !isRaiseUpdate)
                 {
                     continue;
                 }
-                if (employee.Shifts.Count == 0)
+                if (!isRaiseUpdate && employee.Shifts.Count == 0 && !employee.HadManualEntry)
                 {
                     continue;
                 }
@@ -2400,57 +2456,76 @@ namespace PayrollProcessor
 
                 string sixDigitEmployeeNumber = GetEmployeeNumberAsSixDigits(employee.IdNumber);
                 string hireDate = GetImportField(importedEmployee, "HireDate");
+                string changeEffectiveOn = isRaiseUpdate ? FirstDayWeek2.ToShortDateString() : hireDate;
                 string state = GetImportField(importedEmployee, "State");
                 if (string.IsNullOrWhiteSpace(state))
                 {
                     state = "ND";
                 }
 
-                Dictionary<string, string> adpFields = new()
+                Dictionary<string, string> adpFields;
+                if (isRaiseUpdate)
                 {
-                    ["Associate ID"] = "",
-                    ["Position ID"] = "MMF" + sixDigitEmployeeNumber,
-                    ["Change Effective On"] = hireDate,
-                    ["Is Paid By WFN"] = "Y",
-                    ["Position Uses Time"] = "N",
-                    ["Tax ID Type"] = "SSN",
-                    ["Tax ID Number"] = GetImportField(importedEmployee, "SSN"),
-                    ["First Name"] = GetImportField(importedEmployee, "FirstName"),
-                    ["Middle Name"] = GetImportField(importedEmployee, "MiddleName"),
-                    ["Last Name"] = GetImportField(importedEmployee, "LastName"),
-                    ["Hire Date"] = hireDate,
-                    ["Position Start Date"] = hireDate,
-                    ["Employee Status"] = "A",    // Need ADP validation table values/codes
-                    ["Employee Type"] = "P",
-                    ["Gender"] = employee.IsMale ? "M" : "F",
-                    ["Rate Type"] = "",
-                    ["Rate 1 Amount"] = "",
-                    ["Pay Frequency Code"] = "B",
-                    ["Standard Hours"] = "",
-                    ["Home Department"] = GetAdpHomeDepartment(GetImportField(importedEmployee, "Organization")),
-                    ["Reports To Position ID"] = "No one",
-                    ["Birth Date"] = GetImportField(importedEmployee, "BirthDate"),
-                    ["Federal Tax Form Year"] = DateTime.Today.Year.ToString(),
-                    ["Federal Tax Filing Status"] = GetAdpFederalFilingStatus(GetImportField(importedEmployee, "FedFilingStatus")),
-                    ["Federal Tax Multiple Jobs"] = "N",
-                    ["Federal Tax Dependents Amount"] = GetImportField(importedEmployee, "FedDependentsAmt"),
-                    ["Federal Tax Other Income Amount"] = "0",
-                    ["Federal Tax Deductions Amount"] = GetImportField(importedEmployee, "FedDeductions"),
-                    ["Federal Tax Additional Amount"] = GetImportField(importedEmployee, "FedAddlAmount"),
-                    ["Federal Tax Exemptions"] = GetImportField(importedEmployee, "FedExemptions"),
-                    ["Worked State Tax Code"] = "ND",
-                    ["State Marital Status"] = GetAdpStateMaritalStatus(GetImportField(importedEmployee, "StateFilingStatus")),
-                    ["SUI/SDI Tax Jurisdiction Code"] ="92",
-                    ["Assign Onboarding Experience"] = "",
-                    ["Job Title"] = GetAdpJobTitle(importedEmployee),
-                    ["Personal E-mail Address"] = GetImportField(importedEmployee, "EmailAddress"),
-                    ["Address 1 Line 1"] = GetImportField(importedEmployee, "Address1"),
-                    ["Address 1 Line 2"] = GetImportField(importedEmployee, "Address2"),
-                    ["Address 1 City"] = GetImportField(importedEmployee, "City"),
-                    ["Address 1 State Postal Code"] = state,
-                    ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode")
-                    //["Will Worker Complete Form I-9"] = "Y"
-                };
+                    // Existing employees: only identity + rate columns (mirrors isolved rate-only import rows)
+                    adpFields = new()
+                    {
+                        ["Position ID"] = "MMF" + sixDigitEmployeeNumber,
+                        ["Change Effective On"] = changeEffectiveOn,
+                        ["Tax ID Type"] = "SSN",
+                        ["Tax ID Number"] = GetImportField(importedEmployee, "SSN")
+                    };
+                }
+                else
+                {
+                    adpFields = new()
+                    {
+                        ["Associate ID"] = "",
+                        ["Position ID"] = "MMF" + sixDigitEmployeeNumber,
+                        ["Change Effective On"] = changeEffectiveOn,
+                        ["Is Paid By WFN"] = "Y",
+                        ["Position Uses Time"] = "N",
+                        ["Tax ID Type"] = "SSN",
+                        ["Tax ID Number"] = GetImportField(importedEmployee, "SSN"),
+                        ["First Name"] = GetImportField(importedEmployee, "FirstName"),
+                        ["Middle Name"] = GetImportField(importedEmployee, "MiddleName"),
+                        ["Last Name"] = GetImportField(importedEmployee, "LastName"),
+                        ["Hire Date"] = hireDate,
+                        ["Position Start Date"] = hireDate,
+                        ["Employee Status"] = "A",    // Need ADP validation table values/codes
+                        ["Employee Type"] = "P",
+                        ["Gender"] = employee.IsMale ? "M" : "F",
+                        ["Rate Type"] = "",
+                        ["Rate 1 Amount"] = "",
+                        ["Pay Frequency Code"] = "B",
+                        ["Standard Hours"] = "",
+                        ["Home Department"] = GetAdpHomeDepartment(GetImportField(importedEmployee, "Organization")),
+                        ["Reports To Position ID"] = "No one",
+                        ["Birth Date"] = GetImportField(importedEmployee, "BirthDate"),
+                        ["Federal Tax Form Year"] = DateTime.Today.Year.ToString(),
+                        ["Federal Tax Filing Status"] = GetAdpFederalFilingStatus(GetImportField(importedEmployee, "FedFilingStatus")),
+                        ["Federal Tax Multiple Jobs"] = "N",
+                        ["Federal Tax Dependents Amount"] = GetImportField(importedEmployee, "FedDependentsAmt"),
+                        ["Federal Tax Other Income Amount"] = "0",
+                        ["Federal Tax Deductions Amount"] = GetImportField(importedEmployee, "FedDeductions"),
+                        ["Federal Tax Additional Amount"] = GetImportField(importedEmployee, "FedAddlAmount"),
+                        ["Federal Tax Exemptions"] = GetImportField(importedEmployee, "FedExemptions"),
+                        ["Worked State Tax Code"] = "ND",
+                        ["State Marital Status"] = GetAdpStateMaritalStatus(GetImportField(importedEmployee, "StateFilingStatus")),
+                        ["SUI/SDI Tax Jurisdiction Code"] = "92",
+                        ["Assign Onboarding Experience"] = "",
+                        ["Job Title"] = GetAdpJobTitle(importedEmployee),
+                        ["Personal E-mail Address"] = GetImportField(importedEmployee, "EmailAddress"),
+                        ["Address 1 Line 1"] = GetImportField(importedEmployee, "Address1"),
+                        ["Address 1 Line 2"] = GetImportField(importedEmployee, "Address2"),
+                        ["Address 1 City"] = GetImportField(importedEmployee, "City"),
+                        ["Address 1 State Postal Code"] = state,
+                        ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode"),
+                        ["FLSA OVERTIME"] = "Y"
+                        //["Will Worker Complete Form I-9"] = "Y"
+                    };
+                }
+
+                AddAdpRateFields(adpFields, importedEmployee);
 
                 for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
                 {
@@ -2489,7 +2564,7 @@ namespace PayrollProcessor
             {
                 var employee = EmployeeDictionary[employeeEntry.Key];
 
-                if ((!employee.HasAnyDirectDepositAccount || employee.needsDDImported) && (employee.Shifts.Count > 0 || employee.WasAlreadyInPayroll))
+                if ((!employee.HasAnyDirectDepositAccount || employee.needsDDImported) && (employee.Shifts.Count > 0 || employee.WasAlreadyInPayroll || employee.HadManualEntry))
                 {
                     if (employeeEntry.Value.ImportFields.Count > 0)
                     {
@@ -2513,7 +2588,7 @@ namespace PayrollProcessor
                         }
                     }
                 }
-                if (employee.Shifts.Count == 0 && !employee.WasAlreadyInPayroll)
+                if (employee.Shifts.Count == 0 && !employee.WasAlreadyInPayroll && !employee.HadManualEntry)
                 {
                     //don't update employees who aren't currently active.
                     continue;
@@ -3290,7 +3365,7 @@ namespace PayrollProcessor
             }
             if (shift.ClockIn.Seconds == 0 || shift.ClockOut.Seconds == 0)
             {
-                Log("Possible manual entry detected for " + employee.Name + " on " + shift.Date.ToShortDateString(), true);
+                //Log("Possible manual entry detected for " + employee.Name + " on " + shift.Date.ToShortDateString(), true);
             }
         }
     }

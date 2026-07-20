@@ -23,6 +23,7 @@ namespace PayrollProcessor
         public string PhoneNumber;
         public bool NeedsUpdateInPayroll;
         public bool HadHoursInTimesheets; //means they have been confirmed to have hours in Timesheets.xlsx
+        public bool HadManualEntry; //means they have been confirmed to have values in manual_entries.xlsx
         public bool HasAnActiveDirectDepositAccount;
         public bool HasAnyDirectDepositAccount;
         public bool IsMale;
@@ -39,6 +40,7 @@ namespace PayrollProcessor
         public float VacationHours;
         public List<ManualEntry> ManualEntries = new();
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/, 3/*0-has hours,1-has dollars,2-has both*/];
+        public float NetVacationChangeForPayPeriod;
 
         //for schedule matching
         //public Dictionary<int/*bus number*/, Dictionary<RouteTimeContext, List<DayOfWeek>>> RoutesByBusNumber = new();

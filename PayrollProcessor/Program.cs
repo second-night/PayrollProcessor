@@ -80,6 +80,7 @@ namespace PayrollProcessor
             CheckForVacationCutOff(ExcelWorker.FirstDayWeek2);
             ExcelWorker.ReadIsolvedEmployees();
             ExcelWorker.PreCheckTimeSheets();
+            ManualEntriesTracker.GetInstance().PreCheckForNewEmployees();
             ExcelWorker.ReadEmployeeExport();
             DoEmployeeRaises();
             ExcelWorker.ReadTimeSheets();
@@ -804,7 +805,7 @@ namespace PayrollProcessor
         {
             foreach (var employee in EmployeeDictionary.Values)
             {
-                if (!employee.HadHoursInTimesheets)
+                if (!employee.HadHoursInTimesheets && !employee.HadManualEntry)
                 {
                     continue;
                 }

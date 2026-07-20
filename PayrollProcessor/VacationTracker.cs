@@ -14,9 +14,12 @@ namespace PayrollProcessor
             "PositionID",
             "TimeOffPolicyName",
             "TransactionType",
+            "ReasonCodes",
             "TransactionStartDate",
+            "TransactionStartTime",
             "TransactionAmount",
-            "TransactionUnit"
+            "TransactionUnit",
+            "SendToPayroll"
         };
 
         public void ProcessAndWriteCsv(IEnumerable<Employee> employees)
@@ -48,20 +51,25 @@ namespace PayrollProcessor
                     continue;
                 }
 
+                emp.NetVacationChangeForPayPeriod = transactionAmount;
+
                 rows.Add(new Dictionary<string, string>
                 {
                     ["PositionID"] = "MMF" + emp.IdNumber.ToString("D6"),
-                    ["TimeOffPolicyName"] = "PTO",
+                    ["TimeOffPolicyName"] = "Valley Vacation",
                     ["TransactionType"] = "External Award",
+                    ["ReasonCodes"] = "",
                     ["TransactionStartDate"] = transactionDate,
+                    ["TransactionStartTime"] = "",
                     ["TransactionAmount"] = FormatTransactionAmount(transactionAmount),
-                    ["TransactionUnit"] = "hours"
+                    ["TransactionUnit"] = "hours",
+                    ["SendToPayroll"] = ""
                 });
 
                 LogVacationSummary(emp, compensatedHours, accrual, vacationTaken, transactionAmount);
             }
 
-            string path = DesktopPath() + "PTO_TimeOffImport.csv";
+            string path = DesktopPath() + "AccrualsImport.csv";
             WriteCsv(path, rows);
             Log("Vacation time-off import written to " + path + " (" + rows.Count + " rows).");
 
@@ -81,7 +89,7 @@ namespace PayrollProcessor
             {
                 return 4.616f;
             }
-            if (yearsOfService > 2)
+            if (yearsOfService >= 2)
             {
                 return 3.077f;
             }
