@@ -81,32 +81,32 @@ namespace PayrollProcessor
             Excel.Workbook workBook = excelApp.Workbooks.Open(filePath);
 
             Dictionary<Jobs, int> payColumns = new();
-            const int SSN_COLUMN = 2;
-            const int EMP_LAST_NAME_COLUMN = 3;
-            const int EMP_FIRST_NAME_COLUMN = 4;
-            const int BIRTH_DATE_COLUMN = 7;
-            const int GENDER_COLUMN = 8;
-            const int PHONE_NUMBER_COLUMN = 15;
-            const int HIRE_DATE_COLUMN = 18;
-            const int TERM_DATE_COLUMN = 19;
-            const int REHIRE_DATE_COLUMN = 20;
-            const int SALARY_COLUMN = 28;
-            int ADMIN_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.ADMIN, 30);
-            int AIDE_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, 31);
-            int AIDE_CHARTER_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_CHARTER, 32);
-            int BODY_SHOP_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.BODY_SHOP, 34);
-            int CLEANING_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.CLEANING, 35);
-            int DRIVER_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.DRIVER_SCHOOL, 36);
-            int DRIVER_CHARTER_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.DRIVER_CHARTER, 37);
-            int MECHANIC_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.MECHANIC, 38);
-            int WASH_BAY_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.WASH_BAY, 40);
-            const int EMP_NUMBER_COLUMN = 41;
+            const int SSN_COLUMN = 2; //Tax ID (SSN)
+            const int EMP_LAST_NAME_COLUMN = 3; //Legal Last Name
+            const int EMP_FIRST_NAME_COLUMN = 4; //Legal First Name
+            const int BIRTH_DATE_COLUMN = 7; //Birth Date
+            const int GENDER_COLUMN = 8; //Sex Code
+            const int PHONE_NUMBER_COLUMN = 15; //"Home Phone" or "Mobile Phone" - use mobile phone first and if nothing under mobile phone then use home phone.
+            const int HIRE_DATE_COLUMN = 18; //Hire Date
+            const int TERM_DATE_COLUMN = 19; //Termination Date
+            const int REHIRE_DATE_COLUMN = 20; //Rehire Date
+            const int SALARY_COLUMN = 28; //Annual Salary
+            int ADMIN_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.ADMIN, 30); //Rate - Admin
+            int AIDE_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, 31); //Rate - Para Charter
+            int AIDE_CHARTER_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_CHARTER, 32); //Rate - Para School
+            int BODY_SHOP_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.BODY_SHOP, 34); //Rate - Body Shop
+            int CLEANING_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.CLEANING, 35); //Rate - Cleaning
+            int DRIVER_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.DRIVER_SCHOOL, 36); //Rate - Driver School
+            int DRIVER_CHARTER_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.DRIVER_CHARTER, 37); //Rate - Driver Charter
+            int MECHANIC_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.MECHANIC, 38); //Rate - Mechanic
+            int WASH_BAY_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.WASH_BAY, 40); //Rate - Wash Bay
+            const int EMP_NUMBER_COLUMN = 41; //"File Number" - (it is in string format, I'm not sure if that matters. It has extra '0's in front of the number)
             int TRAINING_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.TRAINING, 42);
-            const int ORGANIZATION_TAG_COLUMN = 44;
-            const int YEARS_OF_SERVICE_COLUMN = 45;
-            const int EMPLOYMENT_CATEGORY_COLUMN = 47;
-            const int DD_ACCOUNT_1 = 48;
-            const int VACATION_HOURS_COLUMN = 55;
+            const int ORGANIZATION_TAG_COLUMN = 44; //"Location Code" - Entries will be 'FAR', 'GF', or blank, if they are blank, the 'FAR' is assumed unless the employees entry under the header "Primary Address: City" is Grand Forks, which would the mean an entry of 'GF' is assumed (throw a log if GF is assumed).
+            const int YEARS_OF_SERVICE_COLUMN = 45; //"Years of Service" - this is in string format, example1: '27 year, 3 months', example2: '0 year, 1 month'. We only need to parse the year into integer form, months/decimals are not wanted.
+            const int EMPLOYMENT_CATEGORY_COLUMN = 47; //"Worker Category Description" - entries will be 'Full Time' or 'Part Time' or blank, if they are blank the 'Part Time' is assumed.
+            const int DD_ACCOUNT_1 = 48; //deprecated, don't worry about it.
+            const int VACATION_HOURS_COLUMN = 55; //Vacation Balance
 
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
@@ -119,20 +119,72 @@ namespace PayrollProcessor
                     //Log("cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() == " + cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString());
                     if (TryGetIntFromCell(cellData[rowNumber, EMP_NUMBER_COLUMN], out int employeeNumber))
                     {
-                        if (!Program.EmployeeDictionary.ContainsKey(employeeNumber))
+                        bool existedFromWfn = Program.EmployeeDictionary.ContainsKey(employeeNumber);
+                        if (!existedFromWfn)
                         {
                             string? employeeName = cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() + " " + cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString();
-                            Program.EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, employeeName));
+                            Program.EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, employeeName)
+                            {
+                                HireDate = DateTime.MinValue
+                            });
+                            Log("Employee " + employeeName + " (" + employeeNumber + ") found only in iSolvedEmployees.xlsx (not in WfnEmployees.xlsx); importing from iSolved.");
                         }
                         Employee employee = Program.EmployeeDictionary[employeeNumber];
                         employee.WasAlreadyInPayroll = true;
-                        employee.IsMale = !(TryGetStringFromCell(cellData[rowNumber, GENDER_COLUMN], out string gender) && gender == "F");
-                        TryGetStringFromCell(cellData[rowNumber, PHONE_NUMBER_COLUMN], out employee.PhoneNumber);
-                        TryGetStringFromCell(cellData[rowNumber, SSN_COLUMN], out employee.SocialSecurityNumber);
-                        TryGetDateFromCell(cellData[rowNumber, HIRE_DATE_COLUMN], out employee.HireDate);
-                        TryGetDateFromCell(cellData[rowNumber, BIRTH_DATE_COLUMN], out employee.BirthDate);
-                        if (TryGetDateFromCell(cellData[rowNumber, TERM_DATE_COLUMN], out employee.TerminationDate))
+
+                        if ((!existedFromWfn || string.IsNullOrWhiteSpace(employee.SocialSecurityNumber))
+                            && TryGetStringFromCell(cellData[rowNumber, SSN_COLUMN], out string ssn))
                         {
+                            if (existedFromWfn)
+                            {
+                                Log("Filled SocialSecurityNumber for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                            }
+                            employee.SocialSecurityNumber = ssn;
+                        }
+
+                        if (!existedFromWfn)
+                        {
+                            employee.IsMale = !(TryGetStringFromCell(cellData[rowNumber, GENDER_COLUMN], out string gender) && gender == "F");
+                        }
+
+                        if ((!existedFromWfn || string.IsNullOrWhiteSpace(employee.PhoneNumber))
+                            && TryGetStringFromCell(cellData[rowNumber, PHONE_NUMBER_COLUMN], out string phone))
+                        {
+                            if (existedFromWfn)
+                            {
+                                Log("Filled PhoneNumber for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                            }
+                            employee.PhoneNumber = phone;
+                        }
+
+                        if ((!existedFromWfn || employee.HireDate == DateTime.MinValue)
+                            && TryGetDateFromCell(cellData[rowNumber, HIRE_DATE_COLUMN], out DateTime hireDate))
+                        {
+                            if (existedFromWfn)
+                            {
+                                Log("Filled HireDate for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                            }
+                            employee.HireDate = hireDate;
+                        }
+
+                        if ((!existedFromWfn || employee.BirthDate == DateTime.MinValue)
+                            && TryGetDateFromCell(cellData[rowNumber, BIRTH_DATE_COLUMN], out DateTime birthDate))
+                        {
+                            if (existedFromWfn)
+                            {
+                                Log("Filled BirthDate for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                            }
+                            employee.BirthDate = birthDate;
+                        }
+
+                        if ((!existedFromWfn || employee.TerminationDate == DateTime.MinValue)
+                            && TryGetDateFromCell(cellData[rowNumber, TERM_DATE_COLUMN], out DateTime termDate))
+                        {
+                            if (existedFromWfn)
+                            {
+                                Log("Filled TerminationDate for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                            }
+                            employee.TerminationDate = termDate;
                             TryGetDateFromCell(cellData[rowNumber, REHIRE_DATE_COLUMN], out DateTime rehireDate);
                             if (employee.TerminationDate.CompareTo(employee.HireDate) >= 0 && employee.TerminationDate.CompareTo(rehireDate) >= 0)
                             {
@@ -143,44 +195,109 @@ namespace PayrollProcessor
                                 Log("Rehire date for " + employee.Name + " is less than the hire or rehire date.", true);
                             }
                         }
+
                         foreach (KeyValuePair<Jobs, int> entry in payColumns)
                         {
-                            if (TryGetFloatFromCell(cellData[rowNumber, entry.Value], out float payRate))
+                            if (TryGetFloatFromCell(cellData[rowNumber, entry.Value], out float payRate) && payRate > 0f)
                             {
-                                employee.SetPayRate(entry.Key, Math.Max(payRate, employee.PayRates.GetValueOrDefault(entry.Key, 0f)));
-                                if (entry.Key == Jobs.DRIVER_CHARTER)
+                                float existingRate = employee.PayRates.GetValueOrDefault(entry.Key, 0f);
+                                if (existedFromWfn && existingRate <= 0f)
                                 {
-                                    employee.SetPayRate(Jobs.DRIVER_CHARTER_PUBLIC, Math.Max(payRate, employee.PayRates.GetValueOrDefault(entry.Key, 0f)));
+                                    Log("Filled pay rate for " + entry.Key + " for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                                    employee.SetPayRate(entry.Key, payRate);
+                                    if (entry.Key == Jobs.DRIVER_CHARTER)
+                                    {
+                                        employee.SetPayRate(Jobs.DRIVER_CHARTER_PUBLIC, payRate);
+                                    }
+                                }
+                                else if (!existedFromWfn)
+                                {
+                                    employee.SetPayRate(entry.Key, Math.Max(payRate, existingRate));
+                                    if (entry.Key == Jobs.DRIVER_CHARTER)
+                                    {
+                                        employee.SetPayRate(Jobs.DRIVER_CHARTER_PUBLIC, Math.Max(payRate, employee.PayRates.GetValueOrDefault(Jobs.DRIVER_CHARTER_PUBLIC, 0f)));
+                                    }
                                 }
                             }
                         }
+
                         if (TryGetFloatFromCell(cellData[rowNumber, SALARY_COLUMN], out float salary) && salary > 50)
                         {
-                            employee.IsSalaried = true;
-                            employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary);
-                        }
-                        if (!employee.IsAGrandForksEmployee)
-                        {
-                            if (TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string tag))
+                            if (!existedFromWfn)
                             {
-                                employee.IsAGrandForksEmployee = StringSearch(tag, "Grand Forks") || StringSearch(tag, "GF");
+                                employee.IsSalaried = true;
+                                employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary);
+                                employee.CompanyForSalary = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
+                            }
+                            else if (!employee.IsSalaried || employee.AnnualSalaryAmount <= 0f)
+                            {
+                                Log("Filled AnnualSalaryAmount for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                                employee.IsSalaried = true;
+                                employee.AnnualSalaryAmount = salary;
+                                employee.CompanyForSalary = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
                             }
                         }
-                        employee.IsAMechanicApprentice = TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string s) && StringSearch(s, "Apprentice");
-                        if (TryGetIntFromCell(cellData[rowNumber, YEARS_OF_SERVICE_COLUMN], out int yearsOfService))
+
+                        if (!employee.IsAGrandForksEmployee)
                         {
-                            employee.YearsOfService = Math.Max(yearsOfService, employee.YearsOfService);
+                            if (TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string tag)
+                                && (StringSearch(tag, "Grand Forks") || StringSearch(tag, "GF")))
+                            {
+                                if (existedFromWfn)
+                                {
+                                    Log("Filled IsAGrandForksEmployee for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                                }
+                                employee.IsAGrandForksEmployee = true;
+                            }
                         }
-                        if (employee.EmploymentCategory != "ACAFT")
+
+                        if (!employee.IsAMechanicApprentice)
                         {
-                            TryGetStringFromCell(cellData[rowNumber, EMPLOYMENT_CATEGORY_COLUMN], out employee.EmploymentCategory);
+                            if (TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string orgTag) && StringSearch(orgTag, "Apprentice"))
+                            {
+                                if (existedFromWfn)
+                                {
+                                    Log("Filled IsAMechanicApprentice for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                                }
+                                employee.IsAMechanicApprentice = true;
+                            }
                         }
+
+                        if (!WfnEmployeesReader.EmployeesWithYearsOfServiceFromWfn.Contains(employeeNumber))
+                        {
+                            int yearsOfService = 0;
+                            bool gotYears = WfnEmployeesReader.TryParseYearsOfService(cellData[rowNumber, YEARS_OF_SERVICE_COLUMN], out yearsOfService)
+                                || TryGetIntFromCell(cellData[rowNumber, YEARS_OF_SERVICE_COLUMN], out yearsOfService);
+                            if (gotYears)
+                            {
+                                if (existedFromWfn)
+                                {
+                                    Log("Filled YearsOfService for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                                }
+                                employee.YearsOfService = Math.Max(yearsOfService, employee.YearsOfService);
+                            }
+                        }
+
+                        if (string.IsNullOrWhiteSpace(employee.EmploymentCategory)
+                            && TryGetStringFromCell(cellData[rowNumber, EMPLOYMENT_CATEGORY_COLUMN], out string category))
+                        {
+                            if (existedFromWfn)
+                            {
+                                Log("Filled EmploymentCategory for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                            }
+                            employee.EmploymentCategory = WfnEmployeesReader.MapEmploymentCategory(category);
+                        }
+
                         if (!employee.HasAnActiveDirectDepositAccount)
                         {
                             for (int i = 0; i < 6; i++)
                             {
                                 if (TryGetStringFromCell(cellData[rowNumber, DD_ACCOUNT_1 + i], out string accountStatus))
                                 {
+                                    if (existedFromWfn && !employee.HasAnyDirectDepositAccount)
+                                    {
+                                        Log("Filled direct deposit status for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                                    }
                                     employee.HasAnyDirectDepositAccount = true;
                                     if ((i == 5 && accountStatus != "") || accountStatus == "Active")
                                     {
@@ -190,8 +307,14 @@ namespace PayrollProcessor
                                 }
                             }
                         }
-                        if (TryGetFloatFromCell(cellData[rowNumber, VACATION_HOURS_COLUMN], out float vacationHours))
+
+                        if (!WfnEmployeesReader.EmployeesWithVacationFromWfn.Contains(employeeNumber)
+                            && TryGetFloatFromCell(cellData[rowNumber, VACATION_HOURS_COLUMN], out float vacationHours))
                         {
+                            if (existedFromWfn)
+                            {
+                                Log("Filled VacationHours for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                            }
                             employee.VacationHours = Math.Max(vacationHours, employee.VacationHours);
                         }
                     }
@@ -1621,7 +1744,6 @@ namespace PayrollProcessor
             p.Start();
         }
 
-
         public void WriteWfnPayrollImports()
         {
             List<Employee> sortedEmployees = EmployeeDictionary
@@ -1753,7 +1875,7 @@ namespace PayrollProcessor
                         }
                     }
 
-                    if (employeeHasWfnPayRowsForThisCompany && emp.IsSalaried)
+                    if (employeeHasWfnPayRowsForThisCompany && emp.IsSalaried && emp.CompanyForSalary == (Company) company)
                     {
                         AddWfnSalaryRows(rows, emp, (Company)company, batchId);
                     }
@@ -2373,6 +2495,90 @@ namespace PayrollProcessor
             }
         }
 
+        private static string GetDdAccountField(Dictionary<string, object> account, string fieldName)
+        {
+            return account.TryGetValue(fieldName, out object? value) && value != null ? value.ToString()?.Trim() ?? "" : "";
+        }
+
+        /// <summary>
+        /// Builds ADP bank-deposit columns for one DD account.
+        /// Returns false (and logs) when the account must be discarded (e.g. routing number is not 9 digits).
+        /// </summary>
+        private static bool TryAddAdpBankDepositFields(Dictionary<string, string> adpFields, Dictionary<string, object> account, int positionNumber, Employee employee)
+        {
+            string routingNumber = GetDdAccountField(account, "RoutingNumber");
+            string routingDigits = new string(routingNumber.Where(char.IsDigit).ToArray());
+            if (routingDigits.Length != 9)
+            {
+                Log("Discarding DD account #" + positionNumber + " for " + employee.Name + " (" + employee.IdNumber + "): routing number is not 9 digits (" + routingNumber + ").", true);
+                return false;
+            }
+
+            string accountNumber = GetDdAccountField(account, "AccountNumber");
+            if (string.IsNullOrWhiteSpace(accountNumber))
+            {
+                Log("Discarding DD account #" + positionNumber + " for " + employee.Name + " (" + employee.IdNumber + "): missing account number.", true);
+                return false;
+            }
+
+            string amount = GetDdAccountField(account, "Amount");
+            string percent = GetDdAccountField(account, "Percent");
+            string sequence = GetDdAccountField(account, "Sequence");
+            bool isFullDeposit = sequence == "0"
+                || (string.IsNullOrWhiteSpace(amount) && string.IsNullOrWhiteSpace(percent));
+
+            string percentNet = "";
+            string deductionAmount = "";
+            string partialNet = "";
+            string fullDepositFlag = "N";
+
+            if (isFullDeposit)
+            {
+                fullDepositFlag = "Y";
+            }
+            else if (!string.IsNullOrWhiteSpace(percent) && float.TryParse(percent, out float percentValue))
+            {
+                if (percentValue >= 100f)
+                {
+                    fullDepositFlag = "Y";
+                }
+                else
+                {
+                    percentNet = percent;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(amount))
+            {
+                deductionAmount = amount;
+            }
+
+            adpFields["Bank Deposit Position Number"] = positionNumber.ToString();
+            adpFields["Bank Deposit Deduction Code"] = "CK" + positionNumber;
+            adpFields["Bank Deposit Routing Number"] = routingDigits;
+            adpFields["Bank Deposit Account Number"] = accountNumber;
+            adpFields["Bank Deposit Partial Net"] = partialNet;
+            adpFields["Bank Full Deposit Flag"] = fullDepositFlag;
+            adpFields["Bank Deposit Deduction Amount"] = deductionAmount;
+            adpFields["Bank Deposit Prenote Code"] = "O";
+            adpFields["Bank Deposit Prenote Date"] = DateTime.Today.ToShortDateString();
+            adpFields["Bank Deposit Percent Net"] = percentNet;
+            return true;
+        }
+
+        private static List<Dictionary<string, object>> GetValidDdAccountsForAdp(ImportedEmployee importedEmployee)
+        {
+            List<Dictionary<string, object>> accounts = new();
+            foreach (Dictionary<string, object> account in importedEmployee.DDAccounts)
+            {
+                if (!string.IsNullOrWhiteSpace(GetDdAccountField(account, "AccountNumber"))
+                    || !string.IsNullOrWhiteSpace(GetDdAccountField(account, "RoutingNumber")))
+                {
+                    accounts.Add(account);
+                }
+            }
+            return accounts;
+        }
+
         private static readonly List<string> AdpNewHireImportHeaders = new()
         {
             "Associate ID",
@@ -2413,6 +2619,20 @@ namespace PayrollProcessor
             "Address 1 State Postal Code",
             "Address 1 Zip Code",
             "FLSA OVERTIME",
+            "Mobile Phone Number",
+            "Personal Email Address",
+            "Bank Deposit Position Number", //mandatory for each DD account, entry is 1 for first account, 2 for second, etc.
+            "Bank Deposit Deduction Code", //mandatory for each DD account, entry is CK1 for first account, CK2 for second, etc.
+            "Bank Deposit Routing Number", //mandatory for each DD account, if routing number is not 9 digits, discard entire account and log an error.
+            "Bank Deposit Account Number", //mandatory for each DD account
+            "Bank Deposit Partial Net", //number if a partial net deposit is desired, otherwise leave blank
+            "Bank Full Deposit Flag", //Y if the full net pay is to be deposited into this account, otherwise "N"
+            "Bank Deposit Deduction Amount", //number if a specific amount is to be deposited into this account, otherwise leave blank
+            "Bank Deposit Prenote Code", //always "O"
+            "Bank Deposit Prenote Date", //always today's date
+            "Bank Deposit Percent Net", //number if a percentage of net pay is to be deposited into this account, otherwise leave blank (special note: if this value is >= 100, leave this blank and set the Bank Full Deposit Flag to "Y" instead)
+
+
             "Rate - Admin",
             "Rate - Para School",
             "Rate - Para Charter",
@@ -2427,14 +2647,8 @@ namespace PayrollProcessor
 
         private object[,] BuildAdpNewHireImportMatrix()
         {
-            object[,] adpMatrix = new string[ImportEmployees.Count + 1, AdpNewHireImportHeaders.Count];
+            List<Dictionary<string, string>> dataRows = new();
 
-            for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
-            {
-                adpMatrix[0, columnNumber] = AdpNewHireImportHeaders[columnNumber];
-            }
-
-            int rowNumber = 1;
             foreach (var employeeEntry in ImportEmployees)
             {
                 Employee employee = EmployeeDictionary[employeeEntry.Key];
@@ -2463,6 +2677,12 @@ namespace PayrollProcessor
                     state = "ND";
                 }
 
+                string mobilePhone = GetImportField(importedEmployee, "HomePhone");
+                if (string.IsNullOrWhiteSpace(mobilePhone))
+                {
+                    mobilePhone = employee.PhoneNumber ?? "";
+                }
+
                 Dictionary<string, string> adpFields;
                 if (isRaiseUpdate)
                 {
@@ -2483,7 +2703,7 @@ namespace PayrollProcessor
                         ["Position ID"] = "MMF" + sixDigitEmployeeNumber,
                         ["Change Effective On"] = changeEffectiveOn,
                         ["Is Paid By WFN"] = "Y",
-                        ["Position Uses Time"] = "N",
+                        ["Position Uses Time "] = "N",
                         ["Tax ID Type"] = "SSN",
                         ["Tax ID Number"] = GetImportField(importedEmployee, "SSN"),
                         ["First Name"] = GetImportField(importedEmployee, "FirstName"),
@@ -2491,15 +2711,12 @@ namespace PayrollProcessor
                         ["Last Name"] = GetImportField(importedEmployee, "LastName"),
                         ["Hire Date"] = hireDate,
                         ["Position Start Date"] = hireDate,
-                        ["Employee Status"] = "A",    // Need ADP validation table values/codes
-                        ["Employee Type"] = "P",
                         ["Gender"] = employee.IsMale ? "M" : "F",
                         ["Rate Type"] = "",
                         ["Rate 1 Amount"] = "",
                         ["Pay Frequency Code"] = "B",
                         ["Standard Hours"] = "",
                         ["Home Department"] = GetAdpHomeDepartment(GetImportField(importedEmployee, "Organization")),
-                        ["Reports To Position ID"] = "No one",
                         ["Birth Date"] = GetImportField(importedEmployee, "BirthDate"),
                         ["Federal Tax Form Year"] = DateTime.Today.Year.ToString(),
                         ["Federal Tax Filing Status"] = GetAdpFederalFilingStatus(GetImportField(importedEmployee, "FedFilingStatus")),
@@ -2514,29 +2731,69 @@ namespace PayrollProcessor
                         ["SUI/SDI Tax Jurisdiction Code"] = "92",
                         ["Assign Onboarding Experience"] = "",
                         ["Job Title"] = GetAdpJobTitle(importedEmployee),
-                        ["Personal E-mail Address"] = GetImportField(importedEmployee, "EmailAddress"),
+                        ["Personal Email Address"] = GetImportField(importedEmployee, "SelfServiceEmail"),
                         ["Address 1 Line 1"] = GetImportField(importedEmployee, "Address1"),
                         ["Address 1 Line 2"] = GetImportField(importedEmployee, "Address2"),
                         ["Address 1 City"] = GetImportField(importedEmployee, "City"),
                         ["Address 1 State Postal Code"] = state,
                         ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode"),
-                        ["FLSA OVERTIME"] = "Y"
+                        ["FLSA OVERTIME"] = "Y",
+                        ["Mobile Phone Number"] = mobilePhone,
                         //["Will Worker Complete Form I-9"] = "Y"
                     };
                 }
 
                 AddAdpRateFields(adpFields, importedEmployee);
 
+                if (isRaiseUpdate)
+                {
+                    dataRows.Add(adpFields);
+                    continue;
+                }
+
+                List<Dictionary<string, object>> ddAccounts = GetValidDdAccountsForAdp(importedEmployee);
+                if (ddAccounts.Count == 0)
+                {
+                    dataRows.Add(adpFields);
+                    continue;
+                }
+
+                int positionNumber = 1;
+                bool wroteAnyBankRow = false;
+                foreach (Dictionary<string, object> account in ddAccounts)
+                {
+                    Dictionary<string, string> rowFields = new(adpFields);
+                    if (TryAddAdpBankDepositFields(rowFields, account, positionNumber, employee))
+                    {
+                        dataRows.Add(rowFields);
+                        wroteAnyBankRow = true;
+                        positionNumber++;
+                    }
+                }
+
+                if (!wroteAnyBankRow)
+                {
+                    dataRows.Add(adpFields);
+                }
+            }
+
+            object[,] adpMatrix = new string[dataRows.Count + 1, AdpNewHireImportHeaders.Count];
+            for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
+            {
+                adpMatrix[0, columnNumber] = AdpNewHireImportHeaders[columnNumber];
+            }
+
+            for (int rowNumber = 0; rowNumber < dataRows.Count; rowNumber++)
+            {
+                Dictionary<string, string> adpFields = dataRows[rowNumber];
                 for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
                 {
                     string header = AdpNewHireImportHeaders[columnNumber];
                     if (adpFields.TryGetValue(header, out string? value))
                     {
-                        adpMatrix[rowNumber, columnNumber] = value;
+                        adpMatrix[rowNumber + 1, columnNumber] = value;
                     }
                 }
-
-                rowNumber++;
             }
 
             return adpMatrix;
@@ -2650,14 +2907,14 @@ namespace PayrollProcessor
 
             List<string> paths = new()
             {
-                { DesktopPath() + "EmployeeImport.xlsx" },
+                //{ DesktopPath() + "EmployeeImport.xlsx" },
                 //{ DesktopPath() + "RaiseImport.xlsx" },
                 { DesktopPath() + "DirectDepositImport.xlsx" },
                 { DesktopPath() + "ADP_NewHireImport.csv" }
             };
             List<object[,]> matricis = new()
             {
-                { employeeMatrix },
+                //{ employeeMatrix },
                 //{raiseMatrix },
                 { directDepositMatrix },
                 { adpNewHireMatrix }

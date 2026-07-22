@@ -78,6 +78,7 @@ namespace PayrollProcessor
             ApplicationConfiguration.Initialize();
             ExcelWorker = new();
             CheckForVacationCutOff(ExcelWorker.FirstDayWeek2);
+            new WfnEmployeesReader().Read();
             ExcelWorker.ReadIsolvedEmployees();
             ExcelWorker.PreCheckTimeSheets();
             ManualEntriesTracker.GetInstance().PreCheckForNewEmployees();
@@ -93,7 +94,7 @@ namespace PayrollProcessor
             new VacationTracker().ProcessAndWriteCsv(EmployeeDictionary.Values);
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WriteWfnPayrollImports();
-            ExcelWorker.WritePayrollImports();
+            //ExcelWorker.WritePayrollImports();
             ExcelWorker.WriteBirthDates();
             ExcelWorker.WriteOverTimeReport();
             FinalLogging();
@@ -919,7 +920,7 @@ namespace PayrollProcessor
                 }
             }
 
-            if (jobType == Jobs.DRIVER_SCHOOL && employee.IsAGrandForksEmployee && employee.HireDate.CompareTo(new DateTime(2024, 05, 01)) < 0)
+            if (jobType == Jobs.DRIVER_SCHOOL && employee.IsAGrandForksEmployee && employee.HireDate != DateTime.MinValue && employee.HireDate.CompareTo(new DateTime(2024, 05, 01)) < 0)
             {
                 modifier = Math.Max(modifier, 1f);
             }
