@@ -16,7 +16,8 @@ namespace PayrollProcessor
         public float[,] OverTimeHours = new float[2,3]; //[company, week number]
         public bool IsSalaried;
         public float AnnualSalaryAmount;
-        public Company CompanyForSalary;
+        public Company PrimaryCompany;
+        public HashSet<Company> ActiveCompanies;
         public bool IsAGrandForksEmployee;
         public string SocialSecurityNumber;
         public DateTime HireDate = DateTime.Now;

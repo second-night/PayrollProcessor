@@ -72,6 +72,7 @@ namespace PayrollProcessor
 
         public void ReadIsolvedEmployees()
         {
+            return; //deprecated file
             if (!CheckForExcelFileOnDesktop("iSolvedEmployees.xlsx", out string filePath))
             {
                 return;
@@ -213,10 +214,6 @@ namespace PayrollProcessor
                                 else if (!existedFromWfn)
                                 {
                                     employee.SetPayRate(entry.Key, Math.Max(payRate, existingRate));
-                                    if (entry.Key == Jobs.DRIVER_CHARTER)
-                                    {
-                                        employee.SetPayRate(Jobs.DRIVER_CHARTER_PUBLIC, Math.Max(payRate, employee.PayRates.GetValueOrDefault(Jobs.DRIVER_CHARTER_PUBLIC, 0f)));
-                                    }
                                 }
                             }
                         }
@@ -227,14 +224,14 @@ namespace PayrollProcessor
                             {
                                 employee.IsSalaried = true;
                                 employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary);
-                                employee.CompanyForSalary = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
+                                employee.PrimaryCompany = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
                             }
                             else if (!employee.IsSalaried || employee.AnnualSalaryAmount <= 0f)
                             {
                                 Log("Filled AnnualSalaryAmount for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
                                 employee.IsSalaried = true;
                                 employee.AnnualSalaryAmount = salary;
-                                employee.CompanyForSalary = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
+                                employee.PrimaryCompany = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
                             }
                         }
 
@@ -288,35 +285,35 @@ namespace PayrollProcessor
                             employee.EmploymentCategory = WfnEmployeesReader.MapEmploymentCategory(category);
                         }
 
-                        if (!employee.HasAnActiveDirectDepositAccount)
-                        {
-                            for (int i = 0; i < 6; i++)
-                            {
-                                if (TryGetStringFromCell(cellData[rowNumber, DD_ACCOUNT_1 + i], out string accountStatus))
-                                {
-                                    if (existedFromWfn && !employee.HasAnyDirectDepositAccount)
-                                    {
-                                        Log("Filled direct deposit status for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                                    }
-                                    employee.HasAnyDirectDepositAccount = true;
-                                    if ((i == 5 && accountStatus != "") || accountStatus == "Active")
-                                    {
-                                        employee.HasAnActiveDirectDepositAccount = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+                        //if (!employee.HasAnActiveDirectDepositAccount)
+                        //{
+                        //    for (int i = 0; i < 6; i++)
+                        //    {
+                        //        if (TryGetStringFromCell(cellData[rowNumber, DD_ACCOUNT_1 + i], out string accountStatus))
+                        //        {
+                        //            if (existedFromWfn && !employee.HasAnyDirectDepositAccount)
+                        //            {
+                        //                Log("Filled direct deposit status for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                        //            }
+                        //            employee.HasAnyDirectDepositAccount = true;
+                        //            if ((i == 5 && accountStatus != "") || accountStatus == "Active")
+                        //            {
+                        //                employee.HasAnActiveDirectDepositAccount = true;
+                        //                break;
+                        //            }
+                        //        }
+                        //    }
+                        //}
 
-                        if (!WfnEmployeesReader.EmployeesWithVacationFromWfn.Contains(employeeNumber)
-                            && TryGetFloatFromCell(cellData[rowNumber, VACATION_HOURS_COLUMN], out float vacationHours))
-                        {
-                            if (existedFromWfn)
-                            {
-                                Log("Filled VacationHours for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                            }
-                            employee.VacationHours = Math.Max(vacationHours, employee.VacationHours);
-                        }
+                        //if (!WfnEmployeesReader.EmployeesWithVacationFromWfn.Contains(employeeNumber)
+                        //    && TryGetFloatFromCell(cellData[rowNumber, VACATION_HOURS_COLUMN], out float vacationHours))
+                        //{
+                        //    if (existedFromWfn)
+                        //    {
+                        //        Log("Filled VacationHours for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
+                        //    }
+                        //    employee.VacationHours = Math.Max(vacationHours, employee.VacationHours);
+                        //}
                     }
                 }
             }
@@ -577,26 +574,26 @@ namespace PayrollProcessor
                             {
                                 continue;
                             }
-                            switch (header)
-                            {
-                                case "Date Received (Direct Deposit Authorization )":
+                            //switch (header)
+                            //{
+                            //    case "Date Received (Direct Deposit Authorization )":
 
-                                    if (TryGetDateFromCell(cell, out employee.DateOfDirectDepositUpdateInWorkBright))
-                                    {
-                                        if (employee.WasAlreadyInPayroll && !FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(header))
-                                        {
-                                            if (employee.DateOfDirectDepositUpdateInWorkBright.AddDays(14).CompareTo(DateTime.Today) > 0)
-                                            {
-                                                if (PrintForm.InputBool("Should direct deposit should be imported for " + employee.Name + " ? "))
-                                                {
-                                                    bOverride = true;
-                                                    employee.needsDDImported = true;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    break;
-                            }
+                            //        if (TryGetDateFromCell(cell, out employee.DateOfDirectDepositUpdateInWorkBright))
+                            //        {
+                            //            if (employee.WasAlreadyInPayroll && !FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(header))
+                            //            {
+                            //                if (employee.DateOfDirectDepositUpdateInWorkBright.AddDays(14).CompareTo(DateTime.Today) > 0)
+                            //                {
+                            //                    if (PrintForm.InputBool("Should direct deposit should be imported for " + employee.Name + " ? "))
+                            //                    {
+                            //                        bOverride = true;
+                            //                        employee.needsDDImported = true;
+                            //                    }
+                            //                }
+                            //            }
+                            //        }
+                            //        break;
+                            //}
                             if (!bOverride && employee.WasAlreadyInPayroll && !FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll.Contains(header))
                             {
                                 continue;
@@ -1098,7 +1095,7 @@ namespace PayrollProcessor
                                 if (int.TryParse(busNumberString, out shift.BusNumber))
                                 {
                                 }
-                                
+
                             }
                         }
                         else if (TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out shift.BusNumber))
@@ -1351,7 +1348,7 @@ namespace PayrollProcessor
                         TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out int busNumber);
                         TryGetFloatFromCell(cellData[rowNumber, HOURS_COLUMN], out float hours);
 
-                        
+
 
                         float payRate = 0f;
                         if (hours > 0.001f)
@@ -1363,7 +1360,7 @@ namespace PayrollProcessor
                             }
                             dollars = 0f;
                             bonus = 0f;
-                        } 
+                        }
                         else if (busNumber > 699 && busNumber < 800 && bonus > 0.01f) //if bonus is 0, then the employee probably got the benefit of a minimum guarantee so they don't get overtime.
                         {
                             hours = (dollars + bonus) / T_AND_J_CHARTER_RATE;
@@ -1511,7 +1508,7 @@ namespace PayrollProcessor
                             }
                             else
                             {
-                                Log("Can't determine day for exception: " +  exceptionInstructions, true);
+                                Log("Can't determine day for exception: " + exceptionInstructions, true);
                             }
                             for (int column = 0; column <= (int)RouteTimeContext.AFTERNOON; column++)
                             {
@@ -1619,10 +1616,10 @@ namespace PayrollProcessor
                     {
                         if (!Program.EmployeeIdsToIgnore.Contains(emp.IdNumber) && emp.Shifts.Count > 0)
                         {
-                            if (!emp.HasAnActiveDirectDepositAccount)
-                            {
-                                DelayedLog("Employee: " + emp.Name + " (" + emp.IdNumber + ") has no active DD account. Phone: " + emp.PhoneNumber);
-                            }
+                            //if (!emp.HasAnActiveDirectDepositAccount)
+                            //{
+                            //    DelayedLog("Employee: " + emp.Name + " (" + emp.IdNumber + ") has no active DD account. Phone: " + emp.PhoneNumber);
+                            //}
                             if (emp.IsPartialEntry)
                             {
                                 if (!emp.WasReportedForPartialEntry)
@@ -1802,7 +1799,7 @@ namespace PayrollProcessor
                                 bEmployeeHasShownVacation = true;
                                 Company com = emp.IdNumber == 1734 || emp.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
                                 Dictionary<string, string> row = MakeBaseWfnRow(emp, com, batchId);
-                                row["VBL"] = vacationHours.ToString();
+                                //row["VBL"] = vacationHours.ToString();
                             }
 
                             foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
@@ -1875,7 +1872,7 @@ namespace PayrollProcessor
                         }
                     }
 
-                    if (employeeHasWfnPayRowsForThisCompany && emp.IsSalaried && emp.CompanyForSalary == (Company) company)
+                    if (employeeHasWfnPayRowsForThisCompany && emp.IsSalaried && emp.PrimaryCompany == (Company)company)
                     {
                         AddWfnSalaryRows(rows, emp, (Company)company, batchId);
                     }
@@ -1915,7 +1912,7 @@ namespace PayrollProcessor
             "FLSA Workweek",
             "Temp Dept",
             "Temp Rate",
-            "VBL"
+            //"VBL"
         };
 
         private static string GetWfnCompanyCode(Company company)
@@ -2423,6 +2420,10 @@ namespace PayrollProcessor
             {
                 return "000025";
             }
+            if (StringSearch(jobString, "mech"))
+            {
+                return "000007";
+            }
             Log("Problem determining ADP home department for job string: " + jobString, true);
             return "";
         }
@@ -2453,8 +2454,18 @@ namespace PayrollProcessor
             {
                 return "PARA";
             }
-            Log("Couldn't find a job title for this employee, defaulting to job title of 'Employee': " + GetImportField(importedEmployee, "FirstName") + " " + GetImportField(importedEmployee, "LastName") + ", job field: " + job, true);
+            if (job == "7" || StringSearch(job, "mech") || StringSearch(job, "000007"))
+            {
+                return "MECHNC";
+            }
+            Log("Couldn't find a job title for this employee, defaulting to job title of " + job + " for " + GetImportField(importedEmployee, "FirstName") + " " + GetImportField(importedEmployee, "LastName") + ", job field: " + job, true);
             return job;
+        }
+
+        private static bool PositionIsFullTime(ImportedEmployee importedEmployee)
+        {
+            string JobTitle = GetAdpJobTitle(importedEmployee);
+            return JobTitle != "PARA" && JobTitle != "DRDLYSC";
         }
 
         // Isolved ImportFields rate keys -> ADP_NewHireImport.csv rate column headers
@@ -2552,11 +2563,11 @@ namespace PayrollProcessor
                 deductionAmount = amount;
             }
 
-            adpFields["Bank Deposit Position Number"] = positionNumber.ToString();
+            //adpFields["Bank Deposit Position Number"] = positionNumber.ToString();
             adpFields["Bank Deposit Deduction Code"] = "CK" + positionNumber;
             adpFields["Bank Deposit Routing Number"] = routingDigits;
             adpFields["Bank Deposit Account Number"] = accountNumber;
-            adpFields["Bank Deposit Partial Net"] = partialNet;
+            //adpFields["Bank Deposit Partial Net"] = partialNet;
             adpFields["Bank Full Deposit Flag"] = fullDepositFlag;
             adpFields["Bank Deposit Deduction Amount"] = deductionAmount;
             adpFields["Bank Deposit Prenote Code"] = "O";
@@ -2578,14 +2589,14 @@ namespace PayrollProcessor
             }
             return accounts;
         }
-
+        
         private static readonly List<string> AdpNewHireImportHeaders = new()
         {
             "Associate ID",
             "Position ID",
             "Change Effective On",
             "Is Paid By WFN",
-            "Position Uses Time ",
+            //"Position Uses Time",
             "Tax ID Type",
             "Tax ID Number",
             "First Name",
@@ -2597,7 +2608,9 @@ namespace PayrollProcessor
             "Rate Type",
             "Rate 1 Amount",
             "Pay Frequency Code",
+            //"Employee Status",
             "Standard Hours",
+            "Worker Category or Employee Type",
             "Home Department",
             "Birth Date",
             "Federal Tax Form Year",
@@ -2609,7 +2622,7 @@ namespace PayrollProcessor
             "Federal Tax Additional Amount",
             "Federal Tax Exemptions",
             "Worked State Tax Code",
-            "State Marital Status",
+            //"State Marital Status",
             "SUI/SDI Tax Jurisdiction Code",
             "Assign Onboarding Experience",
             "Job Title",
@@ -2619,13 +2632,11 @@ namespace PayrollProcessor
             "Address 1 State Postal Code",
             "Address 1 Zip Code",
             "FLSA OVERTIME",
-            "Mobile Phone Number",
-            "Personal Email Address",
-            "Bank Deposit Position Number", //mandatory for each DD account, entry is 1 for first account, 2 for second, etc.
+            "Mobile Phone Number", //missing
+            "Personal Email Address", //missing
             "Bank Deposit Deduction Code", //mandatory for each DD account, entry is CK1 for first account, CK2 for second, etc.
             "Bank Deposit Routing Number", //mandatory for each DD account, if routing number is not 9 digits, discard entire account and log an error.
             "Bank Deposit Account Number", //mandatory for each DD account
-            "Bank Deposit Partial Net", //number if a partial net deposit is desired, otherwise leave blank
             "Bank Full Deposit Flag", //Y if the full net pay is to be deposited into this account, otherwise "N"
             "Bank Deposit Deduction Amount", //number if a specific amount is to be deposited into this account, otherwise leave blank
             "Bank Deposit Prenote Code", //always "O"
@@ -2703,7 +2714,7 @@ namespace PayrollProcessor
                         ["Position ID"] = "MMF" + sixDigitEmployeeNumber,
                         ["Change Effective On"] = changeEffectiveOn,
                         ["Is Paid By WFN"] = "Y",
-                        ["Position Uses Time "] = "N",
+                        //["Position Uses Time"] = "N",
                         ["Tax ID Type"] = "SSN",
                         ["Tax ID Number"] = GetImportField(importedEmployee, "SSN"),
                         ["First Name"] = GetImportField(importedEmployee, "FirstName"),
@@ -2715,7 +2726,9 @@ namespace PayrollProcessor
                         ["Rate Type"] = "",
                         ["Rate 1 Amount"] = "",
                         ["Pay Frequency Code"] = "B",
+                        //["Employee Status"] = "A",
                         ["Standard Hours"] = "",
+                        ["Worker Category or Employee Type"] = PositionIsFullTime(importedEmployee) ? "F" : "P",
                         ["Home Department"] = GetAdpHomeDepartment(GetImportField(importedEmployee, "Organization")),
                         ["Birth Date"] = GetImportField(importedEmployee, "BirthDate"),
                         ["Federal Tax Form Year"] = DateTime.Today.Year.ToString(),
@@ -2727,7 +2740,7 @@ namespace PayrollProcessor
                         ["Federal Tax Additional Amount"] = GetImportField(importedEmployee, "FedAddlAmount"),
                         ["Federal Tax Exemptions"] = GetImportField(importedEmployee, "FedExemptions"),
                         ["Worked State Tax Code"] = "ND",
-                        ["State Marital Status"] = GetAdpStateMaritalStatus(GetImportField(importedEmployee, "StateFilingStatus")),
+                        //["State Marital Status"] = GetAdpStateMaritalStatus(GetImportField(importedEmployee, "StateFilingStatus")),
                         ["SUI/SDI Tax Jurisdiction Code"] = "92",
                         ["Assign Onboarding Experience"] = "",
                         ["Job Title"] = GetAdpJobTitle(importedEmployee),
@@ -2738,7 +2751,7 @@ namespace PayrollProcessor
                         ["Address 1 State Postal Code"] = state,
                         ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode"),
                         ["FLSA OVERTIME"] = "Y",
-                        ["Mobile Phone Number"] = mobilePhone,
+                        ["Mobile Phone Number"] = mobilePhone.Replace("(", "").Replace(")", "").Replace("-", "").Replace(" ", ""),
                         //["Will Worker Complete Form I-9"] = "Y"
                     };
                 }
@@ -3005,7 +3018,7 @@ namespace PayrollProcessor
                 }
             }
             Object[,] activeEmployeesObject = new String[1, 1];
-            activeEmployeesObject[0,0] = String.Join(",", activeEmployees);
+            activeEmployeesObject[0, 0] = String.Join(",", activeEmployees);
 
 
             Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["B15"]];
@@ -3055,7 +3068,7 @@ namespace PayrollProcessor
                         {
                             continue;
                         }
-                    } 
+                    }
                     else if (bDateWasFound)
                     {
                         continue;
@@ -3231,7 +3244,7 @@ namespace PayrollProcessor
 
         private enum TimeCardImportColumns
         {
-            EMP_NUMBER = 0, JOB_CODE, REGULAR_HOURS, REGULAR_HOURS_WEEK, MG_HOURS, MG_WEEK, HOLIDAY_HOURS, HOLIDAY_WEEK, VACATION_HOURS, VACATION_WEEK, PAY_RATE_COLUMN, REGULAR_DOLLARS, OT_HOURS, OT_WEEK, BONUS_DOLLARS_COLUMN, PER_DIEM_DOLLARS_COLUMN, SUMMER_BONUS_HOURS, SUMMER_BONUS_WEEK 
+            EMP_NUMBER = 0, JOB_CODE, REGULAR_HOURS, REGULAR_HOURS_WEEK, MG_HOURS, MG_WEEK, HOLIDAY_HOURS, HOLIDAY_WEEK, VACATION_HOURS, VACATION_WEEK, PAY_RATE_COLUMN, REGULAR_DOLLARS, OT_HOURS, OT_WEEK, BONUS_DOLLARS_COLUMN, PER_DIEM_DOLLARS_COLUMN, SUMMER_BONUS_HOURS, SUMMER_BONUS_WEEK
         }
 
         private void CheckEmployeeNumberWithSocialSecurityNumber(Employee employee)
@@ -3379,7 +3392,7 @@ namespace PayrollProcessor
                 {
                     matrix[rowCounter, (int)dollarColumn] = Math.Round(dollarAmount, 2);
                 }
-            } 
+            }
             else if (shift.PayRate > 0f)
             {
                 matrix[rowCounter, (int)TimeCardImportColumns.PAY_RATE_COLUMN] = Math.Round(shift.PayRate.Value, 2);
@@ -3403,7 +3416,7 @@ namespace PayrollProcessor
                     matrix[rowCounter, (int)TimeCardImportColumns.BONUS_DOLLARS_COLUMN] = Math.Round(shift.BonusDollars, 2);
                 }
             }
-            if (dollarAmount + shift.PerDiem + shift.BonusDollars + time < 0.001f) 
+            if (dollarAmount + shift.PerDiem + shift.BonusDollars + time < 0.001f)
             {
                 Log("How did shift with no time or dollar amount make it here?", true);
             }

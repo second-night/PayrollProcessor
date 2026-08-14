@@ -65,6 +65,9 @@ namespace PayrollProcessor
                     int yearsOfServiceCol = FindColumn(headers, "Years of Service");
                     int employmentCategoryCol = FindColumn(headers, "Worker Category Description");
                     int vacationCol = FindColumn(headers, "Vacation Balance");
+                    int positionStatusCol = FindColumn(headers, "Position Status");
+                    int fileNumberCol = FindColumn(headers, "File Number");
+                    int primaryPositionCol = FindColumn(headers, "Primary Position");
 
                     Dictionary<Jobs, int> payColumns = new();
                     RegisterJobColumn(payColumns, Jobs.ADMIN, FindColumn(headers, "Rate - Admin"));
@@ -90,8 +93,7 @@ namespace PayrollProcessor
                             continue;
                         }
 
-                        bool isNewEmployee = !EmployeeDictionary.ContainsKey(employeeNumber);
-                        if (isNewEmployee)
+                        if (!EmployeeDictionary.ContainsKey(employeeNumber))
                         {
                             string firstName = firstNameCol == -1 ? "" : CellString(cellData[rowNumber, firstNameCol + 1]);
                             string lastName = lastNameCol == -1 ? "" : CellString(cellData[rowNumber, lastNameCol + 1]);
@@ -106,18 +108,22 @@ namespace PayrollProcessor
                         Employee employee = EmployeeDictionary[employeeNumber];
                         employee.WasAlreadyInPayroll = true;
 
-                        ApplyStringIfPresent(cellData, rowNumber, ssnCol, isNewEmployee, ref employee.SocialSecurityNumber);
-                        ApplyGender(cellData, rowNumber, genderCol, isNewEmployee, employee);
-                        ApplyPhone(cellData, rowNumber, mobilePhoneCol, homePhoneCol, isNewEmployee, employee);
-                        ApplyDateIfAbsent(cellData, rowNumber, birthDateCol, isNewEmployee, ref employee.BirthDate);
-                        ApplyHireDate(cellData, rowNumber, hireDateCol, isNewEmployee, employee);
-                        ApplyTermination(cellData, rowNumber, termDateCol, rehireDateCol, isNewEmployee, employee);
+                        ApplyVacation(cellData, rowNumber, vacationCol, employee);
+                        if (!IsPrimaryCompany(cellData, rowNumber, fileNumberCol, primaryPositionCol, positionStatusCol, employee))
+                        {
+                            continue;
+                        }
+                        ApplyStringIfPresent(cellData, rowNumber, ssnCol, ref employee.SocialSecurityNumber);
+                        ApplyGender(cellData, rowNumber, genderCol, employee);
+                        ApplyPhone(cellData, rowNumber, mobilePhoneCol, homePhoneCol, employee);
+                        ApplyDateIfAbsent(cellData, rowNumber, birthDateCol, ref employee.BirthDate);
+                        ApplyHireDate(cellData, rowNumber, hireDateCol, employee);
+                        ApplyTermination(cellData, rowNumber, termDateCol, rehireDateCol, positionStatusCol, employee);
                         ApplyPayRates(cellData, rowNumber, payColumns, employee);
                         ApplySalary(cellData, rowNumber, salaryCol, employee);
-                        ApplyLocation(cellData, rowNumber, locationCodeCol, cityCol, isNewEmployee, employee);
+                        ApplyLocation(cellData, rowNumber, locationCodeCol, cityCol, employee);
                         ApplyYearsOfService(cellData, rowNumber, yearsOfServiceCol, employee);
-                        ApplyEmploymentCategory(cellData, rowNumber, employmentCategoryCol, isNewEmployee, employee);
-                        ApplyVacation(cellData, rowNumber, vacationCol, employee);
+                        ApplyEmploymentCategory(cellData, rowNumber, employmentCategoryCol, employee);
                     }
                 }
             }
@@ -128,43 +134,60 @@ namespace PayrollProcessor
             }
         }
 
-        private static void ApplyStringIfPresent(object[,] cellData, int row, int col, bool isNewEmployee, ref string field)
+        private static void ApplyStringIfPresent(object[,] cellData, int row, int col, ref string field)
         {
             if (col == -1 || !TryGetStringFromCell(cellData[row, col + 1], out string value))
             {
                 return;
             }
 
-            if (isNewEmployee || string.IsNullOrWhiteSpace(field))
+            if (string.IsNullOrWhiteSpace(field))
             {
                 field = value;
             }
         }
 
-        private static void ApplyGender(object[,] cellData, int row, int genderCol, bool isNewEmployee, Employee employee)
+        private static void ApplyGender(object[,] cellData, int row, int genderCol, Employee employee)
         {
             if (genderCol == -1 || !TryGetStringFromCell(cellData[row, genderCol + 1], out string gender))
             {
-                if (isNewEmployee)
-                {
-                    employee.IsMale = true;
-                }
+                employee.IsMale = true;
                 return;
             }
 
-            if (isNewEmployee)
-            {
-                employee.IsMale = gender != "F";
-            }
+            employee.IsMale = gender != "F";
         }
 
-        private static void ApplyPhone(object[,] cellData, int row, int mobileCol, int homeCol, bool isNewEmployee, Employee employee)
+        private static bool IsPrimaryCompany(object[,] cellData, int row, int positionCol, int primaryPositionCol, int positionStatusCol, Employee employee)
         {
-            if (!isNewEmployee && !string.IsNullOrWhiteSpace(employee.PhoneNumber))
+            if (positionCol == -1 || !TryGetStringFromCell(cellData[row, positionCol + 1], out string positionId))
             {
-                return;
+                Log("Couldn't get position ID for employee " + employee.Name + " (" + employee.IdNumber + ") on row " + row, true);
+                return false;
             }
 
+            Company company = positionId.StartsWith("MMF") ? Company.VALLEY_BUS_LLC : Company.VALLEY_BUS_COACHES;
+            TryGetStringFromCell(cellData[row, positionStatusCol + 1], out string positionStatus);
+            if (positionStatus == "Active")
+            {
+                employee.ActiveCompanies.Add(company);
+            }
+
+            if (primaryPositionCol == -1 || !TryGetStringFromCell(cellData[row, primaryPositionCol + 1], out string bIsPrimaryPosition))
+            {
+                Log("Couldn't get primary position flag for employee " + employee.Name + " (" + employee.IdNumber + ") on row " + row, true);
+                return false;
+            }
+            if (StringSearch(bIsPrimaryPosition, "yes"))
+            {
+                employee.PrimaryCompany = company;
+                return true;
+            }
+            return false;
+        }
+
+        private static void ApplyPhone(object[,] cellData, int row, int mobileCol, int homeCol, Employee employee)
+        {
             if (mobileCol != -1 && TryGetStringFromCell(cellData[row, mobileCol + 1], out string mobile))
             {
                 employee.PhoneNumber = mobile;
@@ -177,58 +200,62 @@ namespace PayrollProcessor
             }
         }
 
-        private static void ApplyDateIfAbsent(object[,] cellData, int row, int col, bool isNewEmployee, ref DateTime field)
+        private static void ApplyDateIfAbsent(object[,] cellData, int row, int col, ref DateTime field)
         {
             if (col == -1 || !TryGetDateFromCell(cellData[row, col + 1], out DateTime date))
             {
                 return;
             }
 
-            if (isNewEmployee || field == DateTime.MinValue)
+            if (field == DateTime.MinValue)
             {
                 field = date;
             }
         }
 
-        private static void ApplyHireDate(object[,] cellData, int row, int hireDateCol, bool isNewEmployee, Employee employee)
+        private static void ApplyHireDate(object[,] cellData, int row, int hireDateCol, Employee employee)
         {
             if (hireDateCol == -1 || !TryGetDateFromCell(cellData[row, hireDateCol + 1], out DateTime hireDate))
             {
                 return;
             }
-
-            if (isNewEmployee || employee.HireDate == DateTime.MinValue)
-            {
-                employee.HireDate = hireDate;
-            }
+            employee.HireDate = hireDate;
         }
 
-        private static void ApplyTermination(object[,] cellData, int row, int termCol, int rehireCol, bool isNewEmployee, Employee employee)
+        private static void ApplyTermination(object[,] cellData, int row, int termCol, int rehireCol, int positionStatusCol, Employee employee)
         {
-            if (termCol == -1 || !TryGetDateFromCell(cellData[row, termCol + 1], out DateTime termDate))
+            if (termCol == -1)
             {
+                Log("Couldn't find Termination Date column for employee " + employee.Name + " (" + employee.IdNumber + ") on row " + row, true);
                 return;
             }
-
-            if (!isNewEmployee && employee.TerminationDate != DateTime.MinValue)
+            if (TryGetDateFromCell(cellData[row, termCol + 1], out DateTime termDate) && termDate != DateTime.MinValue)
             {
-                return;
+                employee.TerminationDate = termDate;
+                DateTime rehireDate = DateTime.MinValue;
+                if (rehireCol != -1)
+                {
+                    TryGetDateFromCell(cellData[row, rehireCol + 1], out rehireDate);
+                }
+
+                if (employee.TerminationDate.CompareTo(employee.HireDate) >= 0 && employee.TerminationDate.CompareTo(rehireDate) >= 0)
+                {
+                    employee.IsTerminated = true;
+                }
+                else
+                {
+                    Log("Rehire date for " + employee.Name + " is less than the hire or rehire date.", true);
+                }
             }
 
-            employee.TerminationDate = termDate;
-            DateTime rehireDate = DateTime.MinValue;
-            if (rehireCol != -1)
+            TryGetStringFromCell(cellData[row, positionStatusCol + 1], out string positionStatus);
+            if (positionStatus == "Active" && employee.IsTerminated)
             {
-                TryGetDateFromCell(cellData[row, rehireCol + 1], out rehireDate);
+                Log("Position Status for " + employee.Name + " is Active, but Termination Date is present.");
             }
-
-            if (employee.TerminationDate.CompareTo(employee.HireDate) >= 0 && employee.TerminationDate.CompareTo(rehireDate) >= 0)
+            else if (positionStatus != "Active" && !employee.IsTerminated)
             {
-                employee.IsTerminated = true;
-            }
-            else
-            {
-                Log("Rehire date for " + employee.Name + " is less than the hire or rehire date.", true);
+                Log("Position Status for " + employee.Name + " is not Active, but Termination Date is absent.");
             }
         }
 
@@ -261,18 +288,10 @@ namespace PayrollProcessor
 
             employee.IsSalaried = true;
             employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary);
-            employee.CompanyForSalary = employee.IdNumber == 1734 || employee.IdNumber == 123
-                ? Company.VALLEY_BUS_COACHES
-                : Company.VALLEY_BUS_LLC;
         }
 
-        private static void ApplyLocation(object[,] cellData, int row, int locationCol, int cityCol, bool isNewEmployee, Employee employee)
+        private static void ApplyLocation(object[,] cellData, int row, int locationCol, int cityCol, Employee employee)
         {
-            if (!isNewEmployee && employee.IsAGrandForksEmployee)
-            {
-                return;
-            }
-
             string locationCode = locationCol == -1 ? "" : CellString(cellData[row, locationCol + 1]);
             if (string.IsNullOrWhiteSpace(locationCode))
             {
@@ -282,18 +301,10 @@ namespace PayrollProcessor
                     employee.IsAGrandForksEmployee = true;
                     Log("Assumed Location Code 'GF' for " + employee.Name + " (" + employee.IdNumber + ") because Location Code was blank and Primary Address: City is Grand Forks.");
                 }
-                else if (isNewEmployee)
-                {
-                    employee.IsAGrandForksEmployee = false;
-                }
             }
             else if (StringSearch(locationCode, "GF") || StringSearch(locationCode, "Grand Forks"))
             {
                 employee.IsAGrandForksEmployee = true;
-            }
-            else if (isNewEmployee)
-            {
-                employee.IsAGrandForksEmployee = false;
             }
         }
 
@@ -308,20 +319,16 @@ namespace PayrollProcessor
             employee.YearsOfService = Math.Max(yearsOfService, employee.YearsOfService);
         }
 
-        private static void ApplyEmploymentCategory(object[,] cellData, int row, int col, bool isNewEmployee, Employee employee)
+        private static void ApplyEmploymentCategory(object[,] cellData, int row, int col, Employee employee)
         {
-            if (!isNewEmployee && !string.IsNullOrWhiteSpace(employee.EmploymentCategory))
-            {
-                return;
-            }
-
             string categoryDescription = "";
             if (col != -1)
             {
-                TryGetStringFromCell(cellData[row, col + 1], out categoryDescription);
+                if (TryGetStringFromCell(cellData[row, col + 1], out categoryDescription))
+                { 
+                    employee.EmploymentCategory = MapEmploymentCategory(categoryDescription); 
+                }
             }
-
-            employee.EmploymentCategory = MapEmploymentCategory(categoryDescription);
         }
 
         private static void ApplyVacation(object[,] cellData, int row, int col, Employee employee)
