@@ -17,7 +17,7 @@ namespace PayrollProcessor
         public bool IsSalaried;
         public float AnnualSalaryAmount;
         public Company PrimaryCompany;
-        public HashSet<Company> ActiveCompanies;
+        public HashSet<Company> ActiveCompanies = new();
         public bool IsAGrandForksEmployee;
         public string SocialSecurityNumber;
         public DateTime HireDate = DateTime.Now;

@@ -8,6 +8,7 @@ namespace PayrollProcessor
         private bool YesNoButton;
         private Button exirtButton;
         private string InputText;
+        private CheckBox checkBox1;
         public PrintForm(string message)
         {
             InitializeComponent();
@@ -24,6 +25,7 @@ namespace PayrollProcessor
             button2 = new Button();
             textBox1 = new TextBox();
             exirtButton = new Button();
+            checkBox1 = new CheckBox();
             SuspendLayout();
             // 
             // label1
@@ -87,12 +89,22 @@ namespace PayrollProcessor
             exirtButton.UseVisualStyleBackColor = true;
             exirtButton.Click += ExitButtonPressed;
             exirtButton.KeyDown += ExitButtonPressed;
-            // 
+            //
+            // checkBox1
+            //
+            checkBox1.AutoSize = true;
+            checkBox1.Location = new Point(24, 145);
+            checkBox1.Name = "checkBox1";
+            checkBox1.Size = new Size(80, 19);
+            checkBox1.TabIndex = 5;
+            checkBox1.Visible = false;
+            //
             // PrintForm
             // 
             AutoSize = true;
             ClientSize = new Size(284, 261);
             Controls.Add(exirtButton);
+            Controls.Add(checkBox1);
             Controls.Add(textBox1);
             Controls.Add(button2);
             Controls.Add(dateTimePicker1);
@@ -138,6 +150,23 @@ namespace PayrollProcessor
             form.button1.Visible = true;
             Application.Run(form);
             dateTime = new(form.DateTime.Year, form.DateTime.Month, form.DateTime.Day);
+            return form.YesNoButton;
+        }
+
+        public static bool InputDateTime(string message, string checkboxText, bool defaultCheckboxValue,
+            out DateTime dateTime, out bool checkboxValue)
+        {
+            PrintForm form = new PrintForm(message);
+            form.dateTimePicker1.Visible = true;
+            form.checkBox1.Text = checkboxText;
+            form.checkBox1.Checked = defaultCheckboxValue;
+            form.checkBox1.Visible = true;
+            form.button2.Text = "Yes";
+            form.button1.Text = "No";
+            form.button1.Visible = true;
+            Application.Run(form);
+            dateTime = new(form.DateTime.Year, form.DateTime.Month, form.DateTime.Day);
+            checkboxValue = form.checkBox1.Checked;
             return form.YesNoButton;
         }
 

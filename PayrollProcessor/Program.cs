@@ -91,8 +91,11 @@ namespace PayrollProcessor
             CalculateMinimumGuarantees();
             TotalUpShiftsForEmployees();
             manualEntriesTracker.ApplyVacationRoundUp();
+            ExcelWorker.PayrollHistory.LoadPreviousPayPeriods(ExcelWorker.FirstDayWeek2.AddDays(12));
+            ExcelWorker.PayrollHistory.EvaluateEmployees(EmployeeDictionary.Values);
             new VacationTracker().ProcessAndWriteCsv(EmployeeDictionary.Values);
             ExcelWorker.WriteEmployeeImports();
+            ExcelWorker.WritePayrollHistory();
             ExcelWorker.WriteWfnPayrollImports();
             //ExcelWorker.WritePayrollImports();
             ExcelWorker.WriteBirthDates();

@@ -21,13 +21,22 @@ namespace PayrollProcessor
         public static Dictionary<int, ImportedEmployee> ImportEmployees = new();
         public static Dictionary<int, (string FirstName, string LastName)> EmployeeExportByNumber = new();
         public DateTime FirstDayWeek2;
+        public bool IsPrimaryPayrollRun { get; }
+        public EmployeePayrollHistory PayrollHistory { get; } = new();
         HashSet<string> FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll = new() { "EmployeeNumber", "EmploymentCategory", "SSN" };
 
         public ExcelWorker()
         {
             DateTime today = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day);
 
-            if (PrintForm.InputDateTime("Would you like to manually enter the first day of week 2 (as opposed to auto-detecting the date)?", out DateTime dateTime))
+            bool manuallyEnterWeekTwoDate = PrintForm.InputDateTime(
+                "Would you like to manually enter the first day of week 2 (as opposed to auto-detecting the date)?",
+                "This is the primary payroll run (write payroll history records)",
+                true,
+                out DateTime dateTime,
+                out bool isPrimaryPayrollRun);
+            IsPrimaryPayrollRun = isPrimaryPayrollRun;
+            if (manuallyEnterWeekTwoDate)
             {
                 FirstDayWeek2 = dateTime;
             }
@@ -63,7 +72,6 @@ namespace PayrollProcessor
                 Log("ERROR: FirstDayWeek2 must be on a Sunday. Exiting program.", true);
                 Exit();
             }
-
 
             //manual override
             //FirstDayWeek2 = new DateTime(2023, 9, 24);
@@ -1095,12 +1103,16 @@ namespace PayrollProcessor
                                 if (int.TryParse(busNumberString, out shift.BusNumber))
                                 {
                                 }
-
                             }
                         }
                         else if (TryGetIntFromCell(cellData[rowNumber, BUS_NUMBER_COLUMN], out shift.BusNumber))
                         {
                             shift.IsAGrandForksShift = shift.BusNumber >= GF_MIN_BUS && shift.BusNumber <= GF_MAX_BUS;
+                        }
+                        else if (long.TryParse(cellData[rowNumber, BUS_NUMBER_COLUMN].ToString(), out long weirdBusNumber))
+                        {
+                            Log("Weird bus number encountered");
+                            shift.BusNumber = Shift.WEST_FARGO_BUS_PLACE_HOLDER;
                         }
                         else
                         {
@@ -1390,7 +1402,7 @@ namespace PayrollProcessor
                                     ShiftTime = hours / dates.Count,
                                     PayRate = payRate > 1 ? payRate : null,
                                     BusNumber = busNumber,
-                                    CoachTripDays = coachTripDays
+                                    CoachTripDays = 1
                                 };
                                 return shift;
                             }).ToList();
@@ -2608,7 +2620,11 @@ namespace PayrollProcessor
             "Rate Type",
             "Rate 1 Amount",
             "Pay Frequency Code",
-            //"Employee Status",
+            "Employee Status",
+            "Termination Date",
+            "Termination Reason",
+            "Rehire Date",
+            "Rehire Reason",
             "Standard Hours",
             "Worker Category or Employee Type",
             "Home Department",
@@ -2681,7 +2697,7 @@ namespace PayrollProcessor
 
                 string sixDigitEmployeeNumber = GetEmployeeNumberAsSixDigits(employee.IdNumber);
                 string hireDate = GetImportField(importedEmployee, "HireDate");
-                string changeEffectiveOn = isRaiseUpdate ? FirstDayWeek2.ToShortDateString() : hireDate;
+                string changeEffectiveOn = isRaiseUpdate ? FirstDayWeek2.AddDays(-7).ToShortDateString() : hireDate;
                 string state = GetImportField(importedEmployee, "State");
                 if (string.IsNullOrWhiteSpace(state))
                 {
@@ -2790,6 +2806,8 @@ namespace PayrollProcessor
                 }
             }
 
+            AddEmploymentStatusImportRows(dataRows);
+
             object[,] adpMatrix = new string[dataRows.Count + 1, AdpNewHireImportHeaders.Count];
             for (int columnNumber = 0; columnNumber < AdpNewHireImportHeaders.Count; columnNumber++)
             {
@@ -2810,6 +2828,83 @@ namespace PayrollProcessor
             }
 
             return adpMatrix;
+        }
+
+        private void AddEmploymentStatusImportRows(List<Dictionary<string, string>> dataRows)
+        {
+            string changeEffectiveOn = FirstDayWeek2.AddDays(-7).ToShortDateString();
+            DateTime payDate = FirstDayWeek2.AddDays(12);
+
+            foreach (Employee employee in EmployeeDictionary.Values)
+            {
+                if (string.IsNullOrWhiteSpace(employee.SocialSecurityNumber))
+                {
+                    continue;
+                }
+
+                string taxId = employee.SocialSecurityNumber;
+                string employeeNumber = GetEmployeeNumberAsSixDigits(employee.IdNumber);
+                if (PayrollHistory.PartTimeEmployeesNeedingFullTimeStatus.Contains(employee.IdNumber))
+                {
+                    dataRows.Add(new()
+                    {
+                        ["Position ID"] = "MMF" + employeeNumber,
+                        ["Change Effective On"] = changeEffectiveOn,
+                        ["Tax ID Type"] = "SSN",
+                        ["Tax ID Number"] = taxId,
+                        ["Worker Category or Employee Type"] = "F"
+                    });
+                }
+
+                IEnumerable<Company> companies = employee.ActiveCompanies?.Any() == true
+                    ? employee.ActiveCompanies
+                    : new[] { employee.PrimaryCompany };
+                if (PayrollHistory.EmployeesNeedingTermination.Contains(employee.IdNumber))
+                {
+                    string terminationDate = PayrollHistory.GetTerminationDate(employee.IdNumber, payDate).ToShortDateString();
+                    foreach (Company company in companies)
+                    {
+                        dataRows.Add(new()
+                        {
+                            ["Position ID"] = GetPositionId(company, employeeNumber),
+                            ["Change Effective On"] = changeEffectiveOn,
+                            ["Tax ID Type"] = "SSN",
+                            ["Tax ID Number"] = taxId,
+                            ["Employee Status"] = "T",
+                            ["Termination Date"] = terminationDate,
+                            ["Termination Reason"] = "N"
+                        });
+                    }
+                }
+
+                if (PayrollHistory.EmployeesNeedingRehire.Contains(employee.IdNumber))
+                {
+                    foreach (Company company in companies)
+                    {
+                        dataRows.Add(new()
+                        {
+                            ["Position ID"] = GetPositionId(company, employeeNumber),
+                            ["Change Effective On"] = changeEffectiveOn,
+                            ["Tax ID Type"] = "SSN",
+                            ["Tax ID Number"] = taxId,
+                            ["Employee Status"] = "A",
+                            ["Rehire Date"] = changeEffectiveOn,
+                            ["Rehire Reason"] = "CURR"
+                        });
+                    }
+                }
+            }
+        }
+
+        private static string GetPositionId(Company company, string employeeNumber) =>
+            (company == Company.VALLEY_BUS_COACHES ? "MKZ" : "MMF") + employeeNumber;
+
+        public void WritePayrollHistory()
+        {
+            if (IsPrimaryPayrollRun)
+            {
+                PayrollHistory.WriteCurrentPayPeriod(FirstDayWeek2.AddDays(12), EmployeeDictionary.Values);
+            }
         }
 
         public void WriteEmployeeImports()
