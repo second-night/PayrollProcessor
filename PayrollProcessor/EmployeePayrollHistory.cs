@@ -9,12 +9,19 @@ namespace PayrollProcessor
     /// </summary>
     public sealed class EmployeePayrollHistory
     {
-        public sealed record Entry(int EmployeeNumber, Company Company, float TotalHours, float TotalCompensation);
+        public sealed record Entry(int EmployeeNumber, Company Company, float TotalHours, float TotalCompensation,
+            Dictionary<Jobs, float> PayRates, Dictionary<Jobs, float> HoursByJob);
 
         private readonly Dictionary<int, float> historicalHoursByEmployee = new();
         private readonly Dictionary<int, float> fivePreviousPayPeriodHoursByEmployee = new();
         private readonly Dictionary<int, DateTime> lastHoursDateByEmployee = new();
+        private readonly Dictionary<(int EmployeeNumber, Jobs Job), float> latestPayRates = new();
+        private readonly Dictionary<int, Dictionary<Jobs, float>> hoursByJobFromHistory = new();
         private DateTime? earliestHistoryPayDate;
+        private static readonly Jobs[] TrackedPayRateJobs =
+        {
+            Jobs.MECHANIC, Jobs.WASH_BAY, Jobs.ADMIN, Jobs.CLEANING, Jobs.SALARY
+        };
 
         public bool HasSixPreviousPayPeriods { get; private set; }
         private bool HasFiveValidPreviousPayPeriods { get; set; }
@@ -53,6 +60,24 @@ namespace PayrollProcessor
                     ? payDate : earliestHistoryPayDate;
                 foreach (Entry entry in entries)
                 {
+                    foreach ((Jobs job, float rate) in entry.PayRates)
+                    {
+                        latestPayRates.TryAdd((entry.EmployeeNumber, job), rate);
+                    }
+
+                    if (!hoursByJobFromHistory.TryGetValue(entry.EmployeeNumber, out Dictionary<Jobs, float>? hoursByJob))
+                    {
+                        hoursByJob = new();
+                        hoursByJobFromHistory[entry.EmployeeNumber] = hoursByJob;
+                    }
+                    foreach ((Jobs job, float hours) in entry.HoursByJob)
+                    {
+                        if (hours > 0.01f)
+                        {
+                            hoursByJob[job] = hoursByJob.GetValueOrDefault(job) + hours;
+                        }
+                    }
+
                     if (entry.TotalHours > 0.01f)
                     {
                         lastHoursDateByEmployee[entry.EmployeeNumber] =
@@ -117,6 +142,11 @@ namespace PayrollProcessor
             }
         }
 
+        public IReadOnlyDictionary<Jobs, float> GetHoursByJobFromHistory(int employeeNumber) =>
+            hoursByJobFromHistory.TryGetValue(employeeNumber, out Dictionary<Jobs, float>? hoursByJob)
+                ? hoursByJob
+                : new Dictionary<Jobs, float>();
+
         public DateTime GetTerminationDate(int employeeNumber, DateTime fallbackPayDate)
         {
             if (lastHoursDateByEmployee.TryGetValue(employeeNumber, out DateTime lastHoursDate))
@@ -139,6 +169,7 @@ namespace PayrollProcessor
             headers.AddRange(Enum.GetNames<Jobs>().Select(job => $"{job} Compensation"));
             headers.Add("Total Hours");
             headers.Add("Total Compensation");
+            headers.AddRange(TrackedPayRateJobs.Select(job => $"{job} Rate"));
 
             List<List<string>> dataRows = new();
             foreach (Employee employee in employees.OrderBy(employee => employee.IdNumber))
@@ -181,10 +212,13 @@ namespace PayrollProcessor
                     values.AddRange(Enum.GetValues<Jobs>().Select(job => FormatNumber(compensationByJob.GetValueOrDefault(job))));
                     values.Add(FormatNumber(hoursByJob.Values.Sum()));
                     values.Add(FormatNumber(compensationByJob.Values.Sum()));
+                    values.AddRange(TrackedPayRateJobs.Select(job => FormatNumber(GetCurrentPayRate(employee, job))));
                     dataRows.Add(values);
                 }
             }
 
+            Directory.CreateDirectory(HistoryDirectory);
+            WritePayRateChanges(payDate, employees, dataRows.Count > 0);
             int recordCount = dataRows.Count;
             List<string> rows = new() { ToCsvRow(headers) };
             rows.AddRange(dataRows.Select(row =>
@@ -192,9 +226,72 @@ namespace PayrollProcessor
                 row.Insert(4, recordCount.ToString(CultureInfo.InvariantCulture));
                 return ToCsvRow(row);
             }));
-            Directory.CreateDirectory(HistoryDirectory);
             File.WriteAllLines(path, rows);
         }
+
+        private void WritePayRateChanges(DateTime payDate, IEnumerable<Employee> employees, bool hasPayrollRows)
+        {
+            if (!hasPayrollRows)
+            {
+                return;
+            }
+
+            string path = Path.Combine(HistoryDirectory, "PayRateChangeHistory.csv");
+            List<string> headers = new() { "Date of Change", "Employee Number", "Employee Name", "Job", "Old Rate", "New Rate" };
+            HashSet<string> existingChangeKeys = new();
+            if (File.Exists(path))
+            {
+                foreach (string line in File.ReadLines(path).Skip(1))
+                {
+                    string[] values = ParseCsvRow(line);
+                    if (values.Length >= 6)
+                    {
+                        existingChangeKeys.Add(string.Join("|", values[0], values[1], values[3], values[4], values[5]));
+                    }
+                }
+            }
+
+            List<string> newRows = new();
+            foreach (Employee employee in employees.Where(employee => employee.Shifts.Any(shift => !shift.IsATotalsShift)))
+            {
+                foreach (Jobs job in TrackedPayRateJobs)
+                {
+                    float newRate = GetCurrentPayRate(employee, job);
+                    if (!latestPayRates.TryGetValue((employee.IdNumber, job), out float oldRate)
+                        || Math.Abs(oldRate - newRate) < 0.001f)
+                    {
+                        continue;
+                    }
+
+                    string[] values =
+                    {
+                        payDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        employee.IdNumber.ToString(CultureInfo.InvariantCulture),
+                        employee.Name,
+                        job.ToString(),
+                        FormatNumber(oldRate),
+                        FormatNumber(newRate)
+                    };
+                    string key = string.Join("|", values[0], values[1], values[3], values[4], values[5]);
+                    if (existingChangeKeys.Add(key))
+                    {
+                        newRows.Add(ToCsvRow(values));
+                    }
+                }
+            }
+
+            if (!File.Exists(path))
+            {
+                File.WriteAllLines(path, new[] { ToCsvRow(headers) }.Concat(newRows));
+            }
+            else if (newRows.Count > 0)
+            {
+                File.AppendAllLines(path, newRows);
+            }
+        }
+
+        private static float GetCurrentPayRate(Employee employee, Jobs job) =>
+            job == Jobs.SALARY ? employee.AnnualSalaryAmount : employee.PayRates.GetValueOrDefault(job);
 
         private static float GetCurrentHours(Employee employee) => employee.Shifts
             .Where(shift => !shift.IsATotalsShift)
@@ -244,6 +341,14 @@ namespace PayrollProcessor
             {
                 return false;
             }
+            Dictionary<Jobs, int> payRateColumns = TrackedPayRateJobs
+                .Select(job => (Job: job, Column: Array.IndexOf(headers, $"{job} Rate")))
+                .Where(rateColumn => rateColumn.Column >= 0)
+                .ToDictionary(rateColumn => rateColumn.Job, rateColumn => rateColumn.Column);
+            Dictionary<Jobs, int> jobHoursColumns = Enum.GetValues<Jobs>()
+                .Select(job => (Job: job, Column: Array.IndexOf(headers, $"{job} Hours")))
+                .Where(hoursColumn => hoursColumn.Column >= 0)
+                .ToDictionary(hoursColumn => hoursColumn.Job, hoursColumn => hoursColumn.Column);
 
             int expectedRecordCount = -1;
             foreach (string line in lines.Skip(1))
@@ -270,7 +375,32 @@ namespace PayrollProcessor
                     entries.Clear();
                     return false;
                 }
-                entries.Add(new Entry(employeeNumber, company, totalHours, 0f));
+                Dictionary<Jobs, float> payRates = new();
+                foreach ((Jobs job, int column) in payRateColumns)
+                {
+                    if (values.Length <= column
+                        || !float.TryParse(values[column], NumberStyles.Float, CultureInfo.InvariantCulture, out float rate))
+                    {
+                        entries.Clear();
+                        return false;
+                    }
+                    payRates[job] = rate;
+                }
+                Dictionary<Jobs, float> hoursByJob = new();
+                foreach ((Jobs job, int column) in jobHoursColumns)
+                {
+                    if (values.Length <= column
+                        || !float.TryParse(values[column], NumberStyles.Float, CultureInfo.InvariantCulture, out float jobHours))
+                    {
+                        entries.Clear();
+                        return false;
+                    }
+                    if (jobHours > 0.01f)
+                    {
+                        hoursByJob[job] = jobHours;
+                    }
+                }
+                entries.Add(new Entry(employeeNumber, company, totalHours, 0f, payRates, hoursByJob));
             }
             return expectedRecordCount == entries.Count;
         }

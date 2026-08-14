@@ -64,6 +64,7 @@ namespace PayrollProcessor
                     int cityCol = FindColumn(headers, "Primary Address: City");
                     int yearsOfServiceCol = FindColumn(headers, "Years of Service");
                     int employmentCategoryCol = FindColumn(headers, "Worker Category Description");
+                    int jobTitleCodeCol = FindColumn(headers, "Job Title Code");
                     int vacationCol = FindColumn(headers, "Vacation Balance");
                     int positionStatusCol = FindColumn(headers, "Position Status");
                     int fileNumberCol = FindColumn(headers, "File Number");
@@ -124,6 +125,7 @@ namespace PayrollProcessor
                         ApplyLocation(cellData, rowNumber, locationCodeCol, cityCol, employee);
                         ApplyYearsOfService(cellData, rowNumber, yearsOfServiceCol, employee);
                         ApplyEmploymentCategory(cellData, rowNumber, employmentCategoryCol, employee);
+                        ApplyJobTitleCode(cellData, rowNumber, jobTitleCodeCol, employee);
                     }
                 }
             }
@@ -329,6 +331,17 @@ namespace PayrollProcessor
                     employee.EmploymentCategory = MapEmploymentCategory(categoryDescription); 
                 }
             }
+        }
+
+        private static void ApplyJobTitleCode(object[,] cellData, int row, int col, Employee employee)
+        {
+            if (col == -1 || !TryGetStringFromCell(cellData[row, col + 1], out string jobTitleCode)
+                || string.IsNullOrWhiteSpace(jobTitleCode))
+            {
+                return;
+            }
+
+            employee.JobTitleCode = jobTitleCode.Trim().ToUpperInvariant();
         }
 
         private static void ApplyVacation(object[,] cellData, int row, int col, Employee employee)

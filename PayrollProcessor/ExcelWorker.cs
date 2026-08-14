@@ -2458,17 +2458,47 @@ namespace PayrollProcessor
         private static string GetAdpJobTitle(ImportedEmployee importedEmployee)
         {
             string job = GetImportField(importedEmployee, "Job");
+            if (int.TryParse(job, out int jobNumber) && Enum.IsDefined(typeof(Jobs), jobNumber)
+                && JobTitleMapper.TryMapJobToImportCode((Jobs)jobNumber, out string codeFromEnum)
+                && !JobTitleMapper.IsNeverImported(codeFromEnum))
+            {
+                return codeFromEnum;
+            }
             if (job == "1" || StringSearch(job, "Driver") || StringSearch(job, "drvr"))
             {
-                return "DRDLYSC";
+                return JobTitleMapper.DriverDailySchool;
             }
             if (job == "25" || StringSearch(job, "aid") || StringSearch(job, "para"))
             {
-                return "PARA";
+                return JobTitleMapper.Para;
             }
             if (job == "7" || StringSearch(job, "mech") || StringSearch(job, "000007"))
             {
-                return "MECHNC";
+                return JobTitleMapper.Mechanic;
+            }
+            if (StringSearch(job, "admin"))
+            {
+                return JobTitleMapper.Admin;
+            }
+            if (StringSearch(job, "wash") || StringSearch(job, "wshby"))
+            {
+                return JobTitleMapper.WashBay;
+            }
+            if (StringSearch(job, "body") || StringSearch(job, "bdyshp"))
+            {
+                return JobTitleMapper.BodyShop;
+            }
+            if (StringSearch(job, "non") && StringSearch(job, "cdl"))
+            {
+                return JobTitleMapper.NonCdlDriver;
+            }
+            if (JobTitleMapper.IsNeverImported(job))
+            {
+                Log("Refusing to import blocked job title '" + job + "' for "
+                    + GetImportField(importedEmployee, "FirstName") + " "
+                    + GetImportField(importedEmployee, "LastName") + "; defaulting to "
+                    + JobTitleMapper.DriverDailySchool + ".", true);
+                return JobTitleMapper.DriverDailySchool;
             }
             Log("Couldn't find a job title for this employee, defaulting to job title of " + job + " for " + GetImportField(importedEmployee, "FirstName") + " " + GetImportField(importedEmployee, "LastName") + ", job field: " + job, true);
             return job;
@@ -2892,6 +2922,19 @@ namespace PayrollProcessor
                             ["Rehire Reason"] = "CURR"
                         });
                     }
+                }
+
+                if (!string.IsNullOrWhiteSpace(employee.RecommendedJobTitleCode)
+                    && !JobTitleMapper.IsNeverImported(employee.RecommendedJobTitleCode))
+                {
+                    dataRows.Add(new()
+                    {
+                        ["Position ID"] = "MMF" + employeeNumber,
+                        ["Change Effective On"] = changeEffectiveOn,
+                        ["Tax ID Type"] = "SSN",
+                        ["Tax ID Number"] = taxId,
+                        ["Job Title"] = employee.RecommendedJobTitleCode
+                    });
                 }
             }
         }

@@ -22,6 +22,8 @@ namespace PayrollProcessor
         public string SocialSecurityNumber;
         public DateTime HireDate = DateTime.Now;
         public string EmploymentCategory;
+        public string JobTitleCode = "";
+        public string RecommendedJobTitleCode = "";
         public string PhoneNumber;
         public bool NeedsUpdateInPayroll;
         public bool HadHoursInTimesheets; //means they have been confirmed to have hours in Timesheets.xlsx
