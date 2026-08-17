@@ -11,6 +11,9 @@ namespace PayrollProcessor
 
         public int IdNumber { get; protected set; }
         public string Name { get; protected set; }
+        public string FirstName = "";
+        public string MiddleName = "";
+        public string LastName = "";
         public Dictionary<Jobs, float> PayRates { get; private set; } = new();
         public List<Shift> Shifts = new();
         public float[,] OverTimeHours = new float[2,3]; //[company, week number]
@@ -62,6 +65,64 @@ namespace PayrollProcessor
         {
             this.IdNumber = idNumber;
             this.Name = name;
+        }
+
+        public string MiddleInitial
+        {
+            get
+            {
+                foreach (char character in MiddleName ?? "")
+                {
+                    if (char.IsLetter(character))
+                    {
+                        return char.ToUpperInvariant(character).ToString();
+                    }
+                }
+                return "";
+            }
+        }
+
+        public void EnsureNameParts()
+        {
+            if (!string.IsNullOrWhiteSpace(FirstName) && !string.IsNullOrWhiteSpace(LastName))
+            {
+                return;
+            }
+
+            string[] parts = (Name ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 1)
+            {
+                if (string.IsNullOrWhiteSpace(FirstName))
+                {
+                    FirstName = parts[0];
+                }
+            }
+            else if (parts.Length == 2)
+            {
+                if (string.IsNullOrWhiteSpace(FirstName))
+                {
+                    FirstName = parts[0];
+                }
+                if (string.IsNullOrWhiteSpace(LastName))
+                {
+                    LastName = parts[1];
+                }
+            }
+            else if (parts.Length >= 3)
+            {
+                if (string.IsNullOrWhiteSpace(FirstName))
+                {
+                    FirstName = parts[0];
+                }
+                if (string.IsNullOrWhiteSpace(MiddleName))
+                {
+                    MiddleName = parts[1];
+                }
+                if (string.IsNullOrWhiteSpace(LastName))
+                {
+                    LastName = string.Join(" ", parts.Skip(2));
+                }
+            }
         }
 
         public float OverTimeHoursForAllCompaniesForWeek(int weekNumber)

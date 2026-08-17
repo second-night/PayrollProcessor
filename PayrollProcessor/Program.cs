@@ -97,6 +97,7 @@ namespace PayrollProcessor
             new VacationTracker().ProcessAndWriteCsv(EmployeeDictionary.Values);
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WritePayrollHistory();
+            new WsiTracker().RunIfApplicable(ExcelWorker.FirstDayWeek2.AddDays(12), ExcelWorker.IsPrimaryPayrollRun);
             ExcelWorker.WriteWfnPayrollImports();
             //ExcelWorker.WritePayrollImports();
             ExcelWorker.WriteBirthDates();

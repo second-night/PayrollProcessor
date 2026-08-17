@@ -94,20 +94,30 @@ namespace PayrollProcessor
                             continue;
                         }
 
+                        string firstName = firstNameCol == -1 ? "" : CellString(cellData[rowNumber, firstNameCol + 1]);
+                        string lastName = lastNameCol == -1 ? "" : CellString(cellData[rowNumber, lastNameCol + 1]);
                         if (!EmployeeDictionary.ContainsKey(employeeNumber))
                         {
-                            string firstName = firstNameCol == -1 ? "" : CellString(cellData[rowNumber, firstNameCol + 1]);
-                            string lastName = lastNameCol == -1 ? "" : CellString(cellData[rowNumber, lastNameCol + 1]);
                             string employeeName = (firstName + " " + lastName).Trim();
                             Employee newEmployee = new(employeeNumber, employeeName)
                             {
-                                HireDate = DateTime.MinValue
+                                HireDate = DateTime.MinValue,
+                                FirstName = firstName,
+                                LastName = lastName
                             };
                             EmployeeDictionary.Add(employeeNumber, newEmployee);
                         }
 
                         Employee employee = EmployeeDictionary[employeeNumber];
                         employee.WasAlreadyInPayroll = true;
+                        if (string.IsNullOrWhiteSpace(employee.FirstName) && !string.IsNullOrWhiteSpace(firstName))
+                        {
+                            employee.FirstName = firstName;
+                        }
+                        if (string.IsNullOrWhiteSpace(employee.LastName) && !string.IsNullOrWhiteSpace(lastName))
+                        {
+                            employee.LastName = lastName;
+                        }
 
                         ApplyVacation(cellData, rowNumber, vacationCol, employee);
                         if (!IsPrimaryCompany(cellData, rowNumber, fileNumberCol, primaryPositionCol, positionStatusCol, employee))

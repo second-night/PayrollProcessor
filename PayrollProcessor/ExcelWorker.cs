@@ -633,12 +633,24 @@ namespace PayrollProcessor
                                     break;
                                 case "First Name":
                                     importedEmployee.ImportFields["FirstName"] = cellString;
+                                    if (string.IsNullOrWhiteSpace(employee.FirstName) && !string.IsNullOrWhiteSpace(cellString))
+                                    {
+                                        employee.FirstName = cellString;
+                                    }
                                     break;
                                 case "Middle Name":
                                     importedEmployee.ImportFields["MiddleName"] = cellString;
+                                    if (!string.IsNullOrWhiteSpace(cellString))
+                                    {
+                                        employee.MiddleName = cellString;
+                                    }
                                     break;
                                 case "Last Name":
                                     importedEmployee.ImportFields["LastName"] = cellString;
+                                    if (string.IsNullOrWhiteSpace(employee.LastName) && !string.IsNullOrWhiteSpace(cellString))
+                                    {
+                                        employee.LastName = cellString;
+                                    }
                                     break;
                                 case "Email":
                                     importedEmployee.ImportFields["SelfServiceEnabled"] = "Y";

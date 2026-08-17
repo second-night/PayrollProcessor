@@ -10,7 +10,7 @@ namespace PayrollProcessor
     public sealed class EmployeePayrollHistory
     {
         public sealed record Entry(int EmployeeNumber, Company Company, float TotalHours, float TotalCompensation,
-            Dictionary<Jobs, float> PayRates, Dictionary<Jobs, float> HoursByJob);
+            Dictionary<Jobs, float> PayRates, Dictionary<Jobs, float> HoursByJob, float GrossPay);
 
         private readonly Dictionary<int, float> historicalHoursByEmployee = new();
         private readonly Dictionary<int, float> fivePreviousPayPeriodHoursByEmployee = new();
@@ -39,7 +39,7 @@ namespace PayrollProcessor
             Dictionary<string, List<Entry>> entriesByPath = new();
             foreach ((DateTime payDate, string path) in allFiles)
             {
-                if (TryReadEntries(path, payDate, out List<Entry> entries))
+                if (TryReadEntries(path, payDate, out List<Entry> entries, out _))
                 {
                     entriesByPath[path] = entries;
                 }
@@ -157,6 +157,24 @@ namespace PayrollProcessor
             return earliestHistoryPayDate ?? fallbackPayDate;
         }
 
+        public static bool ShouldIncludeSalary(Employee employee) =>
+            employee.AnnualSalaryAmount > 0.001f && !employee.IsTerminated;
+
+        public static float GetPerPayPeriodSalary(Employee employee) =>
+            (float)Math.Round(employee.AnnualSalaryAmount / 26f, 2);
+
+        public static float GetGrossPay(Employee employee)
+        {
+            float grossPay = employee.Shifts
+                .Where(shift => !shift.IsATotalsShift)
+                .Sum(shift => shift.TotalCompensation(employee));
+            if (ShouldIncludeSalary(employee))
+            {
+                grossPay += GetPerPayPeriodSalary(employee);
+            }
+            return grossPay;
+        }
+
         public void WriteCurrentPayPeriod(DateTime payDate, IEnumerable<Employee> employees)
         {
             string path = Path.Combine(HistoryDirectory, $"PayrollHistory_{payDate:yyyy-MM-dd}.csv");
@@ -169,17 +187,21 @@ namespace PayrollProcessor
             headers.AddRange(Enum.GetNames<Jobs>().Select(job => $"{job} Compensation"));
             headers.Add("Total Hours");
             headers.Add("Total Compensation");
+            headers.Add("Gross Pay");
             headers.AddRange(TrackedPayRateJobs.Select(job => $"{job} Rate"));
 
+            Dictionary<int, float> grossPayByEmployee = employees.ToDictionary(employee => employee.IdNumber, GetGrossPay);
             List<List<string>> dataRows = new();
             foreach (Employee employee in employees.OrderBy(employee => employee.IdNumber))
             {
+                bool hasAnyShifts = employee.Shifts.Any(shift => !shift.IsATotalsShift);
+                bool includeSalaryOnlyRow = !hasAnyShifts && ShouldIncludeSalary(employee);
                 foreach (Company company in Enum.GetValues<Company>())
                 {
                     List<Shift> shifts = employee.Shifts
                         .Where(shift => shift.CompanyName == company && !shift.IsATotalsShift)
                         .ToList();
-                    if (shifts.Count == 0)
+                    if (shifts.Count == 0 && !(includeSalaryOnlyRow && company == employee.PrimaryCompany))
                     {
                         continue;
                     }
@@ -212,6 +234,7 @@ namespace PayrollProcessor
                     values.AddRange(Enum.GetValues<Jobs>().Select(job => FormatNumber(compensationByJob.GetValueOrDefault(job))));
                     values.Add(FormatNumber(hoursByJob.Values.Sum()));
                     values.Add(FormatNumber(compensationByJob.Values.Sum()));
+                    values.Add(FormatNumber(grossPayByEmployee.GetValueOrDefault(employee.IdNumber)));
                     values.AddRange(TrackedPayRateJobs.Select(job => FormatNumber(GetCurrentPayRate(employee, job))));
                     dataRows.Add(values);
                 }
@@ -299,6 +322,10 @@ namespace PayrollProcessor
                 ? Math.Max(shift.AllHours(false), shift.CoachTripDays * 8f)
                 : shift.AllHours(false));
 
+        internal static string HistoryFolder => HistoryDirectory;
+
+        internal static IEnumerable<(DateTime PayDate, string Path)> EnumerateHistoryFiles() => GetHistoryFiles();
+
         private static IEnumerable<(DateTime PayDate, string Path)> GetHistoryFiles()
         {
             if (!Directory.Exists(HistoryDirectory))
@@ -314,9 +341,11 @@ namespace PayrollProcessor
                 .Select(file => (file.payDate, file.Path));
         }
 
-        private static bool TryReadEntries(string path, DateTime expectedPayDate, out List<Entry> entries)
+        internal static bool TryReadEntries(string path, DateTime expectedPayDate, out List<Entry> entries,
+            out bool hasGrossPayColumn)
         {
             entries = new();
+            hasGrossPayColumn = false;
             string[] lines;
             try
             {
@@ -337,6 +366,9 @@ namespace PayrollProcessor
             int companyColumn = Array.IndexOf(headers, "Company");
             int hoursColumn = Array.IndexOf(headers, "Total Hours");
             int recordCountColumn = Array.IndexOf(headers, "Record Count");
+            int totalCompensationColumn = Array.IndexOf(headers, "Total Compensation");
+            int grossPayColumn = Array.IndexOf(headers, "Gross Pay");
+            hasGrossPayColumn = grossPayColumn >= 0;
             if (payDateColumn < 0 || employeeColumn < 0 || companyColumn < 0 || hoursColumn < 0 || recordCountColumn < 0)
             {
                 return false;
@@ -375,6 +407,27 @@ namespace PayrollProcessor
                     entries.Clear();
                     return false;
                 }
+                float totalCompensation = 0f;
+                if (totalCompensationColumn >= 0)
+                {
+                    if (values.Length <= totalCompensationColumn
+                        || !float.TryParse(values[totalCompensationColumn], NumberStyles.Float, CultureInfo.InvariantCulture,
+                            out totalCompensation))
+                    {
+                        entries.Clear();
+                        return false;
+                    }
+                }
+                float grossPay = 0f;
+                if (grossPayColumn >= 0)
+                {
+                    if (values.Length <= grossPayColumn
+                        || !float.TryParse(values[grossPayColumn], NumberStyles.Float, CultureInfo.InvariantCulture, out grossPay))
+                    {
+                        entries.Clear();
+                        return false;
+                    }
+                }
                 Dictionary<Jobs, float> payRates = new();
                 foreach ((Jobs job, int column) in payRateColumns)
                 {
@@ -400,7 +453,7 @@ namespace PayrollProcessor
                         hoursByJob[job] = jobHours;
                     }
                 }
-                entries.Add(new Entry(employeeNumber, company, totalHours, 0f, payRates, hoursByJob));
+                entries.Add(new Entry(employeeNumber, company, totalHours, totalCompensation, payRates, hoursByJob, grossPay));
             }
             return expectedRecordCount == entries.Count;
         }
