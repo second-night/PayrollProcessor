@@ -50,6 +50,7 @@ namespace PayrollProcessor
                     List<string> headers = ReadHeaders(cellData, cols);
                     int ssnCol = FindColumn(headers, "Tax ID (SSN)");
                     int lastNameCol = FindColumn(headers, "Legal Last Name");
+                    int middleNameCol = FindColumn(headers, "Legal Middle Name");
                     int firstNameCol = FindColumn(headers, "Legal First Name");
                     int birthDateCol = FindColumn(headers, "Birth Date");
                     int genderCol = FindColumn(headers, "Sex Code");
@@ -69,6 +70,7 @@ namespace PayrollProcessor
                     int positionStatusCol = FindColumn(headers, "Position Status");
                     int fileNumberCol = FindColumn(headers, "File Number");
                     int primaryPositionCol = FindColumn(headers, "Primary Position");
+                    int companyCodeCol = FindColumn(headers, "Payroll Company Code");
 
                     Dictionary<Jobs, int> payColumns = new();
                     RegisterJobColumn(payColumns, Jobs.ADMIN, FindColumn(headers, "Rate - Admin"));
@@ -95,6 +97,7 @@ namespace PayrollProcessor
                         }
 
                         string firstName = firstNameCol == -1 ? "" : CellString(cellData[rowNumber, firstNameCol + 1]);
+                        string middleName = middleNameCol == -1 ? "" : CellString(cellData[rowNumber, middleNameCol + 1]);
                         string lastName = lastNameCol == -1 ? "" : CellString(cellData[rowNumber, lastNameCol + 1]);
                         if (!EmployeeDictionary.ContainsKey(employeeNumber))
                         {
@@ -103,7 +106,8 @@ namespace PayrollProcessor
                             {
                                 HireDate = DateTime.MinValue,
                                 FirstName = firstName,
-                                LastName = lastName
+                                LastName = lastName,
+                                MiddleName = middleName,
                             };
                             EmployeeDictionary.Add(employeeNumber, newEmployee);
                         }
@@ -120,7 +124,7 @@ namespace PayrollProcessor
                         }
 
                         ApplyVacation(cellData, rowNumber, vacationCol, employee);
-                        if (!IsPrimaryCompany(cellData, rowNumber, fileNumberCol, primaryPositionCol, positionStatusCol, employee))
+                        if (!IsPrimaryCompany(cellData, rowNumber, companyCodeCol, primaryPositionCol, positionStatusCol, employee))
                         {
                             continue;
                         }
@@ -170,15 +174,15 @@ namespace PayrollProcessor
             employee.IsMale = gender != "F";
         }
 
-        private static bool IsPrimaryCompany(object[,] cellData, int row, int positionCol, int primaryPositionCol, int positionStatusCol, Employee employee)
+        private static bool IsPrimaryCompany(object[,] cellData, int row, int companyCodeCol, int primaryPositionCol, int positionStatusCol, Employee employee)
         {
-            if (positionCol == -1 || !TryGetStringFromCell(cellData[row, positionCol + 1], out string positionId))
+            if (companyCodeCol == -1 || !TryGetStringFromCell(cellData[row, companyCodeCol + 1], out string companyCode))
             {
                 Log("Couldn't get position ID for employee " + employee.Name + " (" + employee.IdNumber + ") on row " + row, true);
                 return false;
             }
 
-            Company company = positionId.StartsWith("MMF") ? Company.VALLEY_BUS_LLC : Company.VALLEY_BUS_COACHES;
+            Company company = companyCode.StartsWith("MMF") ? Company.VALLEY_BUS_LLC : Company.VALLEY_BUS_COACHES;
             TryGetStringFromCell(cellData[row, positionStatusCol + 1], out string positionStatus);
             if (positionStatus == "Active")
             {
