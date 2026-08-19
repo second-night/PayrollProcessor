@@ -66,7 +66,7 @@ namespace PayrollProcessor
                     ["SendToPayroll"] = ""
                 });
 
-                LogVacationSummary(emp, compensatedHours, accrual, vacationTaken, transactionAmount);
+                //LogVacationSummary(emp, compensatedHours, accrual, vacationTaken, transactionAmount);
             }
 
             string path = DesktopPath() + "AccrualsImport.csv";

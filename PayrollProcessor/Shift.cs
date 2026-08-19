@@ -154,8 +154,16 @@ namespace PayrollProcessor
 
                     if (!Shift.WereThereSchoolRoutesOnThisDay(ShiftLocation, Date.Day))
                     {
-                        Log("No mg for " + employee.Name + " because it was determined that there were no school shifts happening in " +  ShiftLocation + " on " + this.Date.DayOfWeek + " at " + this.Date.ToShortTimeString());
-                        return 0f;
+                        HashSet<int> temporaryExceptions = new HashSet<int>() { 2061, 2628 };
+                        if (temporaryExceptions.Contains(employee.IdNumber))
+                        {
+                            Log("Giving MG to " + employee.Name + " (" + employee.IdNumber + ") even though it doesn't seem like there were routes that day because they are listed as a temporary exception.");
+                        }
+                        else
+                        {
+                            Log("No mg for " + employee.Name + " (" + employee.IdNumber + ") because it was determined that there were no school shifts happening in " + ShiftLocation + " on " + this.Date.DayOfWeek + " at " + this.Date.ToShortTimeString());
+                            return 0f;
+                        }
                     }
 
                     foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.SmallMgExceptions)

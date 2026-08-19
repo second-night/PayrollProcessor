@@ -74,8 +74,8 @@ namespace PayrollProcessor
 
                     Dictionary<Jobs, int> payColumns = new();
                     RegisterJobColumn(payColumns, Jobs.ADMIN, FindColumn(headers, "Rate - Admin"));
-                    RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, FindColumn(headers, "Rate - Para Charter"));
-                    RegisterJobColumn(payColumns, Jobs.AIDE_CHARTER, FindColumn(headers, "Rate - Para School"));
+                    RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, FindColumn(headers, "Rate - Para School"));
+                    RegisterJobColumn(payColumns, Jobs.AIDE_CHARTER, FindColumn(headers, "Rate - Para Charter"));
                     RegisterJobColumn(payColumns, Jobs.BODY_SHOP, FindColumn(headers, "Rate - Body Shop"));
                     RegisterJobColumn(payColumns, Jobs.CLEANING, FindColumn(headers, "Rate - Cleaning"));
                     RegisterJobColumn(payColumns, Jobs.DRIVER_SCHOOL, FindColumn(headers, "Rate - Driver School"));

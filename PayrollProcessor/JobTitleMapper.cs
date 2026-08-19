@@ -185,7 +185,7 @@ namespace PayrollProcessor
                     continue;
                 }
 
-                if (!TryGetMajorityJob(employee, payrollHistory.GetHoursByJobFromHistory(employee.IdNumber),
+                if (!TryGetMajorityJob(employee, payrollHistory. GetHoursByJobFromHistory(employee.IdNumber),
                         out Jobs majorityJob, out float majorityHours, out float totalJudgedHours)
                     || totalJudgedHours < MinimumHoursForJobTitleChange
                     || !TryMapJobToImportCode(majorityJob, out string recommendedCode))

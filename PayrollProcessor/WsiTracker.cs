@@ -6,8 +6,9 @@ namespace PayrollProcessor
 {
     internal class WsiTracker
     {
-        private static readonly HashSet<int> SalesClassEmployeeNumbers = new() { 1335, 1415, 250, 2183 };
+        private static readonly HashSet<int> AccountingClassEmployeeNumbers = new() { 1335, 1415, 250, 2183 };
         private static readonly HashSet<int> MechanicClassSalariedEmployeeNumbers = new() { 1355, 992 };
+        private static readonly HashSet<int> WashBayClassSalariedEmployeeNumbers = new() { 1778 };
 
         public void RunIfApplicable(DateTime payDate, bool isPrimaryPayrollRun)
         {
@@ -171,13 +172,17 @@ namespace PayrollProcessor
         {
             if (employee != null && (employee.IsSalaried || employee.AnnualSalaryAmount > 0.001f))
             {
-                if (SalesClassEmployeeNumbers.Contains(employee.IdNumber))
+                if (AccountingClassEmployeeNumbers.Contains(employee.IdNumber))
                 {
                     return 8747;
                 }
                 if (MechanicClassSalariedEmployeeNumbers.Contains(employee.IdNumber))
                 {
                     return 3630;
+                }
+                if (WashBayClassSalariedEmployeeNumbers.Contains((int)employee.IdNumber))
+                {
+                    return 8380;
                 }
                 return 8805;
             }

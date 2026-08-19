@@ -1016,46 +1016,46 @@ namespace PayrollProcessor
             }
 
             //apprentice mechanics
-            List<int> apprenticeMechanicOrder = new()
-            {
-                1947,1963,1419,1946,1876,2100,1976,2282
-            };
-            foreach (var empEntry in EmployeeDictionary)
-            {
-                if (empEntry.Value.IsAMechanicApprentice && !apprenticeMechanicOrder.Contains(empEntry.Key))
-                {
-                    apprenticeMechanicOrder.Add(empEntry.Key);
-                }
-            }
-            Log("\nApprentice Mechanic Order:");
-            foreach (var mc in apprenticeMechanicOrder)
-            {
-                Log(mc.ToString());
-            }
-            Log("Mechanic hours:");
-            foreach (var mc in apprenticeMechanicOrder)
-            {
-                if (ApprenticeMechanicHours.ContainsKey(mc))
-                {
-                    Log(Math.Round(ApprenticeMechanicHours[mc].GetValueOrDefault(Jobs.MECHANIC, 0f), 2).ToString());
-                }
-                else
-                {
-                    Log("0");
-                }
-            }
-            Log("Driver hours:");
-            foreach (var mc in apprenticeMechanicOrder)
-            {
-                if (ApprenticeMechanicHours.ContainsKey(mc))
-                {
-                    Log(Math.Round(ApprenticeMechanicHours[mc].GetValueOrDefault(Jobs.DRIVER_SCHOOL, 0f), 2).ToString());
-                }
-                else
-                {
-                    Log("0");
-                }
-            }
+            //List<int> apprenticeMechanicOrder = new()
+            //{
+            //    1947,1963,1419,1946,1876,2100,1976,2282
+            //};
+            //foreach (var empEntry in EmployeeDictionary)
+            //{
+            //    if (empEntry.Value.IsAMechanicApprentice && !apprenticeMechanicOrder.Contains(empEntry.Key))
+            //    {
+            //        apprenticeMechanicOrder.Add(empEntry.Key);
+            //    }
+            //}
+            //Log("\nApprentice Mechanic Order:");
+            //foreach (var mc in apprenticeMechanicOrder)
+            //{
+            //    Log(mc.ToString());
+            //}
+            //Log("Mechanic hours:");
+            //foreach (var mc in apprenticeMechanicOrder)
+            //{
+            //    if (ApprenticeMechanicHours.ContainsKey(mc))
+            //    {
+            //        Log(Math.Round(ApprenticeMechanicHours[mc].GetValueOrDefault(Jobs.MECHANIC, 0f), 2).ToString());
+            //    }
+            //    else
+            //    {
+            //        Log("0");
+            //    }
+            //}
+            //Log("Driver hours:");
+            //foreach (var mc in apprenticeMechanicOrder)
+            //{
+            //    if (ApprenticeMechanicHours.ContainsKey(mc))
+            //    {
+            //        Log(Math.Round(ApprenticeMechanicHours[mc].GetValueOrDefault(Jobs.DRIVER_SCHOOL, 0f), 2).ToString());
+            //    }
+            //    else
+            //    {
+            //        Log("0");
+            //    }
+            //}
 
             string nonCdlDrivers = "\nNon CDL Drivers: \n\nFargo:\n";
             foreach (var employee in NonCdlDrivers)
