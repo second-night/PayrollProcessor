@@ -2327,7 +2327,7 @@ namespace PayrollProcessor
 
                 if (entry.Expense > 0.001f)
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype.HasValue ? entry.GetResolvedJobType(emp) : Jobs.ADMIN);
+                    Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
                     row["Adjust Ded Code"] = "EXP";
                     row["Adjust Ded Amount"] = FormatWfnNumber(entry.Expense);
                     rows.Add(row);
@@ -2668,7 +2668,7 @@ namespace PayrollProcessor
             "Rehire Date",
             "Rehire Reason",
             "Standard Hours",
-            "Worker Category or Employee Type",
+            "Worker Category",
             "Home Department",
             "Birth Date",
             "Federal Tax Form Year",
@@ -2786,7 +2786,7 @@ namespace PayrollProcessor
                         ["Pay Frequency Code"] = "B",
                         //["Employee Status"] = "A",
                         ["Standard Hours"] = "",
-                        ["Worker Category or Employee Type"] = PositionIsFullTime(importedEmployee) ? "F" : "P",
+                        ["Worker Category"] = PositionIsFullTime(importedEmployee) ? "F" : "P",
                         ["Home Department"] = GetAdpHomeDepartment(GetImportField(importedEmployee, "Organization")),
                         ["Birth Date"] = GetImportField(importedEmployee, "BirthDate"),
                         ["Federal Tax Form Year"] = DateTime.Today.Year.ToString(),
@@ -2894,24 +2894,34 @@ namespace PayrollProcessor
                         ["Change Effective On"] = changeEffectiveOn,
                         ["Tax ID Type"] = "SSN",
                         ["Tax ID Number"] = taxId,
-                        ["Worker Category or Employee Type"] = "F"
+                        ["First Name"] = employee.FirstName,
+                        ["Last Name"] = employee.LastName,
+                        ["Worker Category"] = "F"
                     });
                 }
 
-                IEnumerable<Company> companies = employee.ActiveCompanies?.Any() == true
-                    ? employee.ActiveCompanies
-                    : new[] { employee.PrimaryCompany };
-                if (PayrollHistory.EmployeesNeedingTermination.Contains(employee.IdNumber))
+                bool terminateAllActiveCompanies = PayrollHistory.EmployeesNeedingTermination.Contains(employee.IdNumber);
+                bool terminateNonPrimaryOnly = PayrollHistory.EmployeesNeedingTerminationInNonPrimaryCompanyOnly
+                    .Contains(employee.IdNumber);
+                if (terminateAllActiveCompanies || terminateNonPrimaryOnly)
                 {
                     string terminationDate = PayrollHistory.GetTerminationDate(employee.IdNumber, payDate).ToShortDateString();
-                    foreach (Company company in companies)
+                    for (int i = (int) Company.VALLEY_BUS_COACHES; i >= 0; --i)
                     {
+                        Company company = (Company)i;
+                        if (!employee.ActiveCompanies.Contains(company)
+                            || (terminateNonPrimaryOnly && !terminateAllActiveCompanies && company == employee.PrimaryCompany))
+                        {
+                            continue;
+                        }
                         dataRows.Add(new()
                         {
                             ["Position ID"] = GetPositionId(company, employeeNumber),
                             ["Change Effective On"] = changeEffectiveOn,
                             ["Tax ID Type"] = "SSN",
                             ["Tax ID Number"] = taxId,
+                            ["First Name"] = employee.FirstName,
+                            ["Last Name"] = employee.LastName,
                             ["Employee Status"] = "T",
                             ["Termination Date"] = terminationDate,
                             ["Termination Reason"] = "N"
@@ -2919,9 +2929,10 @@ namespace PayrollProcessor
                     }
                 }
 
-                if (PayrollHistory.EmployeesNeedingRehire.Contains(employee.IdNumber))
+                if (PayrollHistory.EmployeesNeedingRehire.TryGetValue(employee.IdNumber, out List<Company>? companiesToRehire))
                 {
-                    foreach (Company company in companies)
+                    foreach (Company company in companiesToRehire
+                        .OrderBy(rehireCompany => rehireCompany == employee.PrimaryCompany ? 0 : 1))
                     {
                         dataRows.Add(new()
                         {
@@ -3072,14 +3083,14 @@ namespace PayrollProcessor
             {
                 //{ DesktopPath() + "EmployeeImport.xlsx" },
                 //{ DesktopPath() + "RaiseImport.xlsx" },
-                { DesktopPath() + "DirectDepositImport.xlsx" },
+                //{ DesktopPath() + "DirectDepositImport.xlsx" },
                 { DesktopPath() + "ADP_NewHireImport.csv" }
             };
             List<object[,]> matricis = new()
             {
                 //{ employeeMatrix },
                 //{raiseMatrix },
-                { directDepositMatrix },
+                //{ directDepositMatrix },
                 { adpNewHireMatrix }
             };
             for (int i = 0; i < matricis.Count; i++)

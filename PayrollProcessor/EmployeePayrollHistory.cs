@@ -27,7 +27,8 @@ namespace PayrollProcessor
         private bool HasFiveValidPreviousPayPeriods { get; set; }
         public HashSet<int> PartTimeEmployeesNeedingFullTimeStatus { get; } = new();
         public HashSet<int> EmployeesNeedingTermination { get; } = new();
-        public HashSet<int> EmployeesNeedingRehire { get; } = new();
+        public HashSet<int> EmployeesNeedingTerminationInNonPrimaryCompanyOnly { get; } = new();
+        public Dictionary<int, List<Company>> EmployeesNeedingRehire { get; } = new();
 
         public void LoadPreviousPayPeriods(DateTime currentPayDate)
         {
@@ -121,6 +122,11 @@ namespace PayrollProcessor
         {
             foreach (Employee employee in employees)
             {
+                if (employee.IdNumber == 503)
+                {
+                    //John McLaughlin exception
+                    continue;
+                }
                 bool hasCurrentHours = GetCurrentHours(employee) > 0.01f;
                 if (HasFiveValidPreviousPayPeriods && hasCurrentHours && employee.EmploymentCategory == "PT"
                     && fivePreviousPayPeriodHoursByEmployee.GetValueOrDefault(employee.IdNumber) + GetCurrentHours(employee) >= 360f)
@@ -128,16 +134,40 @@ namespace PayrollProcessor
                     PartTimeEmployeesNeedingFullTimeStatus.Add(employee.IdNumber);
                 }
 
-                if (HasSixPreviousPayPeriods && !employee.IsTerminated && !employee.IsSalaried && !hasCurrentHours
-                    && historicalHoursByEmployee.GetValueOrDefault(employee.IdNumber) < 0.01f)
+                HashSet<int> terminationExceptions = new() {105, 187, 501, 503};
+                if (HasSixPreviousPayPeriods 
+                    && !employee.IsTerminated 
+                    && !employee.IsSalaried 
+                    && !hasCurrentHours
+                    && employee.WasAlreadyInPayroll
+                    && historicalHoursByEmployee.GetValueOrDefault(employee.IdNumber) < 0.01f 
+                    && !terminationExceptions.Contains(employee.IdNumber))
                 {
                     EmployeesNeedingTermination.Add(employee.IdNumber);
                 }
 
-                if (employee.IsTerminated && hasCurrentHours
-                    && !ExcelWorker.EmployeeExportByNumber.ContainsKey(employee.IdNumber))
+                if (employee.IsTerminated && !ExcelWorker.EmployeeExportByNumber.ContainsKey(employee.IdNumber))
                 {
-                    EmployeesNeedingRehire.Add(employee.IdNumber);
+                    List<Company> companiesToRehire = Enum.GetValues<Company>()
+                        .Where(company => HasValidCurrentShifts(employee, company))
+                        .ToList();
+                    if (companiesToRehire.Any(company => company != employee.PrimaryCompany)
+                        && !companiesToRehire.Contains(employee.PrimaryCompany))
+                    {
+                        companiesToRehire.Add(employee.PrimaryCompany);
+                    }
+                    if (companiesToRehire.Count > 0)
+                    {
+                        companiesToRehire.Sort((left, right) =>
+                            (left == employee.PrimaryCompany ? 0 : 1)
+                            .CompareTo(right == employee.PrimaryCompany ? 0 : 1));
+                        EmployeesNeedingRehire[employee.IdNumber] = companiesToRehire;
+                    }
+                    else if (employee.ActiveCompanies.Any(company => company != employee.PrimaryCompany)
+                        && !terminationExceptions.Contains(employee.IdNumber))
+                    {
+                        EmployeesNeedingTerminationInNonPrimaryCompanyOnly.Add(employee.IdNumber);
+                    }
                 }
             }
         }
@@ -321,6 +351,9 @@ namespace PayrollProcessor
             .Sum(shift => shift.JobType == Jobs.DRIVER_COACH
                 ? Math.Max(shift.AllHours(false), shift.CoachTripDays * 8f)
                 : shift.AllHours(false));
+
+        private static bool HasValidCurrentShifts(Employee employee, Company company) =>
+            employee.Shifts.Any(shift => shift.CompanyName == company && !shift.IsATotalsShift && shift.IsValid(employee));
 
         internal static string HistoryFolder => HistoryDirectory;
 
