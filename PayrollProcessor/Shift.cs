@@ -238,10 +238,10 @@ namespace PayrollProcessor
 
                     return maxMg;
                 }
-                else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC || JobType == Jobs.DRIVER_CHARTER || JobType == Jobs.AIDE_CHARTER || JobType == Jobs.COACH_PUBLIC_DRIVING)
+                else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC || JobType == Jobs.DRIVER_CHARTER || JobType == Jobs.AIDE_CHARTER || JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
                 {
                     sourceOfMg = MgSource.STANDARD_CHARTER;
-                    if (JobType == Jobs.COACH_PUBLIC_DRIVING)
+                    if (JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
                     {
                         return OUT_OF_TOWN_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
                     }
@@ -318,7 +318,7 @@ namespace PayrollProcessor
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), PRIVATE_CHARTER_RATE);
             }
 
-            if (JobType == Jobs.COACH_PUBLIC_DRIVING)
+            if (JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
             {
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), OUT_OF_TOWN_CHARTER_RATE);
             }
@@ -337,8 +337,7 @@ namespace PayrollProcessor
             {
                 case Jobs.DRIVER_CHARTER:
                 case Jobs.DRIVER_CHARTER_PUBLIC:
-                case Jobs.COACH_PUBLIC_DRIVING:
-                case Jobs.OUT_OF_TOWN_CHARTER:
+                case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
                     return "DrvrSchool";
                 case Jobs.DRIVER_SCHOOL:
                 case Jobs.NON_CDL_DRIVER:
@@ -380,8 +379,7 @@ namespace PayrollProcessor
                     return "000001";
                 case Jobs.DRIVER_CHARTER:
                 case Jobs.DRIVER_CHARTER_PUBLIC:
-                case Jobs.COACH_PUBLIC_DRIVING:
-                case Jobs.OUT_OF_TOWN_CHARTER:
+                case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
                     return "000002";
                 case Jobs.MECHANIC:
                     return "000007";
@@ -440,7 +438,7 @@ namespace PayrollProcessor
         {
             if (Date.TimeOfDay.CompareTo(new TimeSpan(0, 3, 0)) < 0)
             {
-                if (JobType != Jobs.COACH_PUBLIC_DRIVING)
+                if (JobType != Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
                 {
                     Log("Warning: Trying to get TimeContext for shift with TimeOfDay: " + Date.TimeOfDay.ToString(), true);
                 }
@@ -469,7 +467,7 @@ namespace PayrollProcessor
                     return emp.GetDriverRateForSchoolRouteShift(this);
                 case Jobs.DRIVER_CHARTER:
                 case Jobs.AIDE_CHARTER:
-                case Jobs.COACH_PUBLIC_DRIVING:
+                case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
                     return Math.Max(specialRate, CalculateCharterRate(emp));
                 case Jobs.WASH_BAY_OT:
                     if (emp.PayRates.ContainsKey(Jobs.WASH_BAY))

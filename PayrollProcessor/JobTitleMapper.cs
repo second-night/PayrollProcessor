@@ -115,8 +115,7 @@ namespace PayrollProcessor
             Jobs.DRIVER_COACH
                 or Jobs.DRIVER_CHARTER
                 or Jobs.DRIVER_CHARTER_PUBLIC
-                or Jobs.OUT_OF_TOWN_CHARTER
-                or Jobs.COACH_PUBLIC_DRIVING => Jobs.DRIVER_SCHOOL,
+                or Jobs.DRIVER_OUT_OF_TOWN_CHARTER => Jobs.DRIVER_SCHOOL,
             Jobs.AIDE_CHARTER => Jobs.AIDE_SCHOOL,
             Jobs.WASH_BAY_OT => Jobs.WASH_BAY,
             _ => job

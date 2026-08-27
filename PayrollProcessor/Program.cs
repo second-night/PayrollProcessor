@@ -49,7 +49,7 @@ namespace PayrollProcessor
             {Jobs.DRIVER_SCHOOL, 22.3f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
             {Jobs.DRIVER_CHARTER_PUBLIC, PRIVATE_CHARTER_RATE },
-            {Jobs.COACH_PUBLIC_DRIVING, OUT_OF_TOWN_CHARTER_RATE },
+            {Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 18.5f },
             {Jobs.AIDE_CHARTER, 16.5f },
             {Jobs.NON_CDL_DRIVER, 19f },
@@ -1100,9 +1100,12 @@ namespace PayrollProcessor
 
     public enum Jobs
     {
-        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, DRIVER_CHARTER_PUBLIC = 3, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15,
-        VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24,
-        AIDE_SCHOOL = 25, DRIVER_COACH = 26, OUT_OF_TOWN_CHARTER = 27, NON_CDL_DRIVER = 28,
+        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, DRIVER_CHARTER_PUBLIC = 3/*shouldn't be used*/,
+        MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
+        VACATION = 16, DRIVER_LOCAL_SCHOOL_CHARTERS = 18/*placeholder*/,
+        COACH_PUBLIC_DRIVING = 19/*placeholder*/,
+        DRIVER_OUT_OF_TOWN_CHARTER = 21, DRIVER_CHARTER_PRIVATE = 22, AIDE_CHARTER = 24,
+        AIDE_SCHOOL = 25, DRIVER_COACH = 26, NON_CDL_DRIVER = 28,
 
         SALARY = 99
     }

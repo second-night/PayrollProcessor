@@ -1062,6 +1062,14 @@ namespace PayrollProcessor
                         if (TryGetIntFromCell(cellData[rowNumber, JOB_TYPE_COLUMN], out shift.JobInt))
                         {
                             shift.JobType = GetJobTypeFromCode(shift.JobInt);
+                            if (shift.JobType == Jobs.COACH_PUBLIC_DRIVING)
+                            {
+                                shift.JobType = Jobs.DRIVER_OUT_OF_TOWN_CHARTER;
+                            }
+                            if (shift.JobType == Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS)
+                            {
+                                shift.JobType = Jobs.DRIVER_CHARTER;
+                            }
                             if (employeeNumber == 1983/*chris clark*/ && (Jobs)shift.JobInt == Jobs.MECHANIC)
                             {
                                 shift.JobInt = (int)Jobs.DRIVER_SCHOOL;
