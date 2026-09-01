@@ -364,3 +364,5 @@ FodyWeavers.xsd
 
 # Payroll history CSVs (local payroll-run records)
 Payroll History/
+/AdpPayrollHistory.xlsx
+/GrossWagesiSolved.xlsx

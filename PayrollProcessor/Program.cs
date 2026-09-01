@@ -97,7 +97,7 @@ namespace PayrollProcessor
             new VacationTracker().ProcessAndWriteCsv(EmployeeDictionary.Values);
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WritePayrollHistory();
-            new WsiTracker().RunIfApplicable(ExcelWorker.FirstDayWeek2.AddDays(12), ExcelWorker.IsPrimaryPayrollRun);
+            new WsiTracker().RunIfApplicable(ExcelWorker.FirstDayWeek2.AddDays(12));
             ExcelWorker.WriteWfnPayrollImports();
             //ExcelWorker.WritePayrollImports();
             ExcelWorker.WriteBirthDates();
@@ -535,29 +535,6 @@ namespace PayrollProcessor
                         }
                     }
 
-                    //bob medhus
-                    if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
-                    {
-                        string message = "\nFor Bob Medhus, payroll run on " + DateTime.Now.ToShortDateString() + ":";
-                        for (int i = 0; i < 2; i++)
-                        {
-                            message += "\nFor " + (i == 0 ? "Valley Bus, LLC:" : "Valley Bus Coaches:");
-                            message += "\nHours week 1:\n" + Math.Round(medhusCounter[1, 0, i], 2).ToString();
-                            message += "\nHours week 2:\n" + Math.Round(medhusCounter[2, 0, i], 2).ToString();
-                            message += "\nDollars week 1:\n" + Math.Round(medhusCounter[1, 1, i], 2).ToString();
-                            message += "\nDollars week 2:\n" + Math.Round(medhusCounter[2, 1, i], 2).ToString();
-                            message += "\nBonus Dollars week 1:\n" + Math.Round(medhusCounter[1, 2, i], 2).ToString();
-                            message += "\nBonus Dollars week 2:\n" + Math.Round(medhusCounter[2, 2, i], 2).ToString();
-                            message += "\nPer Diem Dollars week 1:\n" + Math.Round(medhusCounter[1, 3, i], 2).ToString();
-                            message += "\nPer Diem Dollars week 2:\n" + Math.Round(medhusCounter[2, 3, i], 2).ToString();
-                            message += "\nOvertime Hours week 1:\n" + Math.Round(medhusCounter[1, 4, i], 2).ToString();
-                            message += "\nOvertime Hours week 2:\n" + Math.Round(medhusCounter[2, 4, i], 2).ToString();
-                            message += "\nOvertime Dollars week 1:\n" + Math.Round(medhusCounter[1, 5, i], 2).ToString();
-                            message += "\nOvertime Dollars week 2:\n" + Math.Round(medhusCounter[2, 5, i], 2).ToString();
-                        }
-                        Log(message);
-                    }
-
                     //jeff shaw
                     if (DoJeffShawVacation && emp.IdNumber == 876 && jeffShawHours < 80)
                     {
@@ -576,28 +553,31 @@ namespace PayrollProcessor
                             shiftTotalShift.PayRate = emp.GetPayRateForShift(newShift);
                         }
                     }
-                    if (IsLastPayPeriodOfTheYear(ExcelWorker.FirstDayWeek2))
+                    if (IsLastPayPeriodOfAugust(ExcelWorker.FirstDayWeek2))
                     {
-                        float vacationHours = emp.VacationHours;
-                        float hoursAlreadyRequestedForThisPayPeriod = emp.VacationHoursUsedThisPayPeriod();
-                        vacationHours -= hoursAlreadyRequestedForThisPayPeriod;
-                        if (vacationHours > 76)
+                        if (emp.IsActive() && !emp.IsSalaried && emp.VacationHours > 75)
                         {
-                            float extraVacationHours = (float)Math.Round(vacationHours - 75, 2);
-
-                            if (PrintForm.InputBool("Should we use up " + extraVacationHours + " vacation hours for " + emp.Name + " (in addition to the " + hoursAlreadyRequestedForThisPayPeriod + " hours requested)?"))
+                            float vacationHours = emp.VacationHours;
+                            float hoursAlreadyRequestedForThisPayPeriod = emp.VacationHoursUsedThisPayPeriod();
+                            vacationHours -= hoursAlreadyRequestedForThisPayPeriod;
+                            if (vacationHours > 76)
                             {
-                                Log("Using " + extraVacationHours + " vacation hours for " + emp.Name + " (in addition to the " + hoursAlreadyRequestedForThisPayPeriod + " hours requested).");
+                                float extraVacationHours = (float)Math.Round(vacationHours - 75, 2);
+
+                                //if (PrintForm.InputBool("Should we use up " + extraVacationHours + " vacation hours for " + emp.Name + " (in addition to the " + hoursAlreadyRequestedForThisPayPeriod + " hours requested)?"))
+                                //{
+                                    Log("Using " + extraVacationHours + " vacation hours for " + emp.Name + " (in addition to the " + hoursAlreadyRequestedForThisPayPeriod + " hours requested) to reduce their vacation balance to " + (emp.VacationHours - extraVacationHours).ToString() + " hours.");
                                 Shift newShift = new()
-                                {
-                                    JobType = Jobs.VACATION,
-                                    ShiftTime = extraVacationHours,
-                                    CompanyName = Company.VALLEY_BUS_LLC,
-                                    WeekNumber = 1
-                                };
-                                FindOrMakeMatchingShiftTotalShift(newShift, emp, out Shift shiftTotalShift);
-                                shiftTotalShift.ShiftTime = extraVacationHours;
-                                shiftTotalShift.PayRate = emp.GetPayRateForShift(newShift);
+                                    {
+                                        JobType = Jobs.VACATION,
+                                        ShiftTime = extraVacationHours,
+                                        CompanyName = Company.VALLEY_BUS_LLC,
+                                        WeekNumber = 1
+                                    };
+                                    FindOrMakeMatchingShiftTotalShift(newShift, emp, out Shift shiftTotalShift);
+                                    shiftTotalShift.ShiftTime = extraVacationHours;
+                                    shiftTotalShift.PayRate = emp.GetPayRateForShift(newShift);
+                                //}
                             }
                         }
                     }
@@ -945,24 +925,16 @@ namespace PayrollProcessor
 
         public static void CheckForVacationCutOff(DateTime firstDayWeekTwo)
         {
-            if (IsLastPayPeriodOfTheYear(firstDayWeekTwo))
+            if (IsLastPayPeriodOfAugust(firstDayWeekTwo))
             {
-                Log("This is the last pay period for the year. Please check accrual cut-offs", true);
+                Log("This is the last pay period for August. Please check accrual cut-offs", true);
             }
         }
 
-        public static bool IsLastPayPeriodOfTheYear(DateTime firstDayWeekTwo)
+        public static bool IsLastPayPeriodOfAugust(DateTime firstDayWeekTwo)
         {
             DateTime payDate = firstDayWeekTwo.AddDays(12);
-
-            if (payDate.Month == 1 && payDate.Day == 1)
-            {
-                payDate = payDate.AddDays(-1);
-            }
-
-            DateTime nextPayDate = payDate.AddDays(7);
-
-            return nextPayDate.Year > payDate.Year;
+            return payDate.Month == 8 && payDate.AddDays(14).Month > 8;
         }
 
         public static string DesktopPath()

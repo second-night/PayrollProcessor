@@ -135,6 +135,16 @@ namespace PayrollProcessor
             PayRates[job] = Math.Max(PayRates.GetValueOrDefault(job, 0f), rate);
         }
 
+        public bool IsActive()
+        {
+            bool bIsActive = !IsTerminated;
+            if (bIsActive != ActiveCompanies.Count > 0)
+            {
+                Log("Warning: Employee " + Name + " ( " + IdNumber + " ) has a mismatch between IsTerminated and ActiveCompanies.", true);
+            }
+            return bIsActive;
+        }
+
 
         private static Dictionary<Employee, List<Jobs>> PayrateMessages = new();
         public float GetPayRateForShift(Shift shift)
@@ -221,7 +231,7 @@ namespace PayrollProcessor
                 }
                 if (!PayrateMessages.ContainsKey(this) || !PayrateMessages[this].Contains(shift.JobType))
                 {
-                    bool bGiveDefault = shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC || shift.JobType == Jobs.AIDE_CHARTER || shift.JobType == Jobs.AIDE_SCHOOL || shift.JobType == Jobs.TRAINING || shift.JobType == Jobs.DRIVER_CHARTER;
+                    bool bGiveDefault = shift.JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER || shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC || shift.JobType == Jobs.AIDE_CHARTER || shift.JobType == Jobs.AIDE_SCHOOL || shift.JobType == Jobs.TRAINING || shift.JobType == Jobs.DRIVER_CHARTER;
                     if (!bGiveDefault)
                     {
                         string specialString = shift.JobType == Jobs.WASH_BAY && IsAGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";

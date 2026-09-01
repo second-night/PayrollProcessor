@@ -165,6 +165,13 @@
       "Notes":"When Nathaniel Kohler clocks in as mechanic, his rate is switched to his driver rate."
     },
     {
+      "Name":"Eskarlyn B Tejada",
+      "IdNumber": 2650,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Eskarlyn clocks in as mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Thane Johnson",
       "IdNumber": 1799,
       "OverriddenJobType": 7,
