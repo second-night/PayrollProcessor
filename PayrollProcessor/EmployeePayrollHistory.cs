@@ -23,7 +23,7 @@ namespace PayrollProcessor
             Jobs.MECHANIC, Jobs.WASH_BAY, Jobs.ADMIN, Jobs.CLEANING, Jobs.SALARY
         };
 
-        public bool HasSixPreviousPayPeriods { get; private set; }
+        public bool HasEightPreviousPayPeriods { get; private set; }
         private bool HasFiveValidPreviousPayPeriods { get; set; }
         public HashSet<int> PartTimeEmployeesNeedingFullTimeStatus { get; } = new();
         public HashSet<int> EmployeesNeedingTermination { get; } = new();
@@ -36,7 +36,7 @@ namespace PayrollProcessor
                 .Where(file => file.PayDate.Date < currentPayDate.Date)
                 .OrderByDescending(file => file.PayDate)
                 .ToList();
-            List<(DateTime PayDate, string Path)> files = allFiles.Take(6).ToList();
+            List<(DateTime PayDate, string Path)> files = allFiles.Take(8).ToList();
             Dictionary<string, List<Entry>> entriesByPath = new();
             foreach ((DateTime payDate, string path) in allFiles)
             {
@@ -46,7 +46,7 @@ namespace PayrollProcessor
                 }
             }
 
-            HasSixPreviousPayPeriods = files.Count == 6 && files.All(file => entriesByPath.ContainsKey(file.Path));
+            HasEightPreviousPayPeriods = files.Count == 8 && files.All(file => entriesByPath.ContainsKey(file.Path));
             HasFiveValidPreviousPayPeriods = allFiles.Take(5).Count() == 5
                 && allFiles.Take(5).All(file => entriesByPath.ContainsKey(file.Path));
             foreach ((DateTime payDate, string path) in allFiles)
@@ -135,7 +135,7 @@ namespace PayrollProcessor
                 }
 
                 HashSet<int> terminationExceptions = new() {105, 187, 501, 503};
-                if (HasSixPreviousPayPeriods 
+                if (HasEightPreviousPayPeriods 
                     && !employee.IsTerminated 
                     && !employee.IsSalaried 
                     && !hasCurrentHours
