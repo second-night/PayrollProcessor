@@ -12,6 +12,7 @@ namespace PayrollProcessor
         public float VacationHours;
         public float RoundUpVacationHours;
         public float BackpayHours;
+        public float BackpayDollars;
         public string JobtypeText = "";
         public Jobs? Jobtype;
         public float MgHours;
@@ -19,26 +20,30 @@ namespace PayrollProcessor
         public int WeekNumber;
         public float BonusDollars;
         public float Expense;
+        public float? SpecifiedPayRate;
         public bool ShouldAddVacationToRoundUp;
         public bool IsForCoaches;
         public Company Company;
         public float VacationPayRate;
         public float JobPayRate;
 
+        public static bool HasAmount(float value) => Math.Abs(value) > 0.001f;
+
         public bool HasAnyValues()
         {
-            return VacationHours > 0.001f
-                || BackpayHours > 0.001f
-                || MgHours > 0.001f
-                || RegularHours > 0.001f
-                || BonusDollars > 0.001f
-                || Expense > 0.001f
+            return HasAmount(VacationHours)
+                || HasAmount(BackpayHours)
+                || HasAmount(BackpayDollars)
+                || HasAmount(MgHours)
+                || HasAmount(RegularHours)
+                || HasAmount(BonusDollars)
+                || HasAmount(Expense)
                 || ShouldAddVacationToRoundUp;
         }
 
         /// <summary>
         /// Hours that count toward vacation accrual, mirroring Shift.AllHours()
-        /// (vacation, MG, and regular hours count; backpay is a dollar earning and does not).
+        /// (vacation, MG, and regular hours count; backpay hours and backpay dollars do not).
         /// </summary>
         public float AllHours()
         {
@@ -118,7 +123,9 @@ namespace PayrollProcessor
                     int firstNameCol = FindColumn(headers, "Employee First Name");
                     int vacationCol = FindColumn(headers, "Vacation");
                     int backpayHoursCol = FindColumn(headers, "Backpay Hours");
+                    int backpayDollarsCol = FindColumn(headers, "Backpay Dollars");
                     int jobtypeCol = FindColumn(headers, "Jobtype");
+                    int payrateCol = FindColumn(headers, "Payrate");
                     int mgHoursCol = FindColumn(headers, "MG Hours");
                     int regularHoursCol = FindColumn(headers, "Regular Hours");
                     int weekNumberCol = FindColumn(headers, "Week Number");
@@ -141,8 +148,9 @@ namespace PayrollProcessor
 
                         string isForCoachesValue = isForCoachesCol == -1 ? "" : CellString(cellData[row, isForCoachesCol + 1]);
                         if (!RowHasSpreadsheetValues(cellData, row, isForCoachesValue,
-                            firstNameCol, vacationCol, backpayHoursCol, jobtypeCol, mgHoursCol, regularHoursCol,
-                            weekNumberCol, bonusDollarsCol, expenseCol, shouldAddVacationToRoundUpCol))
+                            firstNameCol, vacationCol, backpayHoursCol, backpayDollarsCol, jobtypeCol, payrateCol,
+                            mgHoursCol, regularHoursCol, weekNumberCol, bonusDollarsCol, expenseCol,
+                            shouldAddVacationToRoundUpCol))
                         {
                             continue;
                         }
@@ -217,7 +225,9 @@ namespace PayrollProcessor
                     int firstNameCol = FindColumn(headers, "Employee First Name");
                     int vacationCol = FindColumn(headers, "Vacation");
                     int backpayHoursCol = FindColumn(headers, "Backpay Hours");
+                    int backpayDollarsCol = FindColumn(headers, "Backpay Dollars");
                     int jobtypeCol = FindColumn(headers, "Jobtype");
+                    int payrateCol = FindColumn(headers, "Payrate");
                     int mgHoursCol = FindColumn(headers, "MG Hours");
                     int regularHoursCol = FindColumn(headers, "Regular Hours");
                     int weekNumberCol = FindColumn(headers, "Week Number");
@@ -261,9 +271,17 @@ namespace PayrollProcessor
                         {
                             entry.BackpayHours = backpayHours;
                         }
+                        if (backpayDollarsCol != -1 && TryGetFloat(cellData[row, backpayDollarsCol + 1], out float backpayDollars))
+                        {
+                            entry.BackpayDollars = backpayDollars;
+                        }
                         if (jobtypeCol != -1)
                         {
                             entry.JobtypeText = CellString(cellData[row, jobtypeCol + 1]);
+                        }
+                        if (payrateCol != -1 && TryGetFloat(cellData[row, payrateCol + 1], out float payrate) && ManualEntry.HasAmount(payrate))
+                        {
+                            entry.SpecifiedPayRate = payrate;
                         }
                         if (mgHoursCol != -1 && TryGetFloat(cellData[row, mgHoursCol + 1], out float mgHours))
                         {
@@ -291,8 +309,9 @@ namespace PayrollProcessor
                         }
 
                         if (!hasSpreadsheetValues && RowHasSpreadsheetValues(cellData, row, isForCoachesValue,
-                            firstNameCol, vacationCol, backpayHoursCol, jobtypeCol, mgHoursCol, regularHoursCol,
-                            weekNumberCol, bonusDollarsCol, expenseCol, shouldAddVacationToRoundUpCol))
+                            firstNameCol, vacationCol, backpayHoursCol, backpayDollarsCol, jobtypeCol, payrateCol,
+                            mgHoursCol, regularHoursCol, weekNumberCol, bonusDollarsCol, expenseCol,
+                            shouldAddVacationToRoundUpCol))
                         {
                             hasSpreadsheetValues = true;
                         }
@@ -334,16 +353,18 @@ namespace PayrollProcessor
         }
 
         /// <summary>
-        /// Calculates pay rates for a manual entry the same way they are calculated for shifts,
-        /// by passing a temporary shift (never added to the employee) through Employee.GetPayRateForShift().
+        /// Calculates pay rates for a manual entry. A Payrate column value is used as-is.
+        /// Otherwise rates are calculated the same way as shifts, by passing a temporary shift
+        /// (never added to the employee) through Employee.GetPayRateForShift().
+        /// Negative hour amounts use the absolute value only for that lookup.
         /// </summary>
         private void CalculatePayRates(ManualEntry entry, Employee employee)
         {
-            if (entry.VacationHours > 0.001f || entry.ShouldAddVacationToRoundUp)
+            if (ManualEntry.HasAmount(entry.VacationHours) || entry.ShouldAddVacationToRoundUp)
             {
                 Shift temporaryShift = new(entry.Company, Jobs.VACATION)
                 {
-                    ShiftTime = entry.VacationHours,
+                    ShiftTime = Math.Abs(entry.VacationHours),
                     Date = FirstDayWeek2.AddDays(-7)
                 };
                 entry.VacationPayRate = employee.GetPayRateForShift(temporaryShift);
@@ -354,9 +375,15 @@ namespace PayrollProcessor
                 }
             }
 
+            if (entry.SpecifiedPayRate.HasValue && ManualEntry.HasAmount(entry.SpecifiedPayRate.Value))
+            {
+                entry.JobPayRate = entry.SpecifiedPayRate.Value;
+                return;
+            }
+
             if (entry.Jobtype.HasValue)
             {
-                float jobHours = entry.MgHours + entry.BackpayHours + entry.RegularHours;
+                float jobHours = Math.Abs(entry.MgHours) + Math.Abs(entry.BackpayHours) + Math.Abs(entry.RegularHours);
                 Jobs jobTypeForShift = entry.GetResolvedJobType(employee);
                 Shift temporaryShift = new(entry.Company, jobTypeForShift)
                 {
@@ -364,7 +391,9 @@ namespace PayrollProcessor
                     Date = FirstDayWeek2.AddDays(-7)
                 };
                 entry.JobPayRate = employee.GetPayRateForShift(temporaryShift);
-                if (entry.JobPayRate < 0.001f && (entry.MgHours > 0.001f || entry.BackpayHours > 0.001f || entry.RegularHours > 0.001f))
+                if (entry.JobPayRate < 0.001f
+                    && (ManualEntry.HasAmount(entry.MgHours) || ManualEntry.HasAmount(entry.BackpayHours)
+                        || ManualEntry.HasAmount(entry.RegularHours)))
                 {
                     Log("Manual entry row " + entry.RowNumber + ": no pay rate found for "
                         + employee.Name + " (" + employee.IdNumber + ") for " + entry.Jobtype.Value + ".", true);
@@ -416,13 +445,16 @@ namespace PayrollProcessor
         }
 
         private static bool RowHasSpreadsheetValues(object[,] cellData, int row, string isForCoachesValue,
-            int firstNameCol, int vacationCol, int backpayHoursCol, int jobtypeCol, int mgHoursCol, int regularHoursCol,
-            int weekNumberCol, int bonusDollarsCol, int expenseCol, int shouldAddVacationToRoundUpCol)
+            int firstNameCol, int vacationCol, int backpayHoursCol, int backpayDollarsCol, int jobtypeCol, int payrateCol,
+            int mgHoursCol, int regularHoursCol, int weekNumberCol, int bonusDollarsCol, int expenseCol,
+            int shouldAddVacationToRoundUpCol)
         {
             return HasCellValue(cellData, row, firstNameCol)
                 || HasCellValue(cellData, row, vacationCol)
                 || HasCellValue(cellData, row, backpayHoursCol)
+                || HasCellValue(cellData, row, backpayDollarsCol)
                 || HasCellValue(cellData, row, jobtypeCol)
+                || HasCellValue(cellData, row, payrateCol)
                 || HasCellValue(cellData, row, mgHoursCol)
                 || HasCellValue(cellData, row, regularHoursCol)
                 || HasCellValue(cellData, row, weekNumberCol)
@@ -470,15 +502,16 @@ namespace PayrollProcessor
                 ValidateEntryAgainstEmployeeExport(entry);
             }
 
-            bool needsJobtype = entry.BackpayHours > 0.001f || entry.MgHours > 0.001f || entry.RegularHours > 0.001f;
+            bool needsJobtype = ManualEntry.HasAmount(entry.BackpayHours)
+                || ManualEntry.HasAmount(entry.MgHours)
+                || ManualEntry.HasAmount(entry.RegularHours);
             if (needsJobtype && string.IsNullOrWhiteSpace(entry.JobtypeText))
             {
                 Log("Manual entry row " + entry.RowNumber + ": Backpay Hours, MG Hours, or Regular Hours entered without Jobtype for employee "
                     + entry.EmployeeNumber + ".", true);
-                return;
             }
 
-            if (entry.RegularHours > 0.001f)
+            if (ManualEntry.HasAmount(entry.RegularHours))
             {
                 if (entry.WeekNumber < 1 || entry.WeekNumber > 2)
                 {
@@ -679,7 +712,7 @@ namespace PayrollProcessor
                 return true;
             }
 
-            string text = CellString(cell).Replace(",", "");
+            string text = CellString(cell).Replace(",", "").Replace("$", "");
             return float.TryParse(text, out value);
         }
     }

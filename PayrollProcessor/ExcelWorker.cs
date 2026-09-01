@@ -2254,6 +2254,8 @@ namespace PayrollProcessor
 
         /// <summary>
         /// Writes all manual entries for the given company to the end of the WFN rows.
+        /// Each spreadsheet row is written independently so offsetting hours at different
+        /// pay rates (including negatives) stay on separate import rows.
         /// Most manual entries never get an FLSA Workweek; regular hours are the exception.
         /// </summary>
         private static void AddManualEntryWfnRows(List<Dictionary<string, string>> rows, Company company, string batchId)
@@ -2275,9 +2277,10 @@ namespace PayrollProcessor
                     }
                     continue;
                 }
-
+                
+                Jobs? jobTypeForTempDept = entry.Jobtype.HasValue ? entry.GetResolvedJobType(emp) : null;
                 float vacationHours = entry.VacationHours + entry.RoundUpVacationHours;
-                if (vacationHours > 0.001f)
+                if (ManualEntry.HasAmount(vacationHours))
                 {
                     Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, Jobs.VACATION);
                     row["Hours 3 Code"] = "VAC";
@@ -2289,9 +2292,9 @@ namespace PayrollProcessor
                     rows.Add(row);
                 }
 
-                if (entry.RegularHours > 0.001f && entry.Jobtype.HasValue && entry.WeekNumber >= 1 && entry.WeekNumber <= 2)
+                if (ManualEntry.HasAmount(entry.RegularHours) && entry.WeekNumber >= 1 && entry.WeekNumber <= 2)
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.GetResolvedJobType(emp));
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, jobTypeForTempDept);
                     row["Reg Hours"] = FormatWfnNumber(entry.RegularHours);
                     row["FLSA Workweek"] = entry.WeekNumber.ToString();
                     if (entry.JobPayRate > 0.001f)
@@ -2301,9 +2304,9 @@ namespace PayrollProcessor
                     rows.Add(row);
                 }
 
-                if (entry.MgHours > 0.001f && entry.Jobtype.HasValue)
+                if (ManualEntry.HasAmount(entry.MgHours))
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.GetResolvedJobType(emp));
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, jobTypeForTempDept);
                     row["Hours 3 Code"] = "MNG";
                     row["Hours 3 Amount"] = FormatWfnNumber(entry.MgHours);
                     if (entry.JobPayRate > 0.001f)
@@ -2313,17 +2316,17 @@ namespace PayrollProcessor
                     rows.Add(row);
                 }
 
-                if (entry.BonusDollars > 0.001f)
+                if (ManualEntry.HasAmount(entry.BonusDollars))
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.Jobtype.HasValue ? entry.GetResolvedJobType(emp) : Jobs.ADMIN);
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, jobTypeForTempDept ?? Jobs.ADMIN);
                     row["Earnings 3 Code"] = "BON";
                     row["Earnings 3 Amount"] = FormatWfnNumber(entry.BonusDollars);
                     rows.Add(row);
                 }
 
-                if (entry.BackpayHours > 0.001f && entry.Jobtype.HasValue)
+                if (ManualEntry.HasAmount(entry.BackpayHours))
                 {
-                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, entry.GetResolvedJobType(emp));
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, jobTypeForTempDept);
                     row["Hours 3 Code"] = "BPY";
                     row["Hours 3 Amount"] = FormatWfnNumber(entry.BackpayHours);
                     if (entry.JobPayRate > 0.001f)
@@ -2333,7 +2336,15 @@ namespace PayrollProcessor
                     rows.Add(row);
                 }
 
-                if (entry.Expense > 0.001f)
+                if (ManualEntry.HasAmount(entry.BackpayDollars))
+                {
+                    Dictionary<string, string> row = MakeManualEntryWfnRow(emp, company, batchId, jobTypeForTempDept ?? Jobs.ADMIN);
+                    row["Earnings 3 Code"] = "BPY";
+                    row["Earnings 3 Amount"] = FormatWfnNumber(entry.BackpayDollars);
+                    rows.Add(row);
+                }
+
+                if (ManualEntry.HasAmount(entry.Expense))
                 {
                     Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
                     row["Adjust Ded Code"] = "EXP";
@@ -2343,13 +2354,18 @@ namespace PayrollProcessor
             }
         }
 
-        private static Dictionary<string, string> MakeManualEntryWfnRow(Employee emp, Company company, string batchId, Jobs jobType)
+        private static Dictionary<string, string> MakeManualEntryWfnRow(Employee emp, Company company, string batchId, Jobs? jobType)
         {
             Dictionary<string, string> row = MakeBaseWfnRow(emp, company, batchId);
-            string departmentCode = Shift.GetDepartmentCode(jobType);
+            if (!jobType.HasValue)
+            {
+                return row;
+            }
+
+            string departmentCode = Shift.GetDepartmentCode(jobType.Value);
             if (string.IsNullOrWhiteSpace(departmentCode))
             {
-                Log("No department code found for manual entry job type " + jobType + " for " + emp.Name + ".", true);
+                Log("No department code found for manual entry job type " + jobType.Value + " for " + emp.Name + ".", true);
             }
             else
             {
