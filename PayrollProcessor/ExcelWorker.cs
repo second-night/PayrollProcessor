@@ -2734,8 +2734,12 @@ namespace PayrollProcessor
             "Rate - Driver School",
             "Rate - Driver Charter",
             "Rate - Mechanic",
-            "Rate - Wash Bay"
-            //"Will Worker Complete Form I-9"
+            "Rate - Wash Bay",
+
+            //salary import
+            "Compensation Change Reason", //"ATB" - Across the board
+            "Rate Type", //"S"
+            "Rate 1 Amount" //bi-weekly rate
         };
 
         private object[,] BuildAdpNewHireImportMatrix()
@@ -2834,7 +2838,11 @@ namespace PayrollProcessor
                         ["Address 1 Zip Code"] = GetImportField(importedEmployee, "ZipCode"),
                         ["FLSA OVERTIME"] = "Y",
                         ["Mobile Phone Number"] = mobilePhone.Replace("(", "").Replace(")", "").Replace("-", "").Replace(" ", ""),
-                        //["Will Worker Complete Form I-9"] = "Y"
+                        
+                        //salary import
+                        ["Compensation Change Reason"] = "", //"ATB" - Across the board
+                        ["Rate Type"] = "", //"S"
+                        ["Rate 1 Amount"] = "" //bi-weekly rate
                     };
                 }
 

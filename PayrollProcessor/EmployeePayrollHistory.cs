@@ -12,18 +12,19 @@ namespace PayrollProcessor
         public sealed record Entry(int EmployeeNumber, Company Company, float TotalHours, float TotalCompensation,
             Dictionary<Jobs, float> PayRates, Dictionary<Jobs, float> HoursByJob, float GrossPay);
 
-        private readonly Dictionary<int, float> historicalHoursByEmployee = new();
         private readonly Dictionary<int, float> fivePreviousPayPeriodHoursByEmployee = new();
         private readonly Dictionary<int, DateTime> lastHoursDateByEmployee = new();
         private readonly Dictionary<(int EmployeeNumber, Jobs Job), float> latestPayRates = new();
         private readonly Dictionary<int, Dictionary<Jobs, float>> hoursByJobFromHistory = new();
+        private readonly List<Dictionary<int, float>> previousPayPeriodHoursNewestFirst = new();
+        private DateTime currentPayDate;
         private DateTime? earliestHistoryPayDate;
+        private const int MaxTerminationLookbackPayPeriods = 8;
         private static readonly Jobs[] TrackedPayRateJobs =
         {
             Jobs.MECHANIC, Jobs.WASH_BAY, Jobs.ADMIN, Jobs.CLEANING, Jobs.SALARY
         };
 
-        public bool HasEightPreviousPayPeriods { get; private set; }
         private bool HasFiveValidPreviousPayPeriods { get; set; }
         public HashSet<int> PartTimeEmployeesNeedingFullTimeStatus { get; } = new();
         public HashSet<int> EmployeesNeedingTermination { get; } = new();
@@ -32,11 +33,12 @@ namespace PayrollProcessor
 
         public void LoadPreviousPayPeriods(DateTime currentPayDate)
         {
+            this.currentPayDate = currentPayDate;
+            previousPayPeriodHoursNewestFirst.Clear();
             List<(DateTime PayDate, string Path)> allFiles = GetHistoryFiles()
                 .Where(file => file.PayDate.Date < currentPayDate.Date)
                 .OrderByDescending(file => file.PayDate)
                 .ToList();
-            List<(DateTime PayDate, string Path)> files = allFiles.Take(8).ToList();
             Dictionary<string, List<Entry>> entriesByPath = new();
             foreach ((DateTime payDate, string path) in allFiles)
             {
@@ -46,7 +48,6 @@ namespace PayrollProcessor
                 }
             }
 
-            HasEightPreviousPayPeriods = files.Count == 8 && files.All(file => entriesByPath.ContainsKey(file.Path));
             HasFiveValidPreviousPayPeriods = allFiles.Take(5).Count() == 5
                 && allFiles.Take(5).All(file => entriesByPath.ContainsKey(file.Path));
             foreach ((DateTime payDate, string path) in allFiles)
@@ -88,20 +89,23 @@ namespace PayrollProcessor
                 }
             }
 
-            foreach ((DateTime _, string path) in files)
+            foreach ((DateTime _, string path) in allFiles.Take(MaxTerminationLookbackPayPeriods))
             {
                 if (!entriesByPath.TryGetValue(path, out List<Entry>? entries))
                 {
-                    continue;
+                    break;
                 }
+
+                Dictionary<int, float> hoursByEmployee = new();
                 foreach (Entry entry in entries)
                 {
                     if (entry.TotalHours > 0.01f)
                     {
-                        historicalHoursByEmployee[entry.EmployeeNumber] =
-                            historicalHoursByEmployee.GetValueOrDefault(entry.EmployeeNumber) + entry.TotalHours;
+                        hoursByEmployee[entry.EmployeeNumber] =
+                            hoursByEmployee.GetValueOrDefault(entry.EmployeeNumber) + entry.TotalHours;
                     }
                 }
+                previousPayPeriodHoursNewestFirst.Add(hoursByEmployee);
             }
 
             foreach ((DateTime _, string path) in allFiles.Take(5))
@@ -135,12 +139,13 @@ namespace PayrollProcessor
                 }
 
                 HashSet<int> terminationExceptions = new() {105, 187, 501, 503};
-                if (HasEightPreviousPayPeriods 
+                int lookbackPayPeriods = GetTerminationLookbackPayPeriods(employee);
+                if (previousPayPeriodHoursNewestFirst.Count >= lookbackPayPeriods
                     && !employee.IsTerminated 
                     && !employee.IsSalaried 
                     && !hasCurrentHours
                     && employee.WasAlreadyInPayroll
-                    && historicalHoursByEmployee.GetValueOrDefault(employee.IdNumber) < 0.01f 
+                    && GetHistoricalHours(employee.IdNumber, lookbackPayPeriods) < 0.01f 
                     && !terminationExceptions.Contains(employee.IdNumber))
                 {
                     EmployeesNeedingTermination.Add(employee.IdNumber);
@@ -170,6 +175,38 @@ namespace PayrollProcessor
                     }
                 }
             }
+        }
+
+        private int GetTerminationLookbackPayPeriods(Employee employee)
+        {
+            if (IsFullTime(employee))
+            {
+                return 3;
+            }
+
+            return currentPayDate.Month switch
+            {
+                7 => 7,
+                8 or 9 => 8,
+                _ => 6
+            };
+        }
+
+        private static bool IsFullTime(Employee employee)
+        {
+            string category = employee.EmploymentCategory?.Trim() ?? "";
+            return category.Equals("FT", StringComparison.OrdinalIgnoreCase)
+                || category.Equals("ACAFT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private float GetHistoricalHours(int employeeNumber, int lookbackPayPeriods)
+        {
+            float total = 0f;
+            for (int index = 0; index < lookbackPayPeriods; index++)
+            {
+                total += previousPayPeriodHoursNewestFirst[index].GetValueOrDefault(employeeNumber);
+            }
+            return total;
         }
 
         public IReadOnlyDictionary<Jobs, float> GetHoursByJobFromHistory(int employeeNumber) =>
@@ -216,7 +253,7 @@ namespace PayrollProcessor
             headers.AddRange(Enum.GetNames<Jobs>().Select(job => $"{job} Hours"));
             headers.AddRange(Enum.GetNames<Jobs>().Select(job => $"{job} Compensation"));
             headers.Add("Total Hours");
-            headers.Add("Total Compensation");
+            headers.Add("Total Hourly Compensation");
             headers.Add("Gross Pay");
             headers.AddRange(TrackedPayRateJobs.Select(job => $"{job} Rate"));
 
@@ -399,7 +436,7 @@ namespace PayrollProcessor
             int companyColumn = Array.IndexOf(headers, "Company");
             int hoursColumn = Array.IndexOf(headers, "Total Hours");
             int recordCountColumn = Array.IndexOf(headers, "Record Count");
-            int totalCompensationColumn = Array.IndexOf(headers, "Total Compensation");
+            int totalCompensationColumn = Array.IndexOf(headers, "Total Hourly Compensation");
             int grossPayColumn = Array.IndexOf(headers, "Gross Pay");
             hasGrossPayColumn = grossPayColumn >= 0;
             if (payDateColumn < 0 || employeeColumn < 0 || companyColumn < 0 || hoursColumn < 0 || recordCountColumn < 0)

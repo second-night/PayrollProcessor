@@ -182,7 +182,7 @@ namespace PayrollProcessor
                         float payRate = GetPayRateForShift(tempShift);
 
                         //weird exception due to sped rate pay bump
-                        if (shift.ShiftTime > 2.5f && shift.IsASpedBusShift() && !shift.IsAGrandForksShift && (Jobs)entry.OverridingJobType == Jobs.DRIVER_SCHOOL)
+                        if (shift.ShiftTime > 2.5f && shift.IsASpedBusShift() && !shift.IsAGrandForksShift && (Jobs)entry.OverridingJobType == Jobs.DRIVER_SCHOOL && !shift.IsASummerRoute())
                         {
                             float payBumpTime = shift.ShiftTime - (shift.ShiftTime > 6f ? 3f : 1.5f); //try to figure out if they drove 1 shift or 2
                             float weightedRate1 = (shift.ShiftTime - payBumpTime) * (payRate - FARGO_SPED_CDL_DRIVER_RATE_BUMP);
@@ -345,7 +345,7 @@ namespace PayrollProcessor
                     }
                 }
                 rate = Math.Max(rate, PayRates.GetValueOrDefault(shift.JobType, 0f));
-                if (!shift.IsAGrandForksShift && shift.IsASpedBusShift())
+                if (!shift.IsAGrandForksShift && shift.IsASpedBusShift() && !shift.IsASummerRoute())
                 {
                     rate += FARGO_SPED_CDL_DRIVER_RATE_BUMP;
                 }
