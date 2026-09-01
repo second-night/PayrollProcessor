@@ -23,14 +23,15 @@ namespace PayrollProcessor
         public const float PRIVATE_CHARTER_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 120f;
         public const float WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 70f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 50f;
-        public const float DRIVER_CHARTER_RATE = 18f;
-        public const float OUT_OF_TOWN_CHARTER_RATE = 18.5f;
-        public const float PRIVATE_CHARTER_RATE = 19f;
+        public const float DRIVER_CHARTER_RATE = 18.65f;
+        public const float OUT_OF_TOWN_CHARTER_RATE = 19.15f;
+        public const float PRIVATE_CHARTER_RATE = 19.7f;
         public const float T_AND_J_CHARTER_RATE = 19.5f; //this shouldn't be used I think, Sarah provides the pay for these drivers.
-        public const float TRAINING_RATE = 13f;
+        public const float TRAINING_RATE = 15f;
         public const float COACH_HOURLY_RATE_ESTIMATE = 20f;
         public const float TEN_YEAR_RATE_BUMP = 0.5f;
-        public const float FARGO_SPED_CDL_DRIVER_RATE_BUMP = 0.5f;
+        public const float FARGO_SPED_CDL_DRIVER_RATE_BUMP = 0.6f;
+        public const float GF_MERGER_DRIVERS_BASE_RATE_EXCEPTION = 1.1f;
         public static string LogString = "";
         public static HashSet<int> BusStartingDays = new();
         private static ExcelWorker ExcelWorker;
@@ -46,23 +47,23 @@ namespace PayrollProcessor
 
         public static Dictionary<Jobs, float> FargoDefaultRates = new()
         {
-            {Jobs.DRIVER_SCHOOL, 22.3f },
+            {Jobs.DRIVER_SCHOOL, 23.0f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
             {Jobs.DRIVER_CHARTER_PUBLIC, PRIVATE_CHARTER_RATE },
             {Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
-            {Jobs.AIDE_SCHOOL, 18.5f },
-            {Jobs.AIDE_CHARTER, 16.5f },
-            {Jobs.NON_CDL_DRIVER, 19f },
+            {Jobs.AIDE_SCHOOL, 19.15f },
+            {Jobs.AIDE_CHARTER, 17.1f },
+            {Jobs.NON_CDL_DRIVER, 19.7f },
             {Jobs.TRAINING, TRAINING_RATE }
         };
         public static Dictionary<Jobs, float> GrandForksDefaultRates = new()
         {
-            {Jobs.DRIVER_SCHOOL, 23.7f },
+            {Jobs.DRIVER_SCHOOL, 24.5f },
             {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
             {Jobs.DRIVER_CHARTER_PUBLIC, PRIVATE_CHARTER_RATE },
-            {Jobs.AIDE_SCHOOL, 19f },
-            {Jobs.AIDE_CHARTER, 18f },
-            {Jobs.NON_CDL_DRIVER, 19.7f },
+            {Jobs.AIDE_SCHOOL, 19.7f },
+            {Jobs.AIDE_CHARTER, 18.65f },
+            {Jobs.NON_CDL_DRIVER, 20.4f },
             {Jobs.TRAINING, TRAINING_RATE }
         };
 
@@ -907,7 +908,7 @@ namespace PayrollProcessor
 
             if (jobType == Jobs.DRIVER_SCHOOL && employee.IsAGrandForksEmployee && employee.HireDate != DateTime.MinValue && employee.HireDate.CompareTo(new DateTime(2024, 05, 01)) < 0)
             {
-                modifier = Math.Max(modifier, 1f);
+                modifier = Math.Max(modifier, GF_MERGER_DRIVERS_BASE_RATE_EXCEPTION);
             }
 
             bIsForGrandForks |= employee.IsAGrandForksEmployee;
