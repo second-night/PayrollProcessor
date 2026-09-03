@@ -144,6 +144,13 @@
       "Notes":"When Pat clocks in as admin, his rate is switched to his driver rate."
     },
     {
+      "Name":"Bob Medhus",
+      "IdNumber": 1657,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Bob clocks in as mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Ali Omar",
       "IdNumber": 1248,
       "OverriddenJobType": 7,

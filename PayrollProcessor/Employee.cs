@@ -213,17 +213,17 @@ namespace PayrollProcessor
                 return GetDriverRateForSchoolRouteShift(shift);
             }
 
-            if (shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+            if (JobIsCharter(shift.JobType))
             {
-                float defaultRate = GetBasePayRateForEmployee(Jobs.DRIVER_CHARTER_PUBLIC, this, shift.IsAGrandForksShift);
-                if (defaultRate < 19f)
+                float defaultRate = GetBasePayRateForEmployee(shift.JobType, this, shift.IsAGrandForksShift);
+                if (defaultRate < 15f)
                 {
-                    Log("Problem finding PayRate for employee " + Name + " for DRIVER_CHARTER_PUBLIC", true);
+                    Log("Problem finding PayRate for employee " + Name + " for " + shift.JobType, true);
                 }
-                return TimeInServiceAdjustment(defaultRate, this, Jobs.DRIVER_CHARTER_PUBLIC, shift.IsAGrandForksShift);
+                return TimeInServiceAdjustment(defaultRate, this, shift.JobType, shift.IsAGrandForksShift);
             }
             if (!PayRates.ContainsKey(shift.JobType) &&
-                shift.JobType != Jobs.NON_CDL_DRIVER && shift.JobType != Jobs.VACATION && shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.WASH_BAY_OT && shift.JobType != Jobs.COACH_PUBLIC_DRIVING && shift.JobType != Jobs.DRIVER_COACH)
+                shift.JobType != Jobs.NON_CDL_DRIVER && shift.JobType != Jobs.VACATION && shift.JobType != Jobs.HOLIDAY && shift.JobType != Jobs.WASH_BAY_OT && shift.JobType != Jobs.DRIVER_COACH)
             {
                 if (SocialSecurityNumber == "" || IsPartialEntry)
                 {
@@ -231,7 +231,7 @@ namespace PayrollProcessor
                 }
                 if (!PayrateMessages.ContainsKey(this) || !PayrateMessages[this].Contains(shift.JobType))
                 {
-                    bool bGiveDefault = shift.JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER || shift.JobType == Jobs.DRIVER_CHARTER_PUBLIC || shift.JobType == Jobs.AIDE_CHARTER || shift.JobType == Jobs.AIDE_SCHOOL || shift.JobType == Jobs.TRAINING || shift.JobType == Jobs.DRIVER_CHARTER;
+                    bool bGiveDefault = JobIsCharter(shift.JobType) || shift.JobType == Jobs.AIDE_SCHOOL || shift.JobType == Jobs.TRAINING;
                     if (!bGiveDefault)
                     {
                         string specialString = shift.JobType == Jobs.WASH_BAY && IsAGrandForksEmployee ? " (default rate for helping out in washbay in GF is $17.00/hour)." : "";
@@ -282,7 +282,7 @@ namespace PayrollProcessor
                         }
                         if (newRate < 1)
                         {
-                            Log("Assigning default rate failed", true);
+                            Log("Assigning default rate failed for " + shift.JobType, true);
 
                         }
                         GiveRaiseToEmployee(this, shift.JobType, newRate);

@@ -238,7 +238,7 @@ namespace PayrollProcessor
 
                     return maxMg;
                 }
-                else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC || JobType == Jobs.DRIVER_CHARTER || JobType == Jobs.AIDE_CHARTER || JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
+                else if (JobIsCharter(JobType))
                 {
                     sourceOfMg = MgSource.STANDARD_CHARTER;
                     if (JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
@@ -270,7 +270,7 @@ namespace PayrollProcessor
                         sourceOfMg = BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS ? MgSource.T_AND_J_CHARTER : MgSource.PRIVATE_CHARTER;
                         return T_AND_J_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
                     }
-                    else if (JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+                    else if (JobType == Jobs.DRIVER_CHARTER_PRIVATE)
                     {
                         return PRIVATE_CHARTER_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
                     }
@@ -313,7 +313,7 @@ namespace PayrollProcessor
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), T_AND_J_CHARTER_RATE);
             }
 
-            if (JobType == Jobs.DRIVER_CHARTER_PUBLIC)
+            if (JobType == Jobs.DRIVER_CHARTER_PRIVATE)
             {
                 return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), PRIVATE_CHARTER_RATE);
             }
@@ -335,8 +335,8 @@ namespace PayrollProcessor
             //"Wash BayOT"
             switch (jobType)
             {
-                case Jobs.DRIVER_CHARTER:
-                case Jobs.DRIVER_CHARTER_PUBLIC:
+                case Jobs.DRIVER_CHARTER_PRIVATE:
+                case Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS:
                 case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
                     return "DrvrSchool";
                 case Jobs.DRIVER_SCHOOL:
@@ -377,8 +377,8 @@ namespace PayrollProcessor
             {
                 case Jobs.DRIVER_SCHOOL:
                     return "000001";
-                case Jobs.DRIVER_CHARTER:
-                case Jobs.DRIVER_CHARTER_PUBLIC:
+                case Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS:
+                case Jobs.DRIVER_CHARTER_PRIVATE:
                 case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
                     return "000002";
                 case Jobs.MECHANIC:
@@ -465,7 +465,8 @@ namespace PayrollProcessor
                 case Jobs.DRIVER_SCHOOL:
                 case Jobs.NON_CDL_DRIVER:
                     return emp.GetDriverRateForSchoolRouteShift(this);
-                case Jobs.DRIVER_CHARTER:
+                case Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS:
+                case Jobs.DRIVER_CHARTER_PRIVATE:
                 case Jobs.AIDE_CHARTER:
                 case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
                     return Math.Max(specialRate, CalculateCharterRate(emp));

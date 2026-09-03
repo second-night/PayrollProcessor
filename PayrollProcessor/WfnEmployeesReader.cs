@@ -79,7 +79,7 @@ namespace PayrollProcessor
                     RegisterJobColumn(payColumns, Jobs.BODY_SHOP, FindColumn(headers, "Rate - Body Shop"));
                     RegisterJobColumn(payColumns, Jobs.CLEANING, FindColumn(headers, "Rate - Cleaning"));
                     RegisterJobColumn(payColumns, Jobs.DRIVER_SCHOOL, FindColumn(headers, "Rate - Driver School"));
-                    RegisterJobColumn(payColumns, Jobs.DRIVER_CHARTER, FindColumn(headers, "Rate - Driver Charter"));
+                    RegisterJobColumn(payColumns, Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS, FindColumn(headers, "Rate - Driver Charter"));
                     RegisterJobColumn(payColumns, Jobs.MECHANIC, FindColumn(headers, "Rate - Mechanic"));
                     RegisterJobColumn(payColumns, Jobs.WASH_BAY, FindColumn(headers, "Rate - Wash Bay"));
 
@@ -287,10 +287,6 @@ namespace PayrollProcessor
                 if (TryGetFloatFromCell(cellData[row, entry.Value + 1], out float payRate))
                 {
                     employee.SetPayRate(entry.Key, payRate);
-                    if (entry.Key == Jobs.DRIVER_CHARTER)
-                    {
-                        employee.SetPayRate(Jobs.DRIVER_CHARTER_PUBLIC, payRate);
-                    }
                 }
             }
         }

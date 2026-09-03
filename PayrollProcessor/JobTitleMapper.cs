@@ -4,7 +4,7 @@ namespace PayrollProcessor
 {
     /// <summary>
     /// Maps ADP Workforce Now job title codes to <see cref="Jobs"/> values and back.
-    /// DRCOA, DRCCHSC, and DNU are never used for imports.
+    /// DRCOA and DNU are never used for imports.
     /// </summary>
     internal static class JobTitleMapper
     {
@@ -14,7 +14,7 @@ namespace PayrollProcessor
         public const string Admin = "ADMIN";
         public const string BodyShop = "BDYSHP";
         public const string DoNotUse = "DNU";
-        public const string DriverCoachSchool = "DRCCHSC";
+        public const string DriverCharter = "DRCCHSC";
         public const string DriverCoach = "DRCOA";
         public const string DriverDailySchool = "DRDLYSC";
         public const string Mechanic = "MECHNC";
@@ -24,7 +24,6 @@ namespace PayrollProcessor
         private static readonly HashSet<string> CodesNeverImported = new(StringComparer.OrdinalIgnoreCase)
         {
             DriverCoach,
-            DriverCoachSchool,
             DoNotUse
         };
 
@@ -58,7 +57,9 @@ namespace PayrollProcessor
                 case BodyShop:
                     job = Jobs.BODY_SHOP;
                     return true;
-                case DriverCoachSchool:
+                case DriverCharter:
+                    job = Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS;
+                    return true;
                 case DriverCoach:
                 case DriverDailySchool:
                     job = Jobs.DRIVER_SCHOOL;
@@ -95,6 +96,9 @@ namespace PayrollProcessor
                 case Jobs.DRIVER_SCHOOL:
                     jobTitleCode = DriverDailySchool;
                     return true;
+                case Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS:
+                    jobTitleCode = DriverCharter;
+                    return true;
                 case Jobs.MECHANIC:
                     jobTitleCode = Mechanic;
                     return true;
@@ -112,10 +116,10 @@ namespace PayrollProcessor
 
         public static Jobs CanonicalJobForTitle(Jobs job) => job switch
         {
-            Jobs.DRIVER_COACH
-                or Jobs.DRIVER_CHARTER
-                or Jobs.DRIVER_CHARTER_PUBLIC
-                or Jobs.DRIVER_OUT_OF_TOWN_CHARTER => Jobs.DRIVER_SCHOOL,
+            Jobs.DRIVER_COACH => Jobs.DRIVER_SCHOOL,
+            Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS
+                or Jobs.DRIVER_CHARTER_PRIVATE
+                or Jobs.DRIVER_OUT_OF_TOWN_CHARTER => Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS,
             Jobs.AIDE_CHARTER => Jobs.AIDE_SCHOOL,
             Jobs.WASH_BAY_OT => Jobs.WASH_BAY,
             _ => job

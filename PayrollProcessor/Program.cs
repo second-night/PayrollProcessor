@@ -48,8 +48,8 @@ namespace PayrollProcessor
         public static Dictionary<Jobs, float> FargoDefaultRates = new()
         {
             {Jobs.DRIVER_SCHOOL, 23.0f },
-            {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
-            {Jobs.DRIVER_CHARTER_PUBLIC, PRIVATE_CHARTER_RATE },
+            {Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS, DRIVER_CHARTER_RATE },
+            {Jobs.DRIVER_CHARTER_PRIVATE, PRIVATE_CHARTER_RATE },
             {Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 19.15f },
             {Jobs.AIDE_CHARTER, 17.1f },
@@ -59,8 +59,9 @@ namespace PayrollProcessor
         public static Dictionary<Jobs, float> GrandForksDefaultRates = new()
         {
             {Jobs.DRIVER_SCHOOL, 24.5f },
-            {Jobs.DRIVER_CHARTER, DRIVER_CHARTER_RATE },
-            {Jobs.DRIVER_CHARTER_PUBLIC, PRIVATE_CHARTER_RATE },
+            {Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS, DRIVER_CHARTER_RATE },
+            {Jobs.DRIVER_CHARTER_PRIVATE, PRIVATE_CHARTER_RATE },
+            {Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 19.7f },
             {Jobs.AIDE_CHARTER, 18.65f },
             {Jobs.NON_CDL_DRIVER, 20.4f },
@@ -80,7 +81,6 @@ namespace PayrollProcessor
             ExcelWorker = new();
             CheckForVacationCutOff(ExcelWorker.FirstDayWeek2);
             new WfnEmployeesReader().Read();
-            ExcelWorker.ReadIsolvedEmployees();
             ExcelWorker.PreCheckTimeSheets();
             ManualEntriesTracker.GetInstance().PreCheckForNewEmployees();
             ExcelWorker.ReadEmployeeExport();
@@ -828,7 +828,7 @@ namespace PayrollProcessor
                         }
                     }
                 }
-                if (employee.YearsOfService > 9 && (jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.NON_CDL_DRIVER || jobType == Jobs.DRIVER_CHARTER || jobType == Jobs.DRIVER_CHARTER_PUBLIC || jobType == Jobs.AIDE_SCHOOL || jobType == Jobs.AIDE_CHARTER))
+                if (employee.YearsOfService > 9 && (jobType == Jobs.DRIVER_SCHOOL || jobType == Jobs.NON_CDL_DRIVER || JobIsCharter(jobType) || jobType == Jobs.AIDE_SCHOOL))
                 {
                     newRate += TEN_YEAR_RATE_BUMP;
                 }
@@ -838,7 +838,7 @@ namespace PayrollProcessor
 
         public static void GiveRaiseToEmployee(Employee employee, Jobs job, float rate)
         {
-            if (Jobs.DRIVER_CHARTER_PUBLIC == job)
+            if (Jobs.DRIVER_CHARTER_PRIVATE == job || job == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
             {
                 return;
             }
@@ -864,7 +864,7 @@ namespace PayrollProcessor
                 case Jobs.AIDE_SCHOOL:
                     ExcelWorker.ImportEmployees[employee.IdNumber].ImportFields["Rate_AidDlySchool"] = rate.ToString();
                     break;
-                case Jobs.DRIVER_CHARTER:
+                case Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS:
                     ExcelWorker.ImportEmployees[employee.IdNumber].ImportFields["Rate_DrvrSchoolChrtr"] = rate.ToString();
                     break;
                 case Jobs.AIDE_CHARTER:
@@ -954,6 +954,10 @@ namespace PayrollProcessor
 
             for (int i = 0; i < paths.Length; ++i)
             {
+                if (i < 2 && !ExcelWorker.IsPrimaryPayrollRun)
+                {
+                    continue;
+                }
                 if (File.Exists(paths[i]))
                 {
                     File.Delete(paths[i]);
@@ -973,6 +977,11 @@ namespace PayrollProcessor
         public static void Exit()
         {
             Environment.Exit(0);
+        }
+
+        public static bool JobIsCharter(Jobs job)
+        {
+            return job == Jobs.DRIVER_CHARTER_PRIVATE || job == Jobs.AIDE_CHARTER || job == Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS || job == Jobs.DRIVER_OUT_OF_TOWN_CHARTER;
         }
 
         private static void FinalLogging()
@@ -1073,26 +1082,16 @@ namespace PayrollProcessor
 
     public enum Jobs
     {
-        DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, DRIVER_CHARTER_PUBLIC = 3/*shouldn't be used*/,
+        DRIVER_SCHOOL = 1,
         MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
-        VACATION = 16, DRIVER_LOCAL_SCHOOL_CHARTERS = 18/*placeholder*/,
-        COACH_PUBLIC_DRIVING = 19/*placeholder*/,
+        VACATION = 16, DRIVER_LOCAL_SCHOOL_CHARTERS = 18,
+        COACH_PUBLIC_DRIVING = 19,
         DRIVER_OUT_OF_TOWN_CHARTER = 21, DRIVER_CHARTER_PRIVATE = 22, AIDE_CHARTER = 24,
         AIDE_SCHOOL = 25, DRIVER_COACH = 26, NON_CDL_DRIVER = 28,
 
         SALARY = 99
     }
 
-    //order of payrates in WFN
-    //DRIVER_SCHOOL, 
-    //DRIVER_CHARTER,
-    //MECHANIC,
-    //WASH_BAY,
-    //BODY_SHOP, 
-    //ADMIN, 
-    //CLEANING,
-    //AIDE_CHARTER, 
-    //AIDE_SCHOOL
 
     //  taskkill /f /im excel.exe
 }

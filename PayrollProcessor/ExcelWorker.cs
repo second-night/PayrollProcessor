@@ -21,7 +21,7 @@ namespace PayrollProcessor
         public static Dictionary<int, ImportedEmployee> ImportEmployees = new();
         public static Dictionary<int, (string FirstName, string LastName)> EmployeeExportByNumber = new();
         public DateTime FirstDayWeek2;
-        public bool IsPrimaryPayrollRun { get; }
+        public static bool IsPrimaryPayrollRun { get; set; }
         public EmployeePayrollHistory PayrollHistory { get; } = new();
         HashSet<string> FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll = new() { "EmployeeNumber", "EmploymentCategory", "SSN" };
 
@@ -76,260 +76,6 @@ namespace PayrollProcessor
             //manual override
             //FirstDayWeek2 = new DateTime(2023, 9, 24);
             //Log("FirstDayWeek2 override is active.", true);
-        }
-
-        public void ReadIsolvedEmployees()
-        {
-            return; //deprecated file
-            if (!CheckForExcelFileOnDesktop("iSolvedEmployees.xlsx", out string filePath))
-            {
-                return;
-            }
-            Excel.Application excelApp = new Excel.Application();
-            var fInfo = new FileInfo(filePath);
-            Excel.Workbook workBook = excelApp.Workbooks.Open(filePath);
-
-            Dictionary<Jobs, int> payColumns = new();
-            const int SSN_COLUMN = 2; //Tax ID (SSN)
-            const int EMP_LAST_NAME_COLUMN = 3; //Legal Last Name
-            const int EMP_FIRST_NAME_COLUMN = 4; //Legal First Name
-            const int BIRTH_DATE_COLUMN = 7; //Birth Date
-            const int GENDER_COLUMN = 8; //Sex Code
-            const int PHONE_NUMBER_COLUMN = 15; //"Home Phone" or "Mobile Phone" - use mobile phone first and if nothing under mobile phone then use home phone.
-            const int HIRE_DATE_COLUMN = 18; //Hire Date
-            const int TERM_DATE_COLUMN = 19; //Termination Date
-            const int REHIRE_DATE_COLUMN = 20; //Rehire Date
-            const int SALARY_COLUMN = 28; //Annual Salary
-            int ADMIN_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.ADMIN, 30); //Rate - Admin
-            int AIDE_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_SCHOOL, 31); //Rate - Para Charter
-            int AIDE_CHARTER_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.AIDE_CHARTER, 32); //Rate - Para School
-            int BODY_SHOP_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.BODY_SHOP, 34); //Rate - Body Shop
-            int CLEANING_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.CLEANING, 35); //Rate - Cleaning
-            int DRIVER_SCHOOL_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.DRIVER_SCHOOL, 36); //Rate - Driver School
-            int DRIVER_CHARTER_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.DRIVER_CHARTER, 37); //Rate - Driver Charter
-            int MECHANIC_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.MECHANIC, 38); //Rate - Mechanic
-            int WASH_BAY_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.WASH_BAY, 40); //Rate - Wash Bay
-            const int EMP_NUMBER_COLUMN = 41; //"File Number" - (it is in string format, I'm not sure if that matters. It has extra '0's in front of the number)
-            int TRAINING_PAY_COLUMN = RegisterJobColumn(payColumns, Jobs.TRAINING, 42);
-            const int ORGANIZATION_TAG_COLUMN = 44; //"Location Code" - Entries will be 'FAR', 'GF', or blank, if they are blank, the 'FAR' is assumed unless the employees entry under the header "Primary Address: City" is Grand Forks, which would the mean an entry of 'GF' is assumed (throw a log if GF is assumed).
-            const int YEARS_OF_SERVICE_COLUMN = 45; //"Years of Service" - this is in string format, example1: '27 year, 3 months', example2: '0 year, 1 month'. We only need to parse the year into integer form, months/decimals are not wanted.
-            const int EMPLOYMENT_CATEGORY_COLUMN = 47; //"Worker Category Description" - entries will be 'Full Time' or 'Part Time' or blank, if they are blank the 'Part Time' is assumed.
-            const int DD_ACCOUNT_1 = 48; //deprecated, don't worry about it.
-            const int VACATION_HOURS_COLUMN = 55; //Vacation Balance
-
-            foreach (Excel.Worksheet sheet in workBook.Worksheets)
-            {
-                Excel.Range range = sheet.Range[sheet.Range["A1"], sheet.Range["B2"]].CurrentRegion;
-                //Excel.Range excelRange = (Excel.Range)sheet.Range[sheet.Range["A1"], sheet.Range["P36"]];
-                var cellData = (Object[,])range.Value2;
-                int rows = cellData.GetLength(0);
-                for (int rowNumber = 1; rowNumber <= rows; ++rowNumber)
-                {
-                    //Log("cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() == " + cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString());
-                    if (TryGetIntFromCell(cellData[rowNumber, EMP_NUMBER_COLUMN], out int employeeNumber))
-                    {
-                        bool existedFromWfn = Program.EmployeeDictionary.ContainsKey(employeeNumber);
-                        if (!existedFromWfn)
-                        {
-                            string? employeeName = cellData[rowNumber, EMP_FIRST_NAME_COLUMN].ToString() + " " + cellData[rowNumber, EMP_LAST_NAME_COLUMN].ToString();
-                            Program.EmployeeDictionary.Add(employeeNumber, new Employee(employeeNumber, employeeName)
-                            {
-                                HireDate = DateTime.MinValue
-                            });
-                            Log("Employee " + employeeName + " (" + employeeNumber + ") found only in iSolvedEmployees.xlsx (not in WfnEmployees.xlsx); importing from iSolved.");
-                        }
-                        Employee employee = Program.EmployeeDictionary[employeeNumber];
-                        employee.WasAlreadyInPayroll = true;
-
-                        if ((!existedFromWfn || string.IsNullOrWhiteSpace(employee.SocialSecurityNumber))
-                            && TryGetStringFromCell(cellData[rowNumber, SSN_COLUMN], out string ssn))
-                        {
-                            if (existedFromWfn)
-                            {
-                                Log("Filled SocialSecurityNumber for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                            }
-                            employee.SocialSecurityNumber = ssn;
-                        }
-
-                        if (!existedFromWfn)
-                        {
-                            employee.IsMale = !(TryGetStringFromCell(cellData[rowNumber, GENDER_COLUMN], out string gender) && gender == "F");
-                        }
-
-                        if ((!existedFromWfn || string.IsNullOrWhiteSpace(employee.PhoneNumber))
-                            && TryGetStringFromCell(cellData[rowNumber, PHONE_NUMBER_COLUMN], out string phone))
-                        {
-                            if (existedFromWfn)
-                            {
-                                Log("Filled PhoneNumber for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                            }
-                            employee.PhoneNumber = phone;
-                        }
-
-                        if ((!existedFromWfn || employee.HireDate == DateTime.MinValue)
-                            && TryGetDateFromCell(cellData[rowNumber, HIRE_DATE_COLUMN], out DateTime hireDate))
-                        {
-                            if (existedFromWfn)
-                            {
-                                Log("Filled HireDate for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                            }
-                            employee.HireDate = hireDate;
-                        }
-
-                        if ((!existedFromWfn || employee.BirthDate == DateTime.MinValue)
-                            && TryGetDateFromCell(cellData[rowNumber, BIRTH_DATE_COLUMN], out DateTime birthDate))
-                        {
-                            if (existedFromWfn)
-                            {
-                                Log("Filled BirthDate for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                            }
-                            employee.BirthDate = birthDate;
-                        }
-
-                        if ((!existedFromWfn || employee.TerminationDate == DateTime.MinValue)
-                            && TryGetDateFromCell(cellData[rowNumber, TERM_DATE_COLUMN], out DateTime termDate))
-                        {
-                            if (existedFromWfn)
-                            {
-                                Log("Filled TerminationDate for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                            }
-                            employee.TerminationDate = termDate;
-                            TryGetDateFromCell(cellData[rowNumber, REHIRE_DATE_COLUMN], out DateTime rehireDate);
-                            if (employee.TerminationDate.CompareTo(employee.HireDate) >= 0 && employee.TerminationDate.CompareTo(rehireDate) >= 0)
-                            {
-                                employee.IsTerminated = true;
-                            }
-                            else
-                            {
-                                Log("Rehire date for " + employee.Name + " is less than the hire or rehire date.", true);
-                            }
-                        }
-
-                        foreach (KeyValuePair<Jobs, int> entry in payColumns)
-                        {
-                            if (TryGetFloatFromCell(cellData[rowNumber, entry.Value], out float payRate) && payRate > 0f)
-                            {
-                                float existingRate = employee.PayRates.GetValueOrDefault(entry.Key, 0f);
-                                if (existedFromWfn && existingRate <= 0f)
-                                {
-                                    Log("Filled pay rate for " + entry.Key + " for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                                    employee.SetPayRate(entry.Key, payRate);
-                                    if (entry.Key == Jobs.DRIVER_CHARTER)
-                                    {
-                                        employee.SetPayRate(Jobs.DRIVER_CHARTER_PUBLIC, payRate);
-                                    }
-                                }
-                                else if (!existedFromWfn)
-                                {
-                                    employee.SetPayRate(entry.Key, Math.Max(payRate, existingRate));
-                                }
-                            }
-                        }
-
-                        if (TryGetFloatFromCell(cellData[rowNumber, SALARY_COLUMN], out float salary) && salary > 50)
-                        {
-                            if (!existedFromWfn)
-                            {
-                                employee.IsSalaried = true;
-                                employee.AnnualSalaryAmount = Math.Max(employee.AnnualSalaryAmount, salary);
-                                employee.PrimaryCompany = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
-                            }
-                            else if (!employee.IsSalaried || employee.AnnualSalaryAmount <= 0f)
-                            {
-                                Log("Filled AnnualSalaryAmount for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                                employee.IsSalaried = true;
-                                employee.AnnualSalaryAmount = salary;
-                                employee.PrimaryCompany = employee.IdNumber == 1734 || employee.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
-                            }
-                        }
-
-                        if (!employee.IsAGrandForksEmployee)
-                        {
-                            if (TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string tag)
-                                && (StringSearch(tag, "Grand Forks") || StringSearch(tag, "GF")))
-                            {
-                                if (existedFromWfn)
-                                {
-                                    Log("Filled IsAGrandForksEmployee for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                                }
-                                employee.IsAGrandForksEmployee = true;
-                            }
-                        }
-
-                        if (!employee.IsAMechanicApprentice)
-                        {
-                            if (TryGetStringFromCell(cellData[rowNumber, ORGANIZATION_TAG_COLUMN], out string orgTag) && StringSearch(orgTag, "Apprentice"))
-                            {
-                                if (existedFromWfn)
-                                {
-                                    Log("Filled IsAMechanicApprentice for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                                }
-                                employee.IsAMechanicApprentice = true;
-                            }
-                        }
-
-                        if (!WfnEmployeesReader.EmployeesWithYearsOfServiceFromWfn.Contains(employeeNumber))
-                        {
-                            int yearsOfService = 0;
-                            bool gotYears = WfnEmployeesReader.TryParseYearsOfService(cellData[rowNumber, YEARS_OF_SERVICE_COLUMN], out yearsOfService)
-                                || TryGetIntFromCell(cellData[rowNumber, YEARS_OF_SERVICE_COLUMN], out yearsOfService);
-                            if (gotYears)
-                            {
-                                if (existedFromWfn)
-                                {
-                                    Log("Filled YearsOfService for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                                }
-                                employee.YearsOfService = Math.Max(yearsOfService, employee.YearsOfService);
-                            }
-                        }
-
-                        if (string.IsNullOrWhiteSpace(employee.EmploymentCategory)
-                            && TryGetStringFromCell(cellData[rowNumber, EMPLOYMENT_CATEGORY_COLUMN], out string category))
-                        {
-                            if (existedFromWfn)
-                            {
-                                Log("Filled EmploymentCategory for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                            }
-                            employee.EmploymentCategory = WfnEmployeesReader.MapEmploymentCategory(category);
-                        }
-
-                        //if (!employee.HasAnActiveDirectDepositAccount)
-                        //{
-                        //    for (int i = 0; i < 6; i++)
-                        //    {
-                        //        if (TryGetStringFromCell(cellData[rowNumber, DD_ACCOUNT_1 + i], out string accountStatus))
-                        //        {
-                        //            if (existedFromWfn && !employee.HasAnyDirectDepositAccount)
-                        //            {
-                        //                Log("Filled direct deposit status for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                        //            }
-                        //            employee.HasAnyDirectDepositAccount = true;
-                        //            if ((i == 5 && accountStatus != "") || accountStatus == "Active")
-                        //            {
-                        //                employee.HasAnActiveDirectDepositAccount = true;
-                        //                break;
-                        //            }
-                        //        }
-                        //    }
-                        //}
-
-                        //if (!WfnEmployeesReader.EmployeesWithVacationFromWfn.Contains(employeeNumber)
-                        //    && TryGetFloatFromCell(cellData[rowNumber, VACATION_HOURS_COLUMN], out float vacationHours))
-                        //{
-                        //    if (existedFromWfn)
-                        //    {
-                        //        Log("Filled VacationHours for " + employee.Name + " (" + employee.IdNumber + ") from iSolvedEmployees.xlsx.");
-                        //    }
-                        //    employee.VacationHours = Math.Max(vacationHours, employee.VacationHours);
-                        //}
-                    }
-                }
-            }
-            workBook.Close();
-            excelApp.Quit();
-
-            //Marshal.ReleaseComObject(workBook);
-            //Marshal.ReleaseComObject(excelApp);
         }
 
         public void PreCheckTimeSheets()
@@ -890,8 +636,8 @@ namespace PayrollProcessor
                                         employee.IsAGrandForksEmployee = true;
                                         importedEmployee.ImportFields["OrganizationValue2"] = "GF";
                                     }
-                                    isPara = StringSearch(cellString, "para") || StringSearch(cellString, "aide") || StringSearch(cellString, "van driver");
-                                    isDriver = !isPara && (StringSearch(cellString, "driver"));
+                                    isPara |= StringSearch(cellString, "para") || StringSearch(cellString, "aide") || StringSearch(cellString, "van driver");
+                                    isDriver |= !isPara && (StringSearch(cellString, "driver"));
                                     break;
                                 case "Date Received (Direct Deposit Authorization )":
                                     if (TryGetDateFromCell(cell, out employee.DateOfDirectDepositUpdateInWorkBright))
@@ -918,9 +664,9 @@ namespace PayrollProcessor
                         importedEmployee.ImportFields["Rate_DrvrDlySchool"] = payRate.ToString();
                         employee.PayRates[Jobs.DRIVER_SCHOOL] = payRate;
 
-                        payRate = employee.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_CHARTER] : FargoDefaultRates[Jobs.DRIVER_CHARTER];
+                        payRate = employee.IsAGrandForksEmployee ? GrandForksDefaultRates[Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS] : FargoDefaultRates[Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS];
                         importedEmployee.ImportFields["Rate_DrvrSchoolChrtr"] = payRate.ToString();
-                        employee.PayRates[Jobs.DRIVER_CHARTER] = payRate;
+                        employee.PayRates[Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS] = payRate;
                     }
 
                     string ssn = "";
@@ -1066,10 +812,6 @@ namespace PayrollProcessor
                             {
                                 shift.JobType = Jobs.DRIVER_OUT_OF_TOWN_CHARTER;
                             }
-                            if (shift.JobType == Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS)
-                            {
-                                shift.JobType = Jobs.DRIVER_CHARTER;
-                            }
                             if (employeeNumber == 1983/*chris clark*/ && (Jobs)shift.JobInt == Jobs.MECHANIC)
                             {
                                 shift.JobInt = (int)Jobs.DRIVER_SCHOOL;
@@ -1101,7 +843,7 @@ namespace PayrollProcessor
                         TryGetStringFromCell(cellData[rowNumber, NOTES_COLUMN], out shift.Notes);
                         if (StringSearch(shift.Notes, "TNT"))
                         {
-                            shift.JobType = Jobs.DRIVER_CHARTER;
+                            shift.JobType = Jobs.DRIVER_CHARTER_PRIVATE;
                         }
                         if (StringSearch(shift.Notes, "per diem") || StringSearch(shift.Notes, "perdiem"))
                         {
@@ -3628,7 +3370,7 @@ namespace PayrollProcessor
                     DelayedLog("Warning: Jobcode " + code + " is being used.");
                     goto case 2;
                 case 2:
-                    return Jobs.DRIVER_CHARTER;
+                    return Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS;
                 case 23:
                 case 25:
                     return Jobs.AIDE_SCHOOL;
