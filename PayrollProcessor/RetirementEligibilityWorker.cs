@@ -26,7 +26,7 @@ namespace PayrollProcessor
             {
                 for (int year = FirstYear; year <= LastYear; year++)
                 {
-                    string path = DesktopPath() + year + ".xlsx";
+                    string path = DefaultDirectoryPath() + year + ".xlsx";
 
                     if (!File.Exists(path))
                     {
@@ -43,7 +43,7 @@ namespace PayrollProcessor
                 }
                 WriteReport(excelApp);
 
-                Log("401(k) eligibility report created on desktop: 401k Eligibility Review.xlsx", true);
+                Log("401(k) eligibility report created: " + DefaultDirectoryPath() + "401k Eligibility Review.xlsx", true);
             }
             finally
             {
@@ -200,7 +200,7 @@ namespace PayrollProcessor
 
         private void WriteReport(Excel.Application excelApp)
         {
-            string path = DesktopPath() + "401k Eligibility Review.xlsx";
+            string path = DefaultDirectoryPath() + "401k Eligibility Review.xlsx";
 
             if (File.Exists(path))
             {

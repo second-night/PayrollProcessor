@@ -69,7 +69,7 @@ namespace PayrollProcessor
                 //LogVacationSummary(emp, compensatedHours, accrual, vacationTaken, transactionAmount);
             }
 
-            string path = DesktopPath() + "AccrualsImport.csv";
+            string path = DefaultDirectoryPath() + "AccrualsImport.csv";
             WriteCsv(path, rows);
             Log("Vacation time-off import written to " + path + " (" + rows.Count + " rows).");
 

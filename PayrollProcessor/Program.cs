@@ -79,12 +79,18 @@ namespace PayrollProcessor
             Console.SetOut(new ToDebugWriter());
             ApplicationConfiguration.Initialize();
             ExcelWorker = new();
+            if (PrintForm.LaunchPayrollHistoryParser)
+            {
+                new PayrollHistoryParser().Run();
+                return;
+            }
             CheckForVacationCutOff(ExcelWorker.FirstDayWeek2);
             new WfnEmployeesReader().Read();
             ExcelWorker.PreCheckTimeSheets();
             ManualEntriesTracker.GetInstance().PreCheckForNewEmployees();
             ExcelWorker.ReadEmployeeExport();
             DoEmployeeRaises();
+            new HolidayEligibility().ApplyIfNeeded(ExcelWorker.FirstDayWeek2);
             ExcelWorker.ReadTimeSheets();
             ExcelWorker.ReadCoachesPayroll();
             ManualEntriesTracker manualEntriesTracker = ManualEntriesTracker.GetInstance();
@@ -938,9 +944,22 @@ namespace PayrollProcessor
             return payDate.Month == 8 && payDate.AddDays(14).Month > 8;
         }
 
-        public static string DesktopPath()
+        public static string DefaultDirectoryPath()
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\";
+            const string payrollFilesDirectory =
+                @"C:\Users\User\valleybusllc.com\Admin Team - Payroll - Payroll\Payroll\PayrollProcessor";
+
+            DirectoryInfo? directory = new(Directory.GetCurrentDirectory());
+            while (directory != null)
+            {
+                if (directory.EnumerateFiles("*.sln").Any())
+                {
+                    return directory.FullName + "\\";
+                }
+                directory = directory.Parent;
+            }
+
+            return payrollFilesDirectory + "\\";
         }
 
         public static string MakeLog()
@@ -950,7 +969,7 @@ namespace PayrollProcessor
             paths[0] += "\\Logs\\Log" + DateTime.Today.ToShortDateString().Replace("/", "-") + "_forPayDate_" + ExcelWorker.FirstDayWeek2.AddDays(12).ToShortDateString().Replace("/", "-") + ".txt";
             paths[1] = "C:\\Users\\User\\valleybusllc.com\\PayrollExceptionMonitoring - PayrollMonitoring\\" + "log_forPayDate_" + ExcelWorker.FirstDayWeek2.AddDays(12).ToShortDateString().Replace("/", "-") + ".txt";
 
-            paths[2] = DesktopPath() + "PayrollLog.txt";
+            paths[2] = DefaultDirectoryPath() + "PayrollLog.txt";
 
             for (int i = 0; i < paths.Length; ++i)
             {
@@ -971,7 +990,7 @@ namespace PayrollProcessor
                     fs.Write(log, 0, log.Length);
                 }
             }
-            return paths[1];
+            return paths[2];
         }
 
         public static void Exit()

@@ -366,3 +366,15 @@ FodyWeavers.xsd
 Payroll History/
 /AdpPayrollHistory.xlsx
 /GrossWagesiSolved.xlsx
+/AccrualsImport.csv
+/ADP_NewHireImport.csv
+/backup_manual_entries.xlsx
+/BirthDates.xlsx
+/CoachesPayroll.xlsx
+/EPIMKZAA.csv
+/EPIMMFAA.csv
+/manual_entries.xlsx
+/PayrollLog.txt
+/Timesheets.xlsx
+/WfnEmployees.xlsx
+/WorkbrightEmployees.xlsx

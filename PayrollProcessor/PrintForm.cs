@@ -9,6 +9,8 @@ namespace PayrollProcessor
         private Button exirtButton;
         private string InputText;
         private CheckBox checkBox1;
+        private Button payrollHistoryParserButton;
+        public static bool LaunchPayrollHistoryParser { get; private set; }
         public PrintForm(string message)
         {
             InitializeComponent();
@@ -26,6 +28,7 @@ namespace PayrollProcessor
             textBox1 = new TextBox();
             exirtButton = new Button();
             checkBox1 = new CheckBox();
+            payrollHistoryParserButton = new Button();
             SuspendLayout();
             // 
             // label1
@@ -99,11 +102,23 @@ namespace PayrollProcessor
             checkBox1.TabIndex = 5;
             checkBox1.Visible = false;
             //
+            // payrollHistoryParserButton
+            //
+            payrollHistoryParserButton.Location = new Point(12, 178);
+            payrollHistoryParserButton.Name = "payrollHistoryParserButton";
+            payrollHistoryParserButton.Size = new Size(250, 29);
+            payrollHistoryParserButton.TabIndex = 6;
+            payrollHistoryParserButton.Text = "Launch Payroll History Parser";
+            payrollHistoryParserButton.UseVisualStyleBackColor = true;
+            payrollHistoryParserButton.Visible = false;
+            payrollHistoryParserButton.Click += PayrollHistoryParserButtonPressed;
+            //
             // PrintForm
             // 
             AutoSize = true;
             ClientSize = new Size(284, 261);
             Controls.Add(exirtButton);
+            Controls.Add(payrollHistoryParserButton);
             Controls.Add(checkBox1);
             Controls.Add(textBox1);
             Controls.Add(button2);
@@ -137,6 +152,23 @@ namespace PayrollProcessor
             this.Close();
         }
 
+        private void PayrollHistoryParserButtonPressed(object? sender, EventArgs e)
+        {
+            LaunchPayrollHistoryParser = true;
+            YesNoButton = false;
+            this.Close();
+        }
+
+        private void ShowPayrollHistoryParserButton()
+        {
+            payrollHistoryParserButton.Visible = true;
+            AutoSize = false;
+            ClientSize = new Size(400, 310);
+            button1.Location = new Point(24, 255);
+            button2.Location = new Point(149, 255);
+            exirtButton.Location = new Point(290, 12);
+        }
+
         private Label label1;
         private DateTimePicker dateTimePicker1;
         private Button button1;
@@ -156,6 +188,7 @@ namespace PayrollProcessor
         public static bool InputDateTime(string message, string checkboxText, bool defaultCheckboxValue,
             out DateTime dateTime, out bool checkboxValue)
         {
+            LaunchPayrollHistoryParser = false;
             PrintForm form = new PrintForm(message);
             form.dateTimePicker1.Visible = true;
             form.checkBox1.Text = checkboxText;
@@ -164,6 +197,7 @@ namespace PayrollProcessor
             form.button2.Text = "Yes";
             form.button1.Text = "No";
             form.button1.Visible = true;
+            form.ShowPayrollHistoryParserButton();
             Application.Run(form);
             dateTime = new(form.DateTime.Year, form.DateTime.Month, form.DateTime.Day);
             checkboxValue = form.checkBox1.Checked;

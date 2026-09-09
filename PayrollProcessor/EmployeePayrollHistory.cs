@@ -554,7 +554,7 @@ namespace PayrollProcessor
         private static string ToCsvRow(IEnumerable<string> values) => string.Join(",", values.Select(value =>
             $"\"{value.Replace("\"", "\"\"")}\""));
 
-        private static string[] ParseCsvRow(string line)
+        internal static string[] ParseCsvRow(string line)
         {
             List<string> values = new();
             StringBuilder value = new();

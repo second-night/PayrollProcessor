@@ -28,10 +28,11 @@ namespace PayrollProcessor
             EmployeesWithYearsOfServiceFromWfn.Clear();
             EmployeesWithVacationFromWfn.Clear();
 
-            string filePath = DesktopPath() + FileName;
+            string filePath = DefaultDirectoryPath() + FileName;
             if (!File.Exists(filePath))
             {
-                Log("ERROR: Please make sure there is an excel spreadsheet on your desktop named " + FileName, true);
+                Log("ERROR: Please make sure there is an excel spreadsheet named " + FileName
+                    + " in " + DefaultDirectoryPath(), true);
                 return;
             }
 

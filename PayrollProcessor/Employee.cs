@@ -138,10 +138,6 @@ namespace PayrollProcessor
         public bool IsActive()
         {
             bool bIsActive = !IsTerminated;
-            if (bIsActive != ActiveCompanies.Count > 0)
-            {
-                Log("Warning: Employee " + Name + " ( " + IdNumber + " ) has a mismatch between IsTerminated and ActiveCompanies.", true);
-            }
             return bIsActive;
         }
 

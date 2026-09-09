@@ -36,6 +36,10 @@ namespace PayrollProcessor
                 out DateTime dateTime,
                 out bool isPrimaryPayrollRun);
             IsPrimaryPayrollRun = isPrimaryPayrollRun;
+            if (PrintForm.LaunchPayrollHistoryParser)
+            {
+                return;
+            }
             if (manuallyEnterWeekTwoDate)
             {
                 FirstDayWeek2 = dateTime;
@@ -90,7 +94,7 @@ namespace PayrollProcessor
             const int NOTES_COLUMN = 18;
             const int BUS_NUMBER_COLUMN = 34;
 
-            if (!CheckForExcelFileOnDesktop("Timesheets.xlsx", out string filePath))
+            if (!CheckForExcelFileInDefaultDirectory("Timesheets.xlsx", out string filePath))
             {
                 return;
             }
@@ -228,15 +232,15 @@ namespace PayrollProcessor
         public void ReadEmployeeExport()
         {
             EmployeeExportByNumber.Clear();
-            if (!CheckForExcelFileOnDesktop("Employee Export.xlsx", out string filePath))
+            if (!CheckForExcelFileInDefaultDirectory("WorkbrightEmployees.xlsx", out string filePath))
             {
-                Log("Couldn't find employee export.", true);
+                Log("Couldn't find WorkbrightEmployees.", true);
                 return;
             }
             var lastModified = System.IO.File.GetLastWriteTime(filePath);
             if (new DateTime(lastModified.Year, lastModified.Month, lastModified.Day).CompareTo(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day)) < 0)
             {
-                Log("Employee Export is old.", true);
+                Log("WorkbrightEmployees is old.", true);
             }
             Excel.Application excelApp = new Excel.Application();
             var fInfo = new FileInfo(filePath);
@@ -727,7 +731,7 @@ namespace PayrollProcessor
             const int NOTES_COLUMN = 17;
             const int BUS_NUMBER_COLUMN = 34;
 
-            if (!CheckForExcelFileOnDesktop("Timesheets.xlsx", out string filePath))
+            if (!CheckForExcelFileInDefaultDirectory("Timesheets.xlsx", out string filePath))
             {
                 return;
             }
@@ -1054,7 +1058,7 @@ namespace PayrollProcessor
             const int BUS_NUMBER_COLUMN = 15;
             const int HOURS_COLUMN = 17;
 
-            if (!CheckForExcelFileOnDesktop("CoachesPayroll.xlsx", out string filePath))
+            if (!CheckForExcelFileInDefaultDirectory("CoachesPayroll.xlsx", out string filePath))
             {
                 return;
             }
@@ -1347,7 +1351,7 @@ namespace PayrollProcessor
                 Excel.Worksheet? workSheet = null;
                 if ((Company)company == Company.VALLEY_BUS_LLC)
                 {
-                    string filePath = DesktopPath() + "Timesheets.xlsx";
+                    string filePath = DefaultDirectoryPath() + "Timesheets.xlsx";
                     var fInfo = new FileInfo(filePath);
                     if (fInfo.Exists)
                     {
@@ -1362,7 +1366,7 @@ namespace PayrollProcessor
                 }
                 else
                 {
-                    string filePath = DesktopPath() + "MotorCoach_TimeCardImport.xlsx";
+                    string filePath = DefaultDirectoryPath() + "MotorCoach_TimeCardImport.xlsx";
                     var fInfo = new FileInfo(filePath);
                     fInfo = new FileInfo(filePath);
                     if (fInfo.Exists)
@@ -1399,7 +1403,7 @@ namespace PayrollProcessor
                                 if (!emp.WasReportedForPartialEntry)
                                 {
                                     emp.WasReportedForPartialEntry = true;
-                                    Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
+                                    Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or in WorkbrightEmployees.", true);
                                 }
                                 continue;
                             }
@@ -1479,14 +1483,14 @@ namespace PayrollProcessor
 
                 if ((Company)company == Company.VALLEY_BUS_LLC)
                 {
-                    SaveWorkBook(workBook, DesktopPath() + "Timesheets1.xlsx");
+                    SaveWorkBook(workBook, DefaultDirectoryPath() + "Timesheets1.xlsx");
                     ((Excel.Worksheet)workBook.Worksheets.get_Item(2)).Delete();
-                    SaveWorkBook(workBook, DesktopPath() + "VB_TimeCardImport.xlsx");
+                    SaveWorkBook(workBook, DefaultDirectoryPath() + "VB_TimeCardImport.xlsx");
 
                 }
                 else
                 {
-                    SaveWorkBook(workBook, DesktopPath() + "MotorCoach_TimeCardImport.xlsx");
+                    SaveWorkBook(workBook, DefaultDirectoryPath() + "MotorCoach_TimeCardImport.xlsx");
                 }
 
                 workBook.Close(true, misValue, misValue);
@@ -1499,7 +1503,7 @@ namespace PayrollProcessor
 
             var p = new Process
             {
-                StartInfo = new ProcessStartInfo(DesktopPath() + "VB_TimeCardImport.xlsx")
+                StartInfo = new ProcessStartInfo(DefaultDirectoryPath() + "VB_TimeCardImport.xlsx")
                 {
                     UseShellExecute = true
                 }
@@ -1507,7 +1511,7 @@ namespace PayrollProcessor
             p.Start();
             p = new Process
             {
-                StartInfo = new ProcessStartInfo(DesktopPath() + "MotorCoach_TimeCardImport.xlsx")
+                StartInfo = new ProcessStartInfo(DefaultDirectoryPath() + "MotorCoach_TimeCardImport.xlsx")
                 {
                     UseShellExecute = true
                 }
@@ -1539,7 +1543,7 @@ namespace PayrollProcessor
                         if (!emp.WasReportedForPartialEntry)
                         {
                             emp.WasReportedForPartialEntry = true;
-                            Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or on the employee export.", true);
+                            Log("Employee: " + emp.Name + " (" + emp.IdNumber + ") was not found in payroll or on WorkbrightEmployees.", true);
                         }
                         continue;
                     }
@@ -1655,7 +1659,7 @@ namespace PayrollProcessor
                 //manual entries always go at the end of the .csv file
                 AddManualEntryWfnRows(rows, (Company)company, batchId);
 
-                string path = DesktopPath() + ((Company)company == Company.VALLEY_BUS_LLC ? "EPIMMFAA.csv" : "EPIMKZAA.csv");
+                string path = DefaultDirectoryPath() + ((Company)company == Company.VALLEY_BUS_LLC ? "EPIMMFAA.csv" : "EPIMKZAA.csv");
                 WriteCsv(path, WfnPayrollImportHeaders, rows);
 
                 var p = new Process
@@ -2858,7 +2862,7 @@ namespace PayrollProcessor
                 //{ DesktopPath() + "EmployeeImport.xlsx" },
                 //{ DesktopPath() + "RaiseImport.xlsx" },
                 //{ DesktopPath() + "DirectDepositImport.xlsx" },
-                { DesktopPath() + "ADP_NewHireImport.csv" }
+                { DefaultDirectoryPath() + "ADP_NewHireImport.csv" }
             };
             List<object[,]> matricis = new()
             {
@@ -2922,7 +2926,7 @@ namespace PayrollProcessor
             }
 
             Excel.Workbook? workBook = null;
-            String path = DesktopPath() + "BirthDates.xlsx";
+            String path = DefaultDirectoryPath() + "BirthDates.xlsx";
             var fInfo = new FileInfo(path);
             if (fInfo.Exists)
             {
@@ -3411,12 +3415,13 @@ namespace PayrollProcessor
         }
 
 
-        private bool CheckForExcelFileOnDesktop(string fileName, out string filePath)
+        private bool CheckForExcelFileInDefaultDirectory(string fileName, out string filePath)
         {
-            filePath = DesktopPath() + fileName;
+            filePath = DefaultDirectoryPath() + fileName;
             if (!File.Exists(filePath))
             {
-                Log("ERROR: Please make sure there is an excel spreadsheet on your desktop named " + fileName, true);
+                Log("ERROR: Please make sure there is an excel spreadsheet named " + fileName
+                    + " in " + DefaultDirectoryPath(), true);
                 return false;
             }
             return true;

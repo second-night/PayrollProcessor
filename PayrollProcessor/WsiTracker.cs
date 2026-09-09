@@ -35,7 +35,7 @@ namespace PayrollProcessor
                     "WSI quarter " + quarter + " of " + year + " is ready to generate."
                     + "\n\nDownload a current copy of " + AdpPayrollHistoryFileName
                     + " (Valley Bus LLC, pay dates " + quarterStart.ToString("M/d/yyyy")
-                    + " through " + quarterEnd.ToString("M/d/yyyy") + ") to your desktop, then click Ready.",
+                    + " through " + quarterEnd.ToString("M/d/yyyy") + ") to the PayrollProcessor folder, then click Ready.",
                     "Ready",
                     "Skip"))
             {
@@ -432,7 +432,7 @@ namespace PayrollProcessor
         {
             string[] candidates =
             {
-                DesktopPath() + fileName,
+                DefaultDirectoryPath() + fileName,
                 Path.GetFullPath(Path.Combine(EmployeePayrollHistory.HistoryFolder, "..", fileName))
             };
             foreach (string candidate in candidates)
@@ -446,7 +446,7 @@ namespace PayrollProcessor
 
             path = "";
             Log("WSI quarterly report needs " + fileName
-                + " on the desktop. Download it and run the next primary payroll to generate the report.", true);
+                + " in " + DefaultDirectoryPath() + ". Download it and run the next primary payroll to generate the report.", true);
             return false;
         }
 

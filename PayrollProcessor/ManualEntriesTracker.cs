@@ -88,13 +88,13 @@ namespace PayrollProcessor
         }
 
         /// <summary>
-        /// Scans manual_entries.xlsx before Employee Export is read, mirroring PreCheckTimeSheets.
+        /// Scans manual_entries.xlsx before WorkbrightEmployees is read, mirroring PreCheckTimeSheets.
         /// Employees with manual entry values who are not in iSolved get partial entries so
-        /// ReadEmployeeExport can import them from Employee Export.xlsx.
+        /// ReadEmployeeExport can import them from WorkbrightEmployees.xlsx.
         /// </summary>
         public void PreCheckForNewEmployees()
         {
-            string filePath = DesktopPath() + FileName;
+            string filePath = DefaultDirectoryPath() + FileName;
             if (!File.Exists(filePath))
             {
                 return;
@@ -189,10 +189,10 @@ namespace PayrollProcessor
             FirstDayWeek2 = firstDayWeek2;
             Entries.Clear();
 
-            string filePath = DesktopPath() + FileName;
+            string filePath = DefaultDirectoryPath() + FileName;
             if (!File.Exists(filePath))
             {
-                Log("No manual_entries.xlsx found on desktop; skipping manual entries.");
+                Log("No manual_entries.xlsx found in " + DefaultDirectoryPath() + "; skipping manual entries.");
                 return;
             }
 
@@ -582,7 +582,7 @@ namespace PayrollProcessor
                     && !StringSearch(exportNames.FirstName, entry.EmployeeFirstName.Trim()))
                 {
                     Log("Manual entry row " + entry.RowNumber + ": Employee First Name \""
-                        + entry.EmployeeFirstName + "\" does not match Employee Export first name \""
+                        + entry.EmployeeFirstName + "\" does not match WorkbrightEmployees first name \""
                         + exportNames.FirstName + "\" for employee #" + entry.EmployeeNumber + ".", true);
                 }
                 return;
@@ -593,7 +593,7 @@ namespace PayrollProcessor
                 if (entry.Employee == null || entry.Employee.IsPartialEntry)
                 {
                     Log("Manual entry row " + entry.RowNumber + ": Employee Number "
-                        + entry.EmployeeNumber + " was not found on Employee Export.", true);
+                        + entry.EmployeeNumber + " was not found on WorkbrightEmployees.", true);
                 }
                 return;
             }
@@ -604,7 +604,7 @@ namespace PayrollProcessor
                 {
                     string exportFullName = exportEntry.Value.FirstName + " " + exportEntry.Value.LastName;
                     Log("Manual entry row " + entry.RowNumber + ": Employee Number " + entry.EmployeeNumber
-                        + " was not found on Employee Export, but #" + exportEntry.Key + " ("
+                        + " was not found on WorkbrightEmployees, but #" + exportEntry.Key + " ("
                         + exportFullName + ") has a matching first name — check for a typo in the employee number.", true);
                     return;
                 }
@@ -613,7 +613,7 @@ namespace PayrollProcessor
             if (entry.Employee == null || entry.Employee.IsPartialEntry)
             {
                 Log("Manual entry row " + entry.RowNumber + ": Employee Number "
-                    + entry.EmployeeNumber + " was not found on Employee Export.", true);
+                    + entry.EmployeeNumber + " was not found on WorkbrightEmployees.", true);
             }
         }
 
@@ -631,7 +631,7 @@ namespace PayrollProcessor
 
         private static void BackupFile(string filePath)
         {
-            string backupPath = DesktopPath() + BackupFileName;
+            string backupPath = DefaultDirectoryPath() + BackupFileName;
             File.Copy(filePath, backupPath, true);
             Log("Backed up " + FileName + " to " + BackupFileName + ".");
         }
