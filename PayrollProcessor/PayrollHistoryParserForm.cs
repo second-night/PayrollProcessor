@@ -66,7 +66,7 @@ namespace PayrollProcessor
             selectedLabel.Location = new Point(12, 330);
             selectedLabel.Text = "Selected employee: none";
 
-            lastSixRadio.Text = "Last 6 pay periods";
+            lastSixRadio.Text = "Last 6 pay periods (12 weeks)";
             lastSixRadio.AutoSize = true;
             lastSixRadio.Location = new Point(12, 365);
             lastSixRadio.Checked = true;
@@ -84,7 +84,6 @@ namespace PayrollProcessor
             };
             startPicker.Location = new Point(180, 393);
             startPicker.Width = 160;
-            startPicker.Value = DateTime.Today.AddMonths(-3);
 
             Label toLabel = new()
             {
@@ -94,7 +93,7 @@ namespace PayrollProcessor
             };
             endPicker.Location = new Point(385, 393);
             endPicker.Width = 160;
-            endPicker.Value = DateTime.Today;
+            ApplyLastSixWindowDefaults();
 
             submitButton.Text = "Submit";
             submitButton.Location = new Point(12, 440);
@@ -217,6 +216,20 @@ namespace PayrollProcessor
                 + selectedEmployee.DisplayName;
         }
 
+        private void ApplyLastSixWindowDefaults()
+        {
+            (DateTime Start, DateTime End)? window = PayPeriodSchedule.LastRegularPayPeriodWindow();
+            if (window.HasValue)
+            {
+                startPicker.Value = window.Value.Start;
+                endPicker.Value = window.Value.End;
+                return;
+            }
+
+            startPicker.Value = DateTime.Today.AddMonths(-3);
+            endPicker.Value = DateTime.Today;
+        }
+
         private void RangeModeChanged(object? sender, EventArgs e)
         {
             bool useRange = dateRangeRadio.Checked;
@@ -285,6 +298,7 @@ namespace PayrollProcessor
             bool lastSix = housing || lastSixRadio.Checked;
             DateTime start = startPicker.Value.Date;
             DateTime end = endPicker.Value.Date;
+            int previousWarningCount = catalog.LoadWarnings.Count;
             SetBusy(true);
             statusLabel.Text = "Loading payroll files...";
             BackgroundWorker worker = new();
@@ -307,6 +321,12 @@ namespace PayrollProcessor
                 }
 
                 RestoreSelection(employee);
+                List<string> newWarnings = catalog.LoadWarnings.Skip(previousWarningCount).ToList();
+                if (newWarnings.Count > 0)
+                {
+                    MessageBox.Show(this, string.Join(Environment.NewLine, newWarnings),
+                        "Payroll History Parser", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
                 if (lastSix && WarnIfMostRecentPayrollMissing())
                 {
                     return;

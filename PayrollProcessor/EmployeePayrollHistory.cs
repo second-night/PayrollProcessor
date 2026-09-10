@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using static PayrollProcessor.Program;
 
 namespace PayrollProcessor
 {
@@ -145,6 +146,7 @@ namespace PayrollProcessor
                     && !employee.IsSalaried 
                     && !hasCurrentHours
                     && employee.WasAlreadyInPayroll
+                    && !WasHiredInLast30Days(employee)
                     && GetHistoricalHours(employee.IdNumber, lookbackPayPeriods) < 0.01f 
                     && !terminationExceptions.Contains(employee.IdNumber))
                 {
@@ -197,6 +199,16 @@ namespace PayrollProcessor
             string category = employee.EmploymentCategory?.Trim() ?? "";
             return category.Equals("FT", StringComparison.OrdinalIgnoreCase)
                 || category.Equals("ACAFT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool WasHiredInLast30Days(Employee employee)
+        {
+            if (employee.HireDate == DateTime.MinValue)
+            {
+                return false;
+            }
+
+            return employee.HireDate.Date >= currentPayDate.Date.AddDays(-30);
         }
 
         private float GetHistoricalHours(int employeeNumber, int lookbackPayPeriods)
@@ -416,12 +428,7 @@ namespace PayrollProcessor
         {
             entries = new();
             hasGrossPayColumn = false;
-            string[] lines;
-            try
-            {
-                lines = File.ReadAllLines(path);
-            }
-            catch (IOException)
+            if (!TryReadAllLines(path, out string[] lines, out _))
             {
                 return false;
             }
@@ -553,6 +560,30 @@ namespace PayrollProcessor
         private static string FormatNumber(float value) => value.ToString("0.##", CultureInfo.InvariantCulture);
         private static string ToCsvRow(IEnumerable<string> values) => string.Join(",", values.Select(value =>
             $"\"{value.Replace("\"", "\"\"")}\""));
+
+        internal static bool TryReadAllLines(string path, out string[] lines, out string? error)
+        {
+            lines = Array.Empty<string>();
+            error = null;
+            try
+            {
+                using FileStream stream = new(path, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                List<string> result = new();
+                while (reader.ReadLine() is string line)
+                {
+                    result.Add(line);
+                }
+                lines = result.ToArray();
+                return true;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                error = exception.Message;
+                return false;
+            }
+        }
 
         internal static string[] ParseCsvRow(string line)
         {

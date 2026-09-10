@@ -97,7 +97,9 @@ namespace PayrollProcessor
                 .Distinct()
                 .OrderBy(date => date)
                 .ToList();
-            int weekCount = Math.Max(1, lastSixDates.Count * 2);
+            int regularCount = lastSixDates.Count(date => PayPeriodSchedule.IsRegularPayDate(date));
+            int periodCount = regularCount > 0 ? regularCount : lastSixDates.Count;
+            int weekCount = Math.Max(1, periodCount * PayPeriodSchedule.WeeksPerPayPeriod);
             List<PayrollHistoryPeriod> llcSix = lastSixPeriods
                 .Where(period => period.Company == Company.VALLEY_BUS_LLC)
                 .ToList();
@@ -121,7 +123,7 @@ namespace PayrollProcessor
             int[] years = { currentYear, currentYear - 1, currentYear - 2 };
             string rangeNote = lastSixDates.Count == 0
                 ? "No pay periods found"
-                : "Last " + lastSixDates.Count + " pay period(s) / " + weekCount
+                : "Last " + periodCount + " pay period(s) / " + weekCount
                     + " weeks, Valley Bus LLC and Valley Bus Coaches combined";
 
             Excel.Application excelApp = new()
@@ -262,7 +264,7 @@ namespace PayrollProcessor
             List<PayrollHistoryPeriod> periods, bool lastSixPayPeriods, DateTime startDate, DateTime endDate,
             List<DateTime> payDates)
         {
-            object[,] values = new object[16, 2];
+            object[,] values = new object[18, 2];
             values[0, 0] = "Employee Number";
             values[0, 1] = employee.EmployeeNumber;
             values[1, 0] = "First Name";
@@ -279,7 +281,7 @@ namespace PayrollProcessor
             values[6, 1] = FormatDate(employee.LastPaidDate);
             values[7, 0] = "Range";
             values[7, 1] = lastSixPayPeriods
-                ? "Last 6 pay periods"
+                ? "Last 6 pay periods (12 weeks)"
                 : startDate.ToString("M/d/yyyy") + " - " + endDate.ToString("M/d/yyyy");
             values[8, 0] = "Pay Periods Included";
             values[8, 1] = payDates.Count;
@@ -295,11 +297,18 @@ namespace PayrollProcessor
             values[12, 1] = FormatTotals(coaches);
             values[13, 0] = "Combined Hours / Gross / Net";
             values[13, 1] = FormatTotals(combined);
+            values[14, 0] = "Valley Bus LLC Estimated Coach Hours";
+            values[14, 1] = Round(llc.EstimatedCoachHours);
+            values[15, 0] = "Valley Bus Coaches Estimated Coach Hours";
+            values[15, 1] = Round(coaches.EstimatedCoachHours);
+            values[16, 0] = "Combined Estimated Coach Hours";
+            values[16, 1] = Round(combined.EstimatedCoachHours);
 
-            Excel.Range range = sheet.Range[sheet.Cells[1, 1], sheet.Cells[16, 2]];
+            Excel.Range range = sheet.Range[sheet.Cells[1, 1], sheet.Cells[18, 2]];
             range.Value2 = values;
             sheet.Columns[1].ColumnWidth = 38;
             sheet.Columns[2].ColumnWidth = 40;
+            sheet.Range["B15:B17"].NumberFormat = "0.00";
         }
 
         private static void WriteHistory(Excel.Worksheet sheet,
@@ -310,7 +319,9 @@ namespace PayrollProcessor
                 "Pay Date",
                 "Valley Bus LLC Hours", "Valley Bus LLC Gross", "Valley Bus LLC Net",
                 "Valley Bus Coaches Hours", "Valley Bus Coaches Gross", "Valley Bus Coaches Net",
-                "Combined Hours", "Combined Gross", "Combined Net"
+                "Combined Hours", "Combined Gross", "Combined Net",
+                "Valley Bus LLC Estimated Coach Hours", "Valley Bus Coaches Estimated Coach Hours",
+                "Combined Estimated Coach Hours"
             };
             object[,] values = new object[payDates.Count + 2, headers.Length];
             for (int i = 0; i < headers.Length; i++)
@@ -342,6 +353,9 @@ namespace PayrollProcessor
                 values[row + 1, 7] = Round(llc.TotalHours + coaches.TotalHours);
                 values[row + 1, 8] = Round(llc.GrossPay + coaches.GrossPay);
                 values[row + 1, 9] = Round(llc.NetPay + coaches.NetPay);
+                values[row + 1, 10] = Round(llc.EstimatedCoachHours);
+                values[row + 1, 11] = Round(coaches.EstimatedCoachHours);
+                values[row + 1, 12] = Round(llc.EstimatedCoachHours + coaches.EstimatedCoachHours);
             }
 
             int totalRow = payDates.Count + 1;
@@ -355,6 +369,9 @@ namespace PayrollProcessor
             values[totalRow, 7] = Round(llcTotal.TotalHours + coachesTotal.TotalHours);
             values[totalRow, 8] = Round(llcTotal.GrossPay + coachesTotal.GrossPay);
             values[totalRow, 9] = Round(llcTotal.NetPay + coachesTotal.NetPay);
+            values[totalRow, 10] = Round(llcTotal.EstimatedCoachHours);
+            values[totalRow, 11] = Round(coachesTotal.EstimatedCoachHours);
+            values[totalRow, 12] = Round(llcTotal.EstimatedCoachHours + coachesTotal.EstimatedCoachHours);
 
             Excel.Range range = sheet.Range[sheet.Cells[1, 1], sheet.Cells[payDates.Count + 2, headers.Length]];
             range.Value2 = values;
@@ -366,7 +383,7 @@ namespace PayrollProcessor
         {
             string[] headers =
             {
-                "Pay Date", "Company", "Source", "Total Hours", "Regular Hours", "Overtime Hours",
+                "Pay Date", "Company", "Source", "Total Hours", "Estimated Coach Hours", "Regular Hours", "Overtime Hours",
                 "Holiday Hours", "Vacation Hours", "Min Guarantee Hours", "Gross Pay", "Net Pay",
                 "Regular Earnings", "Overtime Earnings", "Bonus", "Tips", "Holiday Pay", "Vacation Pay",
                 "Back Pay", "Employee Taxes"
@@ -383,30 +400,38 @@ namespace PayrollProcessor
                 values[row + 1, 1] = period.Company == Company.VALLEY_BUS_LLC ? "Valley Bus LLC" : "Valley Bus Coaches";
                 values[row + 1, 2] = period.Source;
                 values[row + 1, 3] = Round(period.TotalHours);
-                values[row + 1, 4] = Round(period.RegularHours);
-                values[row + 1, 5] = Round(period.OvertimeHours);
-                values[row + 1, 6] = Round(period.HolidayHours);
-                values[row + 1, 7] = Round(period.VacationHours);
-                values[row + 1, 8] = Round(period.MinGuaranteeHours);
-                values[row + 1, 9] = Round(period.GrossPay);
-                values[row + 1, 10] = Round(period.NetPay);
-                values[row + 1, 11] = Round(period.RegularEarnings);
-                values[row + 1, 12] = Round(period.OvertimeEarnings);
-                values[row + 1, 13] = Round(period.BonusEarnings);
-                values[row + 1, 14] = Round(period.TipsEarnings);
-                values[row + 1, 15] = Round(period.HolidayEarnings);
-                values[row + 1, 16] = Round(period.VacationEarnings);
-                values[row + 1, 17] = Round(period.BackPayEarnings);
-                values[row + 1, 18] = Round(period.EmployeeTaxes);
+                values[row + 1, 4] = Round(period.EstimatedCoachHours);
+                values[row + 1, 5] = Round(period.RegularHours);
+                values[row + 1, 6] = Round(period.OvertimeHours);
+                values[row + 1, 7] = Round(period.HolidayHours);
+                values[row + 1, 8] = Round(period.VacationHours);
+                values[row + 1, 9] = Round(period.MinGuaranteeHours);
+                values[row + 1, 10] = Round(period.GrossPay);
+                values[row + 1, 11] = Round(period.NetPay);
+                values[row + 1, 12] = Round(period.RegularEarnings);
+                values[row + 1, 13] = Round(period.OvertimeEarnings);
+                values[row + 1, 14] = Round(period.BonusEarnings);
+                values[row + 1, 15] = Round(period.TipsEarnings);
+                values[row + 1, 16] = Round(period.HolidayEarnings);
+                values[row + 1, 17] = Round(period.VacationEarnings);
+                values[row + 1, 18] = Round(period.BackPayEarnings);
+                values[row + 1, 19] = Round(period.EmployeeTaxes);
             }
 
             Excel.Range range = sheet.Range[sheet.Cells[1, 1], sheet.Cells[periods.Count + 1, headers.Length]];
             range.Value2 = values;
             if (periods.Count > 0)
             {
-                sheet.Range[sheet.Cells[2, 4], sheet.Cells[periods.Count + 1, headers.Length]].NumberFormat = "0.00";
+                int lastDataRow = periods.Count + 1;
+                int totalRow = lastDataRow + 1;
+                sheet.Cells[totalRow, 1] = "Totals";
+                sheet.Cells[totalRow, 4].Formula = "=SUM(D2:D" + lastDataRow + ")";
+                sheet.Cells[totalRow, 5].Formula = "=SUM(E2:E" + lastDataRow + ")";
+                sheet.Cells[totalRow, 11].Formula = "=SUM(K2:K" + lastDataRow + ")";
+                sheet.Range[sheet.Cells[2, 4], sheet.Cells[totalRow, headers.Length]].NumberFormat = "0.00";
+                sheet.Range[sheet.Cells[totalRow, 1], sheet.Cells[totalRow, headers.Length]].Font.Bold = true;
             }
-            range.Columns.AutoFit();
+            sheet.Range[sheet.Cells[1, 1], sheet.Cells[Math.Max(1, periods.Count + 2), headers.Length]].Columns.AutoFit();
         }
 
         private static void WriteYearRow(object[,] values, int row, int year, string company, YearlyEarnings yearly)

@@ -1,3 +1,4 @@
+using Microsoft.VisualBasic.Logging;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -53,6 +54,7 @@ namespace PayrollProcessor
         public float VacationHours { get; set; }
         public float MinGuaranteeHours { get; set; }
         public float BackPayHours { get; set; }
+        public float EstimatedCoachHours { get; set; }
         public float GrossPay { get; set; }
         public float NetPay { get; set; }
         public float RegularEarnings { get; set; }
@@ -77,6 +79,7 @@ namespace PayrollProcessor
             VacationHours += other.VacationHours;
             MinGuaranteeHours += other.MinGuaranteeHours;
             BackPayHours += other.BackPayHours;
+            EstimatedCoachHours += other.EstimatedCoachHours;
             GrossPay += other.GrossPay;
             NetPay += other.NetPay;
             RegularEarnings += other.RegularEarnings;
@@ -148,6 +151,15 @@ namespace PayrollProcessor
 
             DateTime rangeStart = need.RangeStart.Date;
             DateTime rangeEnd = need.RangeEnd.Date;
+            if (need.LastSixPayPeriods)
+            {
+                (DateTime Start, DateTime End)? window = PayPeriodSchedule.LastRegularPayPeriodWindow();
+                if (window.HasValue)
+                {
+                    rangeStart = window.Value.Start;
+                    rangeEnd = window.Value.End;
+                }
+            }
             if (rangeEnd < rangeStart)
             {
                 (rangeStart, rangeEnd) = (rangeEnd, rangeStart);
@@ -185,21 +197,11 @@ namespace PayrollProcessor
                     LoadWarnings.Add("Could not read " + Path.GetFileName(file.Path) + ": " + exception.Message);
                 }
                 loadedFilePaths.Add(fullPath);
-
-                if (!need.HousingYears && need.LastSixPayPeriods && DistinctPayDateCount(employee) >= 6)
-                {
-                    bool siblingPending = files.Skip(index + 1).Any(remaining =>
-                        !remaining.IsAdp
-                        && remaining.Year == file.Year
-                        && remaining.Year > 0
-                        && !loadedFilePaths.Contains(Path.GetFullPath(remaining.Path)));
-                    if (!siblingPending)
-                    {
-                        break;
-                    }
-                }
             }
 
+            ApplyEstimatedCoachHours();
+            IgnoreEstimatedCoachHoursOnUnpaidRegularPayrolls();
+            ApplySpecialPayrollEstimatedCoachHours();
             RefreshLastPaidDates();
             DetermineMostRecentPayroll();
         }
@@ -241,19 +243,18 @@ namespace PayrollProcessor
         public List<PayrollHistoryPeriod> GetPeriods(PayrollHistoryEmployee employee, bool lastSixPayPeriods,
             DateTime startDate, DateTime endDate)
         {
-            List<DateTime> payDates = employee.Periods.Keys
-                .Select(key => key.PayDate.Date)
-                .Distinct()
-                .OrderByDescending(date => date)
-                .ToList();
             if (lastSixPayPeriods)
             {
-                HashSet<DateTime> lastSix = payDates.Take(6).ToHashSet();
-                return employee.Periods.Values
-                    .Where(period => lastSix.Contains(period.PayDate.Date))
-                    .OrderBy(period => period.PayDate)
-                    .ThenBy(period => period.Company)
-                    .ToList();
+                (DateTime Start, DateTime End)? window = PayPeriodSchedule.LastRegularPayPeriodWindow();
+                if (window.HasValue)
+                {
+                    return employee.Periods.Values
+                        .Where(period => period.PayDate.Date >= window.Value.Start
+                            && period.PayDate.Date <= window.Value.End)
+                        .OrderBy(period => period.PayDate)
+                        .ThenBy(period => period.Company)
+                        .ToList();
+                }
             }
 
             DateTime start = startDate.Date;
@@ -280,8 +281,171 @@ namespace PayrollProcessor
             }
         }
 
-        private static int DistinctPayDateCount(PayrollHistoryEmployee employee) =>
-            employee.Periods.Keys.Select(key => key.PayDate.Date).Distinct().Count();
+        private void ApplyEstimatedCoachHours()
+        {
+            foreach (PayrollHistoryEmployee employee in Employees.Values)
+            {
+                foreach (PayrollHistoryPeriod period in employee.Periods.Values)
+                {
+                    period.EstimatedCoachHours = 0f;
+                }
+            }
+
+            foreach ((DateTime payDate, string path) in EmployeePayrollHistory.EnumerateHistoryFiles())
+            {
+                if (!EmployeePayrollHistory.TryReadAllLines(path, out string[] lines, out string? error))
+                {
+                    LoadWarnings.Add("Could not read estimated coach hours from " + Path.GetFileName(path)
+                        + (error == null ? "" : ": " + error));
+                    continue;
+                }
+                if (lines.Length < 2)
+                {
+                    continue;
+                }
+
+                string[] headers = EmployeePayrollHistory.ParseCsvRow(lines[0]);
+                int employeeColumn = Array.IndexOf(headers, "Employee Number");
+                int companyColumn = Array.IndexOf(headers, "Company");
+                int coachColumn = Array.IndexOf(headers, "Estimated Coach Hours");
+                if (employeeColumn < 0 || companyColumn < 0 || coachColumn < 0)
+                {
+                    continue;
+                }
+
+                foreach (string line in lines.Skip(1))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    string[] values = EmployeePayrollHistory.ParseCsvRow(line);
+                    if (values.Length <= Math.Max(Math.Max(employeeColumn, companyColumn), coachColumn)
+                        || !int.TryParse(values[employeeColumn], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                            out int employeeNumber)
+                        || employeeNumber <= 0
+                        || !Employees.TryGetValue(employeeNumber, out PayrollHistoryEmployee? employee)
+                        || !Enum.TryParse(values[companyColumn], true, out Company company)
+                        || !float.TryParse(values[coachColumn], NumberStyles.Float, CultureInfo.InvariantCulture,
+                            out float coachHours)
+                        || Math.Abs(coachHours) <= 0.001f)
+                    {
+                        continue;
+                    }
+
+                    (DateTime PayDate, Company Company) key = (payDate.Date, company);
+                    if (employee.Periods.TryGetValue(key, out PayrollHistoryPeriod? period))
+                    {
+                        period.EstimatedCoachHours += coachHours;
+                    }
+                    else
+                    {
+                        employee.Periods[key] = new PayrollHistoryPeriod
+                        {
+                            PayDate = payDate.Date,
+                            Company = company,
+                            Source = "Payroll History",
+                            EstimatedCoachHours = coachHours
+                        };
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 7/11-style off-cycle coach work was sometimes written onto the adjacent regular
+        /// PayrollHistory_*.csv. If that regular period has no gross pay, those hours are leftover
+        /// and should not count.
+        /// </summary>
+        private void IgnoreEstimatedCoachHoursOnUnpaidRegularPayrolls()
+        {
+            List<DateTime> anchors = PayPeriodSchedule.HistoryFilePayDates();
+            foreach (PayrollHistoryEmployee employee in Employees.Values)
+            {
+                List<(DateTime PayDate, Company Company)> csvOnlyEmptyKeys = new();
+                foreach (KeyValuePair<(DateTime PayDate, Company Company), PayrollHistoryPeriod> pair in employee.Periods)
+                {
+                    PayrollHistoryPeriod period = pair.Value;
+                    if (!PayPeriodSchedule.IsRegularPayDate(period.PayDate, anchors)
+                        || period.GrossPay > 0.001f
+                        || period.EstimatedCoachHours <= 0.001f)
+                    {
+                        continue;
+                    }
+
+                    period.EstimatedCoachHours = 0f;
+                    if (period.Source == "Payroll History"
+                        && period.TotalHours <= 0.001f
+                        && period.CompensatedHours <= 0.001f
+                        && period.NetPay <= 0.001f)
+                    {
+                        csvOnlyEmptyKeys.Add(pair.Key);
+                    }
+                }
+
+                foreach ((DateTime PayDate, Company Company) key in csvOnlyEmptyKeys)
+                {
+                    employee.Periods.Remove(key);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Special / off-cycle payrolls do not write PayrollHistory_*.csv, so coach trip days
+        /// are not stored. If gross / hours exceeds the employee's top hourly rate, the extra
+        /// implied hours (gross / top rate − recorded hours) are treated as estimated coach hours.
+        /// </summary>
+        private void ApplySpecialPayrollEstimatedCoachHours()
+        {
+            List<DateTime> anchors = PayPeriodSchedule.HistoryFilePayDates();
+            foreach (PayrollHistoryEmployee employee in Employees.Values)
+            {
+                float topRate = GetTopPayRate(employee);
+                if (topRate <= 0.01f)
+                {
+                    continue;
+                }
+
+                foreach (PayrollHistoryPeriod period in employee.Periods.Values)
+                {
+                    if (PayPeriodSchedule.IsRegularPayDate(period.PayDate, anchors)
+                        || period.EstimatedCoachHours > 0.001f
+                        || period.GrossPay <= 0.001f)
+                    {
+                        continue;
+                    }
+
+                    float effectiveRate = period.GrossPay / period.TotalHours;
+                    if (effectiveRate <= topRate)
+                    {
+                        continue;
+                    }
+
+                    float extraHours = period.GrossPay / topRate - period.TotalHours;
+                    if (extraHours > 0.001f)
+                    {
+                        period.EstimatedCoachHours = extraHours;
+                    }
+                }
+            }
+        }
+
+        private static float GetTopPayRate(PayrollHistoryEmployee employee)
+        {
+            if (employee.HighestHourlyRate > 0.01f)
+            {
+                return employee.HighestHourlyRate;
+            }
+
+            if (Program.EmployeeDictionary.TryGetValue(employee.EmployeeNumber, out Employee? live)
+                && live.PayRates.Count > 0)
+            {
+                return live.PayRates.Values.Max();
+            }
+
+            return 0f;
+        }
 
         private static bool ShouldSkipPayrollFile(PayrollSourceFile file, PayrollHistoryEmployee employee,
             PayrollLoadNeed need, DateTime rangeStart, DateTime rangeEnd, int housingStartYear)
@@ -293,19 +457,12 @@ namespace PayrollProcessor
 
             if (need.LastSixPayPeriods)
             {
-                if (file.IsAdp || DistinctPayDateCount(employee) < 6)
+                if (file.IsAdp)
                 {
-                    return false;
+                    return rangeEnd < new DateTime(2026, 1, 1);
                 }
 
-                int minYear = employee.Periods.Keys
-                    .Select(key => key.PayDate.Date)
-                    .Distinct()
-                    .OrderByDescending(date => date)
-                    .Take(6)
-                    .Min()
-                    .Year;
-                return file.Year > 0 && file.Year < minYear;
+                return file.Year > 0 && (file.Year < rangeStart.Year || file.Year > rangeEnd.Year);
             }
 
             if (file.IsAdp)
@@ -463,7 +620,7 @@ namespace PayrollProcessor
                     GrossPay = GetFloat(columns, row, "Gross Pay"),
                     NetPay = GetFloat(columns, row, "Net Pay"),
                     RegularHours = SumMatching(headers, row, value => IsHours(value) && ContainsAny(value, "Hourly Regular", "Regular Hours")),
-                    OvertimeHours = SumMatching(headers, row, value => IsHours(value) && ContainsAny(value, "Overtime", "Overtim")),
+                    OvertimeHours = 0f,
                     HolidayHours = SumMatching(headers, row, value => IsHours(value) && ContainsAny(value, "Holiday")),
                     VacationHours = SumMatching(headers, row, value => IsHours(value) && ContainsAny(value, "Vacation")),
                     MinGuaranteeHours = SumMatching(headers, row, value => IsHours(value) && ContainsAny(value, "Min Guaran", "Min Guarantee")),
@@ -478,11 +635,11 @@ namespace PayrollProcessor
                     BackPayEarnings = SumMatching(headers, row, value => IsMoney(value) && ContainsAny(value, "Back Pay")),
                     EmployeeTaxes = SumMatching(headers, row, value => ContainsAny(value, "SOC SEC EE", "MED EE", "FEDERAL WH", "NORTH DAKOTA WH", "MINNESOTA WH"))
                 };
-                period.TotalHours = SumMatching(headers, row, IsHours);
+                period.TotalHours = SumMatching(headers, row, value => IsHours(value) && !IsOvertimeHours(value));
                 if (period.TotalHours <= 0.001f)
                 {
-                    period.TotalHours = period.RegularHours + period.OvertimeHours + period.HolidayHours
-                        + period.VacationHours + period.MinGuaranteeHours + period.BackPayHours;
+                    period.TotalHours = period.RegularHours + period.HolidayHours + period.VacationHours
+                        + period.MinGuaranteeHours + period.BackPayHours;
                 }
 
                 RememberName(columns, row, employeeNumber, "Name");
@@ -845,6 +1002,9 @@ namespace PayrollProcessor
 
         private static bool IsHours(string header) =>
             header.Contains("Hours", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsOvertimeHours(string header) =>
+            IsHours(header) && ContainsAny(header, "Overtime", "Overtim");
 
         private static bool IsMoney(string header) =>
             header.Contains("Dollars", StringComparison.OrdinalIgnoreCase)

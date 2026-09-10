@@ -35,9 +35,8 @@ namespace PayrollProcessor
         public static string LogString = "";
         public static HashSet<int> BusStartingDays = new();
         private static ExcelWorker ExcelWorker;
-        private static bool DoMedhusDeferredPayment;
         private static bool DoJeffShawVacation = true;
-        public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/, DoMedhusDeferredPayment ? 1657 : 0/*Bob Medhus*/};
+        public static List<int> EmployeeIdsToIgnore = new() { 503/*John Mc*/};
 
         //fields for logging
         private static Dictionary<MgSource, float> MgSourceTotals = new();
@@ -436,29 +435,6 @@ namespace PayrollProcessor
                                                 weeklyRunnningTotal[company, 0, shift.WeekNumber] += shift.WorkingHours();
                                                 weeklyRunnningTotal[company, 1, shift.WeekNumber] += shift.AllHours(true);
 
-
-                                                //bob medhus
-                                                if (DoMedhusDeferredPayment && emp.IdNumber == 1657)
-                                                {
-                                                    medhusCounter[shift.WeekNumber, 0, company] += shift.WorkingHours();
-                                                    float dollarAmount = shift.DollarAmount;
-                                                    if (dollarAmount < 0.0001f)
-                                                    {
-                                                        float payRate = emp.GetPayRateForShift(shift);
-                                                        if (payRate < 0.1f)
-                                                        {
-                                                            Log("Problem getting payrate for totaling up bob medhus's hours", true);
-                                                        }
-                                                        else
-                                                        {
-                                                            dollarAmount = shift.WorkingHours() * emp.PayRates[shift.JobType];
-                                                        }
-                                                    }
-                                                    medhusCounter[shift.WeekNumber, 1, company] += dollarAmount;
-                                                    medhusCounter[shift.WeekNumber, 2, company] += shift.BonusDollars;
-                                                    medhusCounter[shift.WeekNumber, 3, company] += shift.PerDiem;
-                                                }
-
                                                 //jeff shaw
                                                 if (DoJeffShawVacation && emp.IdNumber == 876)
                                                 {
@@ -532,12 +508,6 @@ namespace PayrollProcessor
                             if (weeklyRunnningTotal[company, 0, weekNumber] > 40f)
                             {
                                 emp.OverTimeHours[company, weekNumber] = weeklyRunnningTotal[company, 0, weekNumber] - 40f;
-                                //bob medhus
-                                if (DoMedhusDeferredPayment && emp.IdNumber == 1657 && company == (int)Company.VALLEY_BUS_LLC)
-                                {
-                                    medhusCounter[weekNumber, 4, 0] = emp.OverTimeHours[company, weekNumber];
-                                    medhusCounter[weekNumber, 5, 0] = (medhusCounter[weekNumber, 1, 0] / medhusCounter[weekNumber, 0, 0]) * medhusCounter[weekNumber, 4, 0] * 0.5f;
-                                }
                             }
                         }
                     }
