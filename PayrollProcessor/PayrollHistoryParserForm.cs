@@ -13,6 +13,7 @@ namespace PayrollProcessor
         private readonly Label selectedLabel = new();
         private readonly RadioButton lastSixRadio = new();
         private readonly RadioButton dateRangeRadio = new();
+        private readonly RadioButton acaRadio = new();
         private readonly DateTimePicker startPicker = new();
         private readonly DateTimePicker endPicker = new();
         private readonly Button submitButton = new();
@@ -25,9 +26,9 @@ namespace PayrollProcessor
             this.catalog = catalog;
             Text = "Payroll History Parser";
             Width = 760;
-            Height = 620;
+            Height = 660;
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(680, 520);
+            MinimumSize = new Size(680, 560);
             Font = new Font("Segoe UI", 9F);
 
             Label searchLabel = new()
@@ -75,6 +76,12 @@ namespace PayrollProcessor
             dateRangeRadio.Text = "Date range";
             dateRangeRadio.AutoSize = true;
             dateRangeRadio.Location = new Point(12, 395);
+            dateRangeRadio.CheckedChanged += RangeModeChanged;
+
+            acaRadio.Text = "ACA eligibility (rolling 3-month periods since latest hire)";
+            acaRadio.AutoSize = true;
+            acaRadio.Location = new Point(12, 425);
+            acaRadio.CheckedChanged += RangeModeChanged;
 
             Label fromLabel = new()
             {
@@ -96,24 +103,24 @@ namespace PayrollProcessor
             ApplyLastSixWindowDefaults();
 
             submitButton.Text = "Submit";
-            submitButton.Location = new Point(12, 440);
+            submitButton.Location = new Point(12, 470);
             submitButton.Size = new Size(140, 32);
             submitButton.Click += (_, _) => SubmitIfReady();
 
             housingButton.Text = "Housing Request";
-            housingButton.Location = new Point(160, 440);
+            housingButton.Location = new Point(160, 470);
             housingButton.Size = new Size(160, 32);
             housingButton.Click += (_, _) => WriteHousingRequest();
 
             statusLabel.AutoSize = true;
-            statusLabel.Location = new Point(12, 490);
+            statusLabel.Location = new Point(12, 520);
             statusLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             statusLabel.Text = "Loading employees from WfnEmployees.xlsx...";
 
             Controls.AddRange(new Control[]
             {
                 searchLabel, searchBox, searchButton, resultsList, selectedLabel,
-                lastSixRadio, dateRangeRadio, fromLabel, startPicker, toLabel, endPicker,
+                lastSixRadio, dateRangeRadio, acaRadio, fromLabel, startPicker, toLabel, endPicker,
                 submitButton, housingButton, statusLabel
             });
 
@@ -130,6 +137,9 @@ namespace PayrollProcessor
             searchButton.Enabled = false;
             submitButton.Enabled = false;
             housingButton.Enabled = false;
+            lastSixRadio.Enabled = false;
+            dateRangeRadio.Enabled = false;
+            acaRadio.Enabled = false;
             BackgroundWorker worker = new();
             worker.DoWork += (_, _) => catalog.LoadEmployees();
             worker.RunWorkerCompleted += (_, args) =>
@@ -139,6 +149,9 @@ namespace PayrollProcessor
                 searchButton.Enabled = true;
                 submitButton.Enabled = true;
                 housingButton.Enabled = true;
+                lastSixRadio.Enabled = true;
+                dateRangeRadio.Enabled = true;
+                acaRadio.Enabled = true;
                 if (args.Error != null)
                 {
                     statusLabel.Text = "Load failed.";
@@ -252,7 +265,13 @@ namespace PayrollProcessor
 
         private void SubmitIfReady()
         {
-            LoadPayrollThen(housing: false, () =>
+            if (acaRadio.Checked)
+            {
+                WriteAcaEligibility();
+                return;
+            }
+
+            LoadPayrollThen(ReportKind.PayHistory, () =>
             {
                 List<PayrollHistoryPeriod> periods = catalog.GetPeriods(selectedEmployee!, lastSixRadio.Checked,
                     startPicker.Value.Date, endPicker.Value.Date);
@@ -272,7 +291,7 @@ namespace PayrollProcessor
 
         private void WriteHousingRequest()
         {
-            LoadPayrollThen(housing: true, () =>
+            LoadPayrollThen(ReportKind.Housing, () =>
             {
                 string path = PayrollHistoryReportWriter.WriteHousingRequest(selectedEmployee!,
                     catalog.GetPeriods(selectedEmployee!, true, DateTime.MinValue, DateTime.MaxValue));
@@ -281,11 +300,28 @@ namespace PayrollProcessor
             });
         }
 
-        private void LoadPayrollThen(bool housing, Action onReady)
+        private void WriteAcaEligibility()
+        {
+            LoadPayrollThen(ReportKind.Aca, () =>
+            {
+                string path = PayrollHistoryReportWriter.WriteAcaEligibility(selectedEmployee!);
+                statusLabel.Text = "Loaded " + catalog.AdpFileCount + " ADP and " + catalog.IsolvedFileCount
+                    + " iSolved file(s). Wrote " + path;
+            });
+        }
+
+        private void LoadPayrollThen(ReportKind kind, Action onReady)
         {
             if (selectedEmployee == null)
             {
                 MessageBox.Show(this, "Select an employee from the search results first.",
+                    "Payroll History Parser", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (kind == ReportKind.Aca && !selectedEmployee.CurrentStartDate.HasValue)
+            {
+                MessageBox.Show(this,
+                    "This employee does not have a hire or rehire date in WfnEmployees.xlsx.",
                     "Payroll History Parser", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -295,9 +331,13 @@ namespace PayrollProcessor
             }
 
             PayrollHistoryEmployee employee = selectedEmployee;
-            bool lastSix = housing || lastSixRadio.Checked;
-            DateTime start = startPicker.Value.Date;
-            DateTime end = endPicker.Value.Date;
+            bool lastSix = kind == ReportKind.Housing || (kind == ReportKind.PayHistory && lastSixRadio.Checked);
+            bool housing = kind == ReportKind.Housing;
+            bool aca = kind == ReportKind.Aca;
+            DateTime start = aca
+                ? (employee.CurrentStartDate ?? DateTime.Today).Date
+                : startPicker.Value.Date;
+            DateTime end = aca ? DateTime.Today.Date : endPicker.Value.Date;
             int previousWarningCount = catalog.LoadWarnings.Count;
             SetBusy(true);
             statusLabel.Text = "Loading payroll files...";
@@ -306,6 +346,7 @@ namespace PayrollProcessor
             {
                 LastSixPayPeriods = lastSix,
                 HousingYears = housing,
+                AcaEligibility = aca,
                 RangeStart = start,
                 RangeEnd = end
             });
@@ -356,6 +397,7 @@ namespace PayrollProcessor
             housingButton.Enabled = !value;
             lastSixRadio.Enabled = !value;
             dateRangeRadio.Enabled = !value;
+            acaRadio.Enabled = !value;
             startPicker.Enabled = !value && dateRangeRadio.Checked;
             endPicker.Enabled = !value && dateRangeRadio.Checked;
         }
@@ -374,6 +416,13 @@ namespace PayrollProcessor
             }
             selectedEmployee = employee;
             selectedLabel.Text = "Selected employee: #" + employee.EmployeeNumber + "  " + employee.DisplayName;
+        }
+
+        private enum ReportKind
+        {
+            PayHistory,
+            Housing,
+            Aca
         }
     }
 }

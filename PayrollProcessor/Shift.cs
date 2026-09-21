@@ -38,7 +38,7 @@ namespace PayrollProcessor
         public Location ShiftLocation; //WARNING: Be wary of using location for any shift that isn't a driver shift. 
         public bool ExtrasWereWrittenToExport = false;
         public int JobInt;
-        public int CoachTripDays = 1;
+        public int CoachTripDays;
 
         public Shift()
         {
@@ -130,6 +130,10 @@ namespace PayrollProcessor
 
         public float GetMinimumGuaranteeMax(Employee employee, out MgSource sourceOfMg, List<Shift>? shiftsInRouteTimeContext = null)
         {
+            if (employee.IdNumber == 2288)
+            {
+                Log("Breakpoint");
+            }
             sourceOfMg = MgSource.NONE;
             if (null != Notes && (StringSearch(Notes, "no min") || StringSearch(Notes, "nomin") || StringSearch(Notes, "no minimum") || StringSearch(Notes, "tnt") || StringSearch(Notes, "trolley") || StringSearch(Notes, "training")))
             {
@@ -146,10 +150,14 @@ namespace PayrollProcessor
 
                     var shiftTime = shiftsInRouteTimeContext == null ? ShiftTime : shiftsInRouteTimeContext.Sum(shift => shift.ShiftTime);
 
-                    if (null != shiftsInRouteTimeContext && shiftTime < 0.08)
+                    if (shiftTime < 0.08)
                     {
-                        DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
-                        return 0f;
+                        Log("Why do I care if null != shiftsInRouteTimeContext here?", true);
+                        if (null != shiftsInRouteTimeContext && shiftTime < 0.08)
+                        {
+                            DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
+                            return 0f;
+                        }
                     }
 
                     if (!Shift.WereThereSchoolRoutesOnThisDay(ShiftLocation, Date.Day))
@@ -175,10 +183,14 @@ namespace PayrollProcessor
                         }
                     }
 
-                    if (null != shiftsInRouteTimeContext && shiftTime < 0.2)
+                    if (shiftTime < 0.2)
                     {
-                        DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
-                        return 0f;
+                        Log("Why do I care if null != shiftsInRouteTimeContext here?", true);
+                        if (null != shiftsInRouteTimeContext && shiftTime < 0.2)
+                        {
+                            DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
+                            return 0f;
+                        }
                     }
 
                     //standard mg 
@@ -240,10 +252,11 @@ namespace PayrollProcessor
                 }
                 else if (JobIsCharter(JobType))
                 {
+                    float rate = employee.GetPayRateForShift(this);
                     sourceOfMg = MgSource.STANDARD_CHARTER;
                     if (JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
                     {
-                        return OUT_OF_TOWN_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
+                        return OUT_OF_TOWN_MIN_GUARANTEE_DRIVER_IN_DOLLARS / rate;
                     }
                     if (StringSearch(Notes, "Hock"))
                     {
@@ -268,17 +281,17 @@ namespace PayrollProcessor
                     if ((null != Notes && StringSearch(Notes, "private")) || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
                     {
                         sourceOfMg = BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS ? MgSource.T_AND_J_CHARTER : MgSource.PRIVATE_CHARTER;
-                        return T_AND_J_CHARTERS_MG_IN_DOLLARS / CalculateCharterRate(employee);
+                        return T_AND_J_CHARTERS_MG_IN_DOLLARS / rate;
                     }
                     else if (JobType == Jobs.DRIVER_CHARTER_PRIVATE)
                     {
-                        return PRIVATE_CHARTER_MIN_GUARANTEE_DRIVER_IN_DOLLARS / CalculateCharterRate(employee);
+                        return PRIVATE_CHARTER_MIN_GUARANTEE_DRIVER_IN_DOLLARS / rate;
                     }
                     else if (Date.DayOfWeek == DayOfWeek.Saturday || Date.DayOfWeek == DayOfWeek.Sunday)
                     {
                         sourceOfMg = MgSource.WEEKEND_CHARTER;
                         float weekendMinimum = JobType == Jobs.AIDE_CHARTER ? OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS : WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS;
-                        return weekendMinimum / CalculateCharterRate(employee);
+                        return weekendMinimum / rate;
                     }
                     else
                     {
@@ -292,38 +305,6 @@ namespace PayrollProcessor
         public bool IsASpedBusShift()
         {
             return SpedBusNumbers.Contains(this.BusNumber);
-        }
-
-        static bool TAndJMessageWasDisplayed = false;
-        private float CalculateCharterRate(Employee employee)
-        {
-            if (JobType == Jobs.AIDE_CHARTER)
-            {
-                return employee.IsAGrandForksEmployee || IsAGrandForksShift ? GrandForksDefaultRates[Jobs.AIDE_CHARTER] : FargoDefaultRates[Jobs.AIDE_CHARTER];
-            }
-
-            if (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS && !TAndJMessageWasDisplayed)
-            {
-                Log("Attention: There is a shift in a T&J bus. I thought all T&J was supposed to make $19.00/hr (aka Sarah would be putting their shifts on the coaches sheet and they wouldn't be clocking-in).", true);
-                TAndJMessageWasDisplayed = true;
-            }
-
-            if ((null != Notes && StringSearch(Notes, "private")) || (BusNumber >= TJ_MIN_BUS && BusNumber <= TJ_MAX_BUS))
-            {
-                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), T_AND_J_CHARTER_RATE);
-            }
-
-            if (JobType == Jobs.DRIVER_CHARTER_PRIVATE)
-            {
-                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), PRIVATE_CHARTER_RATE);
-            }
-
-            if (JobType == Jobs.DRIVER_OUT_OF_TOWN_CHARTER)
-            {
-                return Math.Max(employee.PayRates.GetValueOrDefault(JobType, 0f), OUT_OF_TOWN_CHARTER_RATE);
-            }
-
-            return employee.PayRates.GetValueOrDefault(JobType, 0f);
         }
 
         public static string GetLaborCode(Jobs jobType, bool isOvertime)
@@ -445,9 +426,13 @@ namespace PayrollProcessor
             }
             if (Date.TimeOfDay.CompareTo(new TimeSpan(9, 10, 0)) <= 0)
             {
-                return PayrollProcessor.RouteTimeContext.MORNING;
+                return RouteTimeContext.MORNING;
             }
-            return Date.TimeOfDay.CompareTo(new TimeSpan(12, 30, 0)) <= 0 ? PayrollProcessor.RouteTimeContext.NOON : PayrollProcessor.RouteTimeContext.AFTERNOON;
+            if (Date.TimeOfDay.CompareTo(new TimeSpan(12, 30, 0)) <= 0)
+            {
+                return PayrollProcessor.RouteTimeContext.NOON;
+            }
+            return Date.TimeOfDay.CompareTo(new TimeSpan(4, 00, 0)) <= 0 ? RouteTimeContext.AFTERNOON : RouteTimeContext.LATE_AFTERNOON;
         }
 
         public bool IsASchoolRouteShift()
@@ -460,6 +445,10 @@ namespace PayrollProcessor
         {
             float specialRate = 0f;
 
+            if (JobIsCharter(JobType))
+            {
+                Log("I don't think this happens because charter rates are determined in employee.GetPayRateForShift() before specialRate() is ever called", true);
+            }
             switch (JobType)
             {
                 case Jobs.DRIVER_SCHOOL:
@@ -469,7 +458,8 @@ namespace PayrollProcessor
                 case Jobs.DRIVER_CHARTER_PRIVATE:
                 case Jobs.AIDE_CHARTER:
                 case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
-                    return Math.Max(specialRate, CalculateCharterRate(emp));
+                    Log("I don't think this happens because charter rates are determined in employee.GetPayRateForShift() before specialRate() is ever called", true);
+                    return Math.Max(specialRate, 0f);
                 case Jobs.WASH_BAY_OT:
                     if (emp.PayRates.ContainsKey(Jobs.WASH_BAY))
                     {
@@ -554,7 +544,7 @@ namespace PayrollProcessor
 
     public enum RouteTimeContext
     {
-        MORNING, NOON, AFTERNOON
+        MORNING, NOON, AFTERNOON, LATE_AFTERNOON
     }
 
     public enum Company

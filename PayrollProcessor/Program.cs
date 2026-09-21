@@ -24,11 +24,13 @@ namespace PayrollProcessor
         public const float WEEKEND_MIN_GUARANTEE_DRIVER_IN_DOLLARS = 70f;
         public const float OUT_OF_TOWN_OR_WEEKEND_MIN_GUARANTEE_AIDE_IN_DOLLARS = 50f;
         public const float DRIVER_CHARTER_RATE = 18.65f;
-        public const float OUT_OF_TOWN_CHARTER_RATE = 19.15f;
-        public const float PRIVATE_CHARTER_RATE = 19.7f;
-        public const float T_AND_J_CHARTER_RATE = 19.5f; //this shouldn't be used I think, Sarah provides the pay for these drivers.
+        //public const float OUT_OF_TOWN_CHARTER_RATE = 19.15f; //deprecated
+        public const float OUT_OF_TOWN_CHARTER_RATE_BUMP = 0.5f;
+        //public const float PRIVATE_CHARTER_RATE = 19.7f; //deprecated
+        public const float PRIVATE_CHARTER_RATE_BUMP = 1.05f;
+        public const float T_AND_J_CHARTER_RATE = 20.20f;
         public const float TRAINING_RATE = 15f;
-        public const float COACH_HOURLY_RATE_ESTIMATE = 20f;
+        public const float COACH_HOURLY_RATE_ESTIMATE = T_AND_J_CHARTER_RATE + 0.5f;
         public const float TEN_YEAR_RATE_BUMP = 0.5f;
         public const float FARGO_SPED_CDL_DRIVER_RATE_BUMP = 0.6f;
         public const float GF_MERGER_DRIVERS_BASE_RATE_EXCEPTION = 1.1f;
@@ -48,8 +50,8 @@ namespace PayrollProcessor
         {
             {Jobs.DRIVER_SCHOOL, 23.0f },
             {Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS, DRIVER_CHARTER_RATE },
-            {Jobs.DRIVER_CHARTER_PRIVATE, PRIVATE_CHARTER_RATE },
-            {Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
+            //{Jobs.DRIVER_CHARTER_PRIVATE, PRIVATE_CHARTER_RATE },
+            //{Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 19.15f },
             {Jobs.AIDE_CHARTER, 17.1f },
             {Jobs.NON_CDL_DRIVER, 19.7f },
@@ -59,8 +61,8 @@ namespace PayrollProcessor
         {
             {Jobs.DRIVER_SCHOOL, 24.5f },
             {Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS, DRIVER_CHARTER_RATE },
-            {Jobs.DRIVER_CHARTER_PRIVATE, PRIVATE_CHARTER_RATE },
-            {Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
+            //{Jobs.DRIVER_CHARTER_PRIVATE, PRIVATE_CHARTER_RATE },
+            //{Jobs.DRIVER_OUT_OF_TOWN_CHARTER, OUT_OF_TOWN_CHARTER_RATE },
             {Jobs.AIDE_SCHOOL, 19.7f },
             {Jobs.AIDE_CHARTER, 18.65f },
             {Jobs.NON_CDL_DRIVER, 20.4f },
@@ -71,16 +73,34 @@ namespace PayrollProcessor
         ///  The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             //new RetirementEligibilityWorker().Run();
             //return;
-            Console.SetOut(new ToDebugWriter());
             ApplicationConfiguration.Initialize();
+            if (args.Any(argument => string.Equals(argument, "--census", StringComparison.OrdinalIgnoreCase)))
+            {
+                try
+                {
+                    new CensusBuilder().Run();
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine("Census builder failed: " + exception);
+                    throw;
+                }
+                return;
+            }
+            Console.SetOut(new ToDebugWriter());
             ExcelWorker = new();
             if (PrintForm.LaunchPayrollHistoryParser)
             {
                 new PayrollHistoryParser().Run();
+                return;
+            }
+            if (PrintForm.LaunchCensusBuilder)
+            {
+                new CensusBuilder().Run();
                 return;
             }
             CheckForVacationCutOff(ExcelWorker.FirstDayWeek2);
@@ -872,6 +892,13 @@ namespace PayrollProcessor
 
         public static float GetBasePayRateForEmployee(Jobs jobType, Employee employee, bool bIsForGrandForks = false)
         {
+            switch (jobType)
+            {
+                case Jobs.DRIVER_OUT_OF_TOWN_CHARTER:
+                    return GetBasePayRateForEmployee(Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS, employee, bIsForGrandForks) + OUT_OF_TOWN_CHARTER_RATE_BUMP;
+                case Jobs.DRIVER_CHARTER_PRIVATE:
+                    return GetBasePayRateForEmployee(Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS, employee, bIsForGrandForks) + PRIVATE_CHARTER_RATE_BUMP;
+            }
             float modifier = 0f;
             foreach (var entry in SpecialEmployeeHandler.GetInstance().SpecialEmployees.StartingRateExceptions)
             {
@@ -1045,6 +1072,10 @@ namespace PayrollProcessor
                 }
             }
             nonCdlDrivers += "\n";
+            foreach (var employee in NonCdlDrivers)
+            {
+                nonCdlDrivers += employee.IdNumber + "\n";
+            }
             Log(nonCdlDrivers);
 
             SpecialEmployeeHandler.GetInstance().AddExceptionNotificationsToLog();
@@ -1074,7 +1105,7 @@ namespace PayrollProcessor
         DRIVER_SCHOOL = 1,
         MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, 
         VACATION = 16, DRIVER_LOCAL_SCHOOL_CHARTERS = 18,
-        COACH_PUBLIC_DRIVING = 19,
+        COACH_PUBLIC_DRIVING = 19, //redirects to DRIVER_OUT_OF_TOWN_CHARTER
         DRIVER_OUT_OF_TOWN_CHARTER = 21, DRIVER_CHARTER_PRIVATE = 22, AIDE_CHARTER = 24,
         AIDE_SCHOOL = 25, DRIVER_COACH = 26, NON_CDL_DRIVER = 28,
 

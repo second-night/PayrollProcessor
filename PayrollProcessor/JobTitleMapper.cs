@@ -24,6 +24,7 @@ namespace PayrollProcessor
         private static readonly HashSet<string> CodesNeverImported = new(StringComparer.OrdinalIgnoreCase)
         {
             DriverCoach,
+            //DriverCharter,
             DoNotUse
         };
 
@@ -58,8 +59,6 @@ namespace PayrollProcessor
                     job = Jobs.BODY_SHOP;
                     return true;
                 case DriverCharter:
-                    job = Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS;
-                    return true;
                 case DriverCoach:
                 case DriverDailySchool:
                     job = Jobs.DRIVER_SCHOOL;

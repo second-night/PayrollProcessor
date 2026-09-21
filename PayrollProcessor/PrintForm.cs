@@ -10,7 +10,9 @@ namespace PayrollProcessor
         private string InputText;
         private CheckBox checkBox1;
         private Button payrollHistoryParserButton;
+        private Button censusButton;
         public static bool LaunchPayrollHistoryParser { get; private set; }
+        public static bool LaunchCensusBuilder { get; private set; }
         public PrintForm(string message)
         {
             InitializeComponent();
@@ -29,6 +31,7 @@ namespace PayrollProcessor
             exirtButton = new Button();
             checkBox1 = new CheckBox();
             payrollHistoryParserButton = new Button();
+            censusButton = new Button();
             SuspendLayout();
             // 
             // label1
@@ -113,11 +116,23 @@ namespace PayrollProcessor
             payrollHistoryParserButton.Visible = false;
             payrollHistoryParserButton.Click += PayrollHistoryParserButtonPressed;
             //
+            // censusButton
+            //
+            censusButton.Location = new Point(12, 213);
+            censusButton.Name = "censusButton";
+            censusButton.Size = new Size(250, 29);
+            censusButton.TabIndex = 7;
+            censusButton.Text = "Build 2026 Employee Census";
+            censusButton.UseVisualStyleBackColor = true;
+            censusButton.Visible = false;
+            censusButton.Click += CensusButtonPressed;
+            //
             // PrintForm
             // 
             AutoSize = true;
             ClientSize = new Size(284, 261);
             Controls.Add(exirtButton);
+            Controls.Add(censusButton);
             Controls.Add(payrollHistoryParserButton);
             Controls.Add(checkBox1);
             Controls.Add(textBox1);
@@ -159,13 +174,21 @@ namespace PayrollProcessor
             this.Close();
         }
 
+        private void CensusButtonPressed(object? sender, EventArgs e)
+        {
+            LaunchCensusBuilder = true;
+            YesNoButton = false;
+            this.Close();
+        }
+
         private void ShowPayrollHistoryParserButton()
         {
             payrollHistoryParserButton.Visible = true;
+            censusButton.Visible = true;
             AutoSize = false;
-            ClientSize = new Size(400, 310);
-            button1.Location = new Point(24, 255);
-            button2.Location = new Point(149, 255);
+            ClientSize = new Size(400, 360);
+            button1.Location = new Point(24, 305);
+            button2.Location = new Point(149, 305);
             exirtButton.Location = new Point(290, 12);
         }
 
@@ -189,6 +212,7 @@ namespace PayrollProcessor
             out DateTime dateTime, out bool checkboxValue)
         {
             LaunchPayrollHistoryParser = false;
+            LaunchCensusBuilder = false;
             PrintForm form = new PrintForm(message);
             form.dateTimePicker1.Visible = true;
             form.checkBox1.Text = checkboxText;

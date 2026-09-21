@@ -1,4 +1,5 @@
-﻿using DocumentFormat.OpenXml.Spreadsheet;
+﻿using DocumentFormat.OpenXml.ExtendedProperties;
+using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Vml.Office;
 using System.Data;
 using System.Windows.Forms.VisualStyles;
@@ -212,6 +213,10 @@ namespace PayrollProcessor
             if (JobIsCharter(shift.JobType))
             {
                 float defaultRate = GetBasePayRateForEmployee(shift.JobType, this, shift.IsAGrandForksShift);
+                if (null != shift.Notes && StringSearch(shift.Notes, "private"))
+                {
+                    defaultRate = Math.Max(defaultRate, T_AND_J_CHARTER_RATE);
+                }
                 if (defaultRate < 15f)
                 {
                     Log("Problem finding PayRate for employee " + Name + " for " + shift.JobType, true);

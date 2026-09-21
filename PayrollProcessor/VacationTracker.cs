@@ -148,7 +148,7 @@ namespace PayrollProcessor
                     continue;
                 }
 
-                if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars + shift.PerDiem < 0.01f)
+                if (shift.ShiftTime + shift.DollarAmount + shift.BonusDollars < 0.01f)
                 {
                     continue;
                 }

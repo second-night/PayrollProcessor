@@ -13,7 +13,6 @@ namespace PayrollProcessor
         public sealed record Entry(int EmployeeNumber, Company Company, float TotalHours, float TotalCompensation,
             Dictionary<Jobs, float> PayRates, Dictionary<Jobs, float> HoursByJob, float GrossPay);
 
-        private readonly Dictionary<int, float> fivePreviousPayPeriodHoursByEmployee = new();
         private readonly Dictionary<int, DateTime> lastHoursDateByEmployee = new();
         private readonly Dictionary<(int EmployeeNumber, Jobs Job), float> latestPayRates = new();
         private readonly Dictionary<int, Dictionary<Jobs, float>> hoursByJobFromHistory = new();
@@ -26,7 +25,6 @@ namespace PayrollProcessor
             Jobs.MECHANIC, Jobs.WASH_BAY, Jobs.ADMIN, Jobs.CLEANING, Jobs.SALARY
         };
 
-        private bool HasFiveValidPreviousPayPeriods { get; set; }
         public HashSet<int> PartTimeEmployeesNeedingFullTimeStatus { get; } = new();
         public HashSet<int> EmployeesNeedingTermination { get; } = new();
         public HashSet<int> EmployeesNeedingTerminationInNonPrimaryCompanyOnly { get; } = new();
@@ -49,8 +47,6 @@ namespace PayrollProcessor
                 }
             }
 
-            HasFiveValidPreviousPayPeriods = allFiles.Take(5).Count() == 5
-                && allFiles.Take(5).All(file => entriesByPath.ContainsKey(file.Path));
             foreach ((DateTime payDate, string path) in allFiles)
             {
                 if (!entriesByPath.TryGetValue(path, out List<Entry>? entries))
@@ -108,24 +104,13 @@ namespace PayrollProcessor
                 }
                 previousPayPeriodHoursNewestFirst.Add(hoursByEmployee);
             }
-
-            foreach ((DateTime _, string path) in allFiles.Take(5))
-            {
-                if (!entriesByPath.TryGetValue(path, out List<Entry>? entries))
-                {
-                    continue;
-                }
-                foreach (Entry entry in entries.Where(entry => entry.TotalHours > 0.01f))
-                {
-                    fivePreviousPayPeriodHoursByEmployee[entry.EmployeeNumber] =
-                        fivePreviousPayPeriodHoursByEmployee.GetValueOrDefault(entry.EmployeeNumber) + entry.TotalHours;
-                }
-            }
         }
 
         public void EvaluateEmployees(IEnumerable<Employee> employees)
         {
-            foreach (Employee employee in employees)
+            List<Employee> employeeList = employees.ToList();
+            CheckPartTimeAcaEligibility(employeeList);
+            foreach (Employee employee in employeeList)
             {
                 if (employee.IdNumber == 503)
                 {
@@ -133,11 +118,6 @@ namespace PayrollProcessor
                     continue;
                 }
                 bool hasCurrentHours = GetCurrentHours(employee) > 0.01f;
-                if (HasFiveValidPreviousPayPeriods && hasCurrentHours && employee.EmploymentCategory == "PT"
-                    && fivePreviousPayPeriodHoursByEmployee.GetValueOrDefault(employee.IdNumber) + GetCurrentHours(employee) >= 360f)
-                {
-                    PartTimeEmployeesNeedingFullTimeStatus.Add(employee.IdNumber);
-                }
 
                 HashSet<int> terminationExceptions = new() {105, 187, 501, 503};
                 int lookbackPayPeriods = GetTerminationLookbackPayPeriods(employee);
@@ -179,6 +159,107 @@ namespace PayrollProcessor
             }
         }
 
+        private void CheckPartTimeAcaEligibility(IEnumerable<Employee> employees)
+        {
+            List<Employee> partTimeEmployees = employees
+                .Where(employee => employee.IdNumber != 503
+                    && !employee.IsTerminated
+                    && !employee.IsSalaried
+                    && IsPartTime(employee))
+                .ToList();
+            if (partTimeEmployees.Count == 0)
+            {
+                return;
+            }
+
+            PayrollHistoryCatalog catalog;
+            try
+            {
+                catalog = new PayrollHistoryCatalog();
+                catalog.LoadEmployees();
+                DateTime rangeStart = new DateTime(currentPayDate.Year, currentPayDate.Month, 1)
+                    .AddMonths(-(AcaEligibility.MonthsPerPeriod - 1));
+                catalog.LoadPayrollForDateRange(rangeStart, currentPayDate);
+                OverlayCurrentPayPeriodHours(catalog, partTimeEmployees);
+            }
+            catch (Exception exception)
+            {
+                Program.Log("Could not load payroll history for the ACA full-time hour check: " + exception.Message, true);
+                return;
+            }
+
+            List<string> lines = new();
+            foreach (Employee employee in partTimeEmployees.OrderBy(employee => employee.LastName)
+                .ThenBy(employee => employee.FirstName))
+            {
+                if (!catalog.Employees.TryGetValue(employee.IdNumber, out PayrollHistoryEmployee? history))
+                {
+                    continue;
+                }
+                if (!history.CurrentStartDate.HasValue && employee.HireDate != DateTime.MinValue)
+                {
+                    history.HireDate = employee.HireDate.Date;
+                }
+
+                List<AcaEligibilityPeriod> qualifying = AcaEligibility.QualifyingWindowsCovering(history, currentPayDate);
+                if (qualifying.Count == 0)
+                {
+                    continue;
+                }
+
+                PartTimeEmployeesNeedingFullTimeStatus.Add(employee.IdNumber);
+                string windows = string.Join("; ", qualifying.Select(period =>
+                    period.Start.ToString("M/d/yyyy", CultureInfo.InvariantCulture) + "-"
+                    + period.End.ToString("M/d/yyyy", CultureInfo.InvariantCulture) + " avg "
+                    + period.MonthlyAverage.ToString("0.0", CultureInfo.InvariantCulture) + " hrs/mo"));
+                lines.Add(employee.Name + " (" + employee.IdNumber + "): " + windows);
+            }
+
+            if (lines.Count > 0)
+            {
+                Program.DelayedLog("Part-time employees who have met the ACA full-time hour threshold "
+                    + "(130 hours/month over a rolling 3-month period). Review in ADP; this was not imported "
+                    + "as a status change." + Environment.NewLine + Environment.NewLine
+                    + string.Join(Environment.NewLine, lines), true);
+            }
+        }
+
+        private void OverlayCurrentPayPeriodHours(PayrollHistoryCatalog catalog, IEnumerable<Employee> employees)
+        {
+            foreach (Employee employee in employees)
+            {
+                if (!catalog.Employees.TryGetValue(employee.IdNumber, out PayrollHistoryEmployee? history))
+                {
+                    continue;
+                }
+
+                foreach (Company company in Enum.GetValues<Company>())
+                {
+                    List<Shift> shifts = employee.Shifts
+                        .Where(shift => shift.CompanyName == company && !shift.IsATotalsShift)
+                        .ToList();
+                    if (shifts.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    float totalHours = shifts.Sum(shift => shift.AllHours(false));
+                    float estimatedCoachHours = shifts
+                        .Where(shift => shift.JobType == Jobs.DRIVER_COACH)
+                        .Sum(shift => shift.CoachTripDays * 8f);
+                    (DateTime PayDate, Company Company) key = (currentPayDate.Date, company);
+                    history.Periods[key] = new PayrollHistoryPeriod
+                    {
+                        PayDate = currentPayDate.Date,
+                        Company = company,
+                        Source = "Current",
+                        TotalHours = totalHours,
+                        EstimatedCoachHours = estimatedCoachHours
+                    };
+                }
+            }
+        }
+
         private int GetTerminationLookbackPayPeriods(Employee employee)
         {
             if (IsFullTime(employee))
@@ -199,6 +280,12 @@ namespace PayrollProcessor
             string category = employee.EmploymentCategory?.Trim() ?? "";
             return category.Equals("FT", StringComparison.OrdinalIgnoreCase)
                 || category.Equals("ACAFT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPartTime(Employee employee)
+        {
+            string category = employee.EmploymentCategory?.Trim() ?? "";
+            return category.Equals("PT", StringComparison.OrdinalIgnoreCase);
         }
 
         private bool WasHiredInLast30Days(Employee employee)

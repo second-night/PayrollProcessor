@@ -120,13 +120,6 @@
 
   "SpecificShiftMgExceptions" : [
     {
-      "Name":"Eric Buringrud",
-      "IdNumber": 872,
-      "Hours": 4.5,
-      "ShiftNumber": 2,
-      "Notes":"(ShiftNumber: 0-morning, 1-noon, 2-afternoon). Eric gets a 4.5 hour mg in the afternoon."
-    },
-    {
       "Name":"Ali Omar",
       "IdNumber": 1248,
       "Hours": 3,
@@ -416,30 +409,6 @@
     {
       "Name":"Kenny Biffert",
       "IdNumber": 1224,
-      "Dollars": 10,
-      "ReceivesBusStartingMinimumGuarantee": true,
-      "JobType": 7,
-      "Notes":""
-    },
-    {
-      "Name":"Julie Gonzalez",
-      "IdNumber": 1976,
-      "Dollars": 10,
-      "ReceivesBusStartingMinimumGuarantee": true,
-      "JobType": 7,
-      "Notes":""
-    },
-    {
-      "Name":"Ryan Garfield",
-      "IdNumber": 2117,
-      "Dollars": 10,
-      "ReceivesBusStartingMinimumGuarantee": true,
-      "JobType": 7,
-      "Notes":""
-    },
-    {
-      "Name":"Chris Craig",
-      "IdNumber": 1803,
       "Dollars": 10,
       "ReceivesBusStartingMinimumGuarantee": true,
       "JobType": 7,

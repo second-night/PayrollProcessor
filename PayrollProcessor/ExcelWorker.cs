@@ -36,7 +36,7 @@ namespace PayrollProcessor
                 out DateTime dateTime,
                 out bool isPrimaryPayrollRun);
             IsPrimaryPayrollRun = isPrimaryPayrollRun;
-            if (PrintForm.LaunchPayrollHistoryParser)
+            if (PrintForm.LaunchPayrollHistoryParser || PrintForm.LaunchCensusBuilder)
             {
                 return;
             }
@@ -134,7 +134,10 @@ namespace PayrollProcessor
                             Log("Couldn't get employee number", true);
                             continue;
                         }
-
+                        if (employeeNumber == 9997 || employeeNumber == 2652)
+                        {
+                            employeeNumber = 2060; //Kenneth Armstrong
+                        }
                         if (!EmployeeDictionary.ContainsKey(employeeNumber))
                         {
                             string name = null == cellData[rowNumber, EMP_NAME_COLUMN] ? "" : (null == cellData[rowNumber, EMP_NAME_COLUMN].ToString() ? "" : new string((cellData[rowNumber, EMP_NAME_COLUMN].ToString())));
@@ -277,6 +280,10 @@ namespace PayrollProcessor
                                 break;
                             }
                         }
+                    }
+                    if (employeeNumber == 2652)
+                    {
+                        employeeNumber = 2060;
                     }
                     if (employeeNumber == 0)
                     {
@@ -744,7 +751,6 @@ namespace PayrollProcessor
             var fInfo = new FileInfo(filePath);
             Excel.Workbook workBook = excelApp.Workbooks.Open(filePath);
 
-            //var employeeScheduleData = LoadEmployeeScheduleData();
             foreach (Excel.Worksheet sheet in workBook.Worksheets)
             {
                 Excel.Range range = sheet.Range[sheet.Range["A6"], sheet.Range["B8"]];
@@ -777,6 +783,10 @@ namespace PayrollProcessor
                         {
                             Log("Couldn't get employee number", true);
                             continue;
+                        }
+                        if (employeeNumber == 9997 || employeeNumber == 2652)
+                        {
+                            employeeNumber = 2060; //Kenneth Armstrong
                         }
 
                         Company company = employeeNumber == 1734 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
@@ -924,11 +934,6 @@ namespace PayrollProcessor
                             }
                         }
 
-                        //if (shift.IsASchoolRouteShift())
-                        //{
-                        //    CheckShiftAgainstSchedule(shift, employee, employeeScheduleData);
-                        //}
-
                         employee.Shifts.Add(shift);
                     }
                 }
@@ -937,114 +942,8 @@ namespace PayrollProcessor
             workBook.Close();
             excelApp.Quit();
 
-            LogSchedulingData();
             //Marshal.ReleaseComObject(workBook);
             //Marshal.ReleaseComObject(excelApp);
-        }
-
-        static HashSet<int> LoggedEmployees = new();
-        static Dictionary<string, List<string>> SchedulingLogMessages = new();
-        void LogSchedulingData()
-        {
-            foreach (var kvp in SchedulingLogMessages)
-            {
-                Log("");
-                foreach (var message in kvp.Value)
-                {
-                    Log(message);
-                }
-            }
-        }
-        static HashSet<string> EarlyOutSignals = new();
-        static void CheckShiftAgainstSchedule(Shift shift, Employee employee, Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> employeeScheduleData)
-        {
-            if (shift.IsASummerRoute())
-            {
-                return;
-            }
-            if (!shift.IsASchoolRouteShift())
-            {
-                return;
-            }
-            foreach (var kvp in employeeScheduleData)
-            {
-                if (kvp.Key == employee.IdNumber)
-                {
-                    if (!kvp.Value.ContainsKey(shift.TimeContext()))
-                    {
-                        continue;
-                    }
-
-                    TimeSpan earliestClockIn = kvp.Value[shift.TimeContext()];
-                    if (employee.ScheduleExceptions.ContainsKey(shift.Date.DayOfWeek) && employee.ScheduleExceptions[shift.Date.DayOfWeek].ContainsKey(shift.TimeContext()))
-                    {
-                        earliestClockIn = employee.ScheduleExceptions[shift.Date.DayOfWeek][shift.TimeContext()];
-                    }
-                    if (shift.ClockIn.CompareTo(earliestClockIn) < 0)
-                    {
-                        if (shift.ClockOut.CompareTo(earliestClockIn) < 0)
-                        {
-                            //something is going on but it's probably not an early punch in
-                            continue;
-                        }
-                        var originalClockIn = shift.ClockIn;
-                        TimeSpan difference = earliestClockIn - shift.ClockIn;
-
-                        if (difference.CompareTo(new TimeSpan(1, 30, 0)) > 0 && shift.Date.DayOfWeek == DayOfWeek.Wednesday && shift.IsAGrandForksShift)
-                        {
-                            Log("Skipping shift because it is probably an early out on Wednesday in GF");
-                            continue;
-                        }
-
-                        if (difference.CompareTo(new TimeSpan(1, 30, 0)) > 0 && shift.TimeContext() == RouteTimeContext.AFTERNOON)
-                        {
-                            if (EarlyOutSignals.Contains(shift.Date.ToShortDateString()))
-                            {
-                                Log("Was there an early out on this day: " + shift.Date.ToShortDateString(), true);
-                            }
-                            EarlyOutSignals.Add(shift.Date.ToShortDateString());
-                        }
-
-                        if (shift.BusNumber != 0 && shift.BusNumber != Shift.WEST_FARGO_BUS_PLACE_HOLDER)
-                        {
-                            int totalShiftsForContext = employee.BusShiftTotals[shift.Date.DayOfWeek][shift.TimeContext()];
-                            if (employee.ShiftsByBusNumber[shift.Date.DayOfWeek][shift.TimeContext()][shift.BusNumber] < totalShiftsForContext / 2)
-                            {
-                                Log("Not docking time for " + employee.Name + " because this bus was not used a majority of the time for this context.\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + earliestClockIn.ToString());
-                                continue;
-                            }
-                        }
-
-                        shift.ModifyClockIn(earliestClockIn);
-
-                        if (originalClockIn.CompareTo(shift.ClockIn) == 0)
-                        {
-                            Log("Shift invalidated for " + employee.Name + ".\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString());
-                        }
-                        if (difference.CompareTo(new TimeSpan(0, 25, 0)) > 0)
-                        {
-                            if (shift.TimeContext() == RouteTimeContext.MORNING)
-                            {
-                                continue;
-                            }
-
-                            //Log("Modifying clock in for " + employee.Name + " by " + difference.ToString() + "\nOriginal clock in time: " + originalClockIn.ToString() + "\nNew time: " + shift.ClockIn.ToString(), false/*!LoggedEmployees.Contains(employee.IdNumber)*/);
-                            LoggedEmployees.Add(employee.IdNumber);
-                        }
-
-                        if (difference.CompareTo(new TimeSpan(0, 15, 0)) > 0)
-                        {
-                            if (!SchedulingLogMessages.ContainsKey(employee.Name))
-                            {
-                                SchedulingLogMessages.Add(employee.Name, new());
-                            }
-                            string message = "For " + employee.Name + " on " + shift.Date.ToShortDateString() + " changing clock in time from " + originalClockIn.ToString() + " to " + shift.ClockIn.ToString();
-                            SchedulingLogMessages[employee.Name].Add(message);
-                            LoggedEmployees.Add(employee.IdNumber);
-                        }
-                    }
-                }
-            }
         }
 
         public void ReadCoachesPayroll()
@@ -1138,6 +1037,11 @@ namespace PayrollProcessor
                             }
                             dollars = 0f;
                             bonus = 0f;
+
+                            if (employee.YearsOfService > 9)
+                            {
+                                payRate += Program.TEN_YEAR_RATE_BUMP;
+                            }
                         }
                         else if (busNumber > 699 && busNumber < 800 && bonus > 0.01f) //if bonus is 0, then the employee probably got the benefit of a minimum guarantee so they don't get overtime.
                         {
@@ -1168,7 +1072,7 @@ namespace PayrollProcessor
                                     ShiftTime = hours / dates.Count,
                                     PayRate = payRate > 1 ? payRate : null,
                                     BusNumber = busNumber,
-                                    CoachTripDays = 1
+                                    CoachTripDays = coachTripDays > 0 ? 1 : 0
                                 };
                                 return shift;
                             }).ToList();
@@ -1206,124 +1110,6 @@ namespace PayrollProcessor
 
             //Marshal.ReleaseComObject(workBook);
             //Marshal.ReleaseComObject(excelApp);
-        }
-
-        public Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> LoadEmployeeScheduleData()
-        {
-            if (!PrintForm.InputBool("Please check that Driver-Para-Schedule.xlsx is synced with OneDrive.", "Okay", "Skip"))
-            {
-                return new();
-            }
-            Log("Please check that Driver-Para-Schedule.xlsx is synced with OneDrive.", true);
-            Dictionary<int, Dictionary<RouteTimeContext, TimeSpan>> employeeScheduleData = new();
-
-            Excel.Application xlApp = new();
-            String path = "C:/Users/User/valleybusllc.com/Admin Team - Payroll - Payroll/Payroll/Driver-Para-Schedule.xlsx";
-            Excel.Workbook workBook = xlApp.Workbooks.Open(path);
-
-            foreach (Excel.Worksheet workSheet in workBook.Worksheets)
-            {
-                Excel.Range range = workSheet.Range[workSheet.Range["A1"], workSheet.Range["Z400"]];
-                var cellData = (Object[,])range.Value2;
-                int rows = range.Value2.GetLength(0) + 1;
-                HashSet<int> employeesWhoseIdsHaveBeenChecked = new();
-                if (TryGetStringFromCell(cellData[400, 26], out String cellString))
-                {
-                    employeesWhoseIdsHaveBeenChecked = cellString
-                        .Split(',')
-                        .Select(int.Parse)
-                        .ToHashSet();
-                }
-
-
-                for (int row = 1; row < rows; ++row)
-                {
-                    int employeeNameColumn = 1;
-                    int employeeNumberColumn = 2;
-                    int exceptionColumn = 6;
-                    int columnOffset = employeeNumberColumn + 1;
-                    if (TryGetIntFromCell(cellData[row, employeeNumberColumn], out int employeeNumber))
-                    {
-                        if (TryGetStringFromCell(cellData[row, employeeNameColumn], out string nameFromSheet))
-                        {
-                            if (!EmployeeDictionary.ContainsKey(employeeNumber))
-                            {
-                                Log("Problem in attendance schedule! , " + employeeNumber.ToString() + " isn't an employee");
-                                continue;
-                            }
-                            if (!employeesWhoseIdsHaveBeenChecked.Contains(employeeNumber))
-                            {
-                                Log("From attendance schedule, " + nameFromSheet + "(" + EmployeeDictionary[employeeNumber].Name + ")");
-                                employeesWhoseIdsHaveBeenChecked.Add(employeeNumber);
-                            }
-                        }
-                        for (int column = 0; column <= (int)RouteTimeContext.AFTERNOON; column++)
-                        {
-                            if (TryGetDateFromCell(cellData[row, column + columnOffset], out DateTime dateTime))
-                            {
-                                TimeSpan timeSpan = dateTime.TimeOfDay;
-                                if ((RouteTimeContext)column == RouteTimeContext.AFTERNOON && timeSpan.CompareTo(new TimeSpan(11, 59, 59)) < 0)
-                                {
-                                    //time wasn't put in as 24 hour
-                                    timeSpan = timeSpan.Add(new TimeSpan(12, 0, 0));
-                                }
-                                if (!employeeScheduleData.ContainsKey(employeeNumber))
-                                {
-                                    employeeScheduleData.Add(employeeNumber, new());
-                                }
-                                employeeScheduleData[employeeNumber][(RouteTimeContext)column] = timeSpan;
-                            }
-                        }
-
-                        if (TryGetStringFromCell(cellData[row, exceptionColumn], out string exceptionInstructions))
-                        {
-                            Employee employee = EmployeeDictionary[employeeNumber];
-                            columnOffset = exceptionColumn + 1;
-                            DayOfWeek dayOfWeek = DayOfWeek.Sunday;
-                            if (StringSearch(exceptionInstructions, "wed"))
-                            {
-                                dayOfWeek = DayOfWeek.Wednesday;
-                            }
-                            else
-                            {
-                                Log("Can't determine day for exception: " + exceptionInstructions, true);
-                            }
-                            for (int column = 0; column <= (int)RouteTimeContext.AFTERNOON; column++)
-                            {
-                                if (TryGetDateFromCell(cellData[row, column + columnOffset], out DateTime dateTime))
-                                {
-                                    TimeSpan timeSpan = dateTime.TimeOfDay;
-                                    if ((RouteTimeContext)column == RouteTimeContext.AFTERNOON && timeSpan.CompareTo(new TimeSpan(11, 59, 59)) < 0)
-                                    {
-                                        //time wasn't put in as 24 hour
-                                        timeSpan = timeSpan.Add(new TimeSpan(12, 0, 0));
-                                    }
-                                    if (!employee.ScheduleExceptions.ContainsKey(dayOfWeek))
-                                    {
-                                        employee.ScheduleExceptions.Add(dayOfWeek, new());
-                                    }
-                                    if (!employee.ScheduleExceptions[dayOfWeek].ContainsKey((RouteTimeContext)column))
-                                    {
-                                        employee.ScheduleExceptions[dayOfWeek].Add((RouteTimeContext)column, new());
-                                    }
-                                    employee.ScheduleExceptions[dayOfWeek][(RouteTimeContext)column] = timeSpan;
-                                }
-                            }
-                        }
-
-
-                        //Object[,] employeesWhoseIdsHaveBeenCheckedObject = new String[1, 1];
-                        //employeesWhoseIdsHaveBeenCheckedObject[0, 0] = String.Join(",", employeesWhoseIdsHaveBeenChecked);
-                        //workSheet.Range["Z" + 400].Value = employeesWhoseIdsHaveBeenCheckedObject;
-
-                        //SaveWorkBook(workBook, path);
-                    }
-                }
-            }
-            workBook.Close();
-            xlApp.Quit();
-
-            return employeeScheduleData;
         }
 
         public void WritePayrollImports()
@@ -1577,7 +1363,9 @@ namespace PayrollProcessor
                                 bEmployeeHasShownVacation = true;
                                 Company com = emp.IdNumber == 1734 || emp.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
                                 Dictionary<string, string> row = MakeBaseWfnRow(emp, com, batchId);
-                                //row["VBL"] = vacationHours.ToString();
+                                row["memo amount"] = vacationHours.ToString();
+                                row["memo code"] = "VBL";
+                                rows.Add(row);
                             }
 
                             foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
@@ -1690,7 +1478,8 @@ namespace PayrollProcessor
             "FLSA Workweek",
             "Temp Dept",
             "Temp Rate",
-            //"VBL"
+            "Memo Code",
+            "Memo Amount"
         };
 
         private static string GetWfnCompanyCode(Company company)
@@ -2664,19 +2453,6 @@ namespace PayrollProcessor
 
                 string taxId = employee.SocialSecurityNumber;
                 string employeeNumber = GetEmployeeNumberAsSixDigits(employee.IdNumber);
-                if (PayrollHistory.PartTimeEmployeesNeedingFullTimeStatus.Contains(employee.IdNumber))
-                {
-                    dataRows.Add(new()
-                    {
-                        ["Position ID"] = "MMF" + employeeNumber,
-                        ["Change Effective On"] = changeEffectiveOn,
-                        ["Tax ID Type"] = "SSN",
-                        ["Tax ID Number"] = taxId,
-                        ["First Name"] = employee.FirstName,
-                        ["Last Name"] = employee.LastName,
-                        ["Worker Category"] = "F"
-                    });
-                }
 
                 bool terminateAllActiveCompanies = PayrollHistory.EmployeesNeedingTermination.Contains(employee.IdNumber);
                 bool terminateNonPrimaryOnly = PayrollHistory.EmployeesNeedingTerminationInNonPrimaryCompanyOnly

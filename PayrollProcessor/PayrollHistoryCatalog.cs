@@ -450,6 +450,11 @@ namespace PayrollProcessor
         private static bool ShouldSkipPayrollFile(PayrollSourceFile file, PayrollHistoryEmployee employee,
             PayrollLoadNeed need, DateTime rangeStart, DateTime rangeEnd, int housingStartYear)
         {
+            if (need.AcaEligibility)
+            {
+                return !file.IsAdp && file.Year > 0 && file.Year < rangeStart.Year;
+            }
+
             if (need.HousingYears)
             {
                 return !file.IsAdp && file.Year > 0 && file.Year < housingStartYear;
@@ -592,6 +597,7 @@ namespace PayrollProcessor
             string[] headers = BuildIsolvedHeaders(rows[0], rows[1]);
             Dictionary<string, int> columns = BuildColumnMap(headers);
             string fileName = Path.GetFileName(path);
+            Dictionary<(int EmployeeNumber, Company Company, DateTime PayDate), PayrollHistoryPeriod> aggregated = new();
             for (int rowIndex = 2; rowIndex < rows.Count; rowIndex++)
             {
                 string[] row = rows[rowIndex];
@@ -614,7 +620,7 @@ namespace PayrollProcessor
 
                 PayrollHistoryPeriod period = new()
                 {
-                    PayDate = payDate,
+                    PayDate = payDate.Date,
                     Company = company,
                     Source = "iSolved",
                     GrossPay = GetFloat(columns, row, "Gross Pay"),
@@ -643,8 +649,10 @@ namespace PayrollProcessor
                 }
 
                 RememberName(columns, row, employeeNumber, "Name");
-                AddOrReplacePeriod(employeeNumber, period, overwriteExisting: false);
+                AddToAggregated(aggregated, employeeNumber, period);
             }
+
+            StoreAggregatedPeriods(aggregated);
         }
 
         private void LoadAdpFile(string path)
@@ -685,7 +693,7 @@ namespace PayrollProcessor
                 float netPay = GetFloat(columns, row, "NET PAY", "Net Pay");
                 PayrollHistoryPeriod period = new()
                 {
-                    PayDate = payDate,
+                    PayDate = payDate.Date,
                     Company = company,
                     Source = "ADP",
                     GrossPay = GetFloat(columns, row, "GROSS PAY", "Gross Pay"),
@@ -714,36 +722,47 @@ namespace PayrollProcessor
                 }
 
                 RememberName(columns, row, employeeNumber, "NAME", "Name");
-                (int EmployeeNumber, Company Company, DateTime PayDate) key = (employeeNumber, company, payDate);
-                if (aggregated.TryGetValue(key, out PayrollHistoryPeriod? existing))
-                {
-                    existing.Add(period);
-                }
-                else
-                {
-                    aggregated[key] = period;
-                }
+                AddToAggregated(aggregated, employeeNumber, period);
             }
 
+            StoreAggregatedPeriods(aggregated);
+        }
+
+        /// <summary>
+        /// Regular, manual, additional, and no-deduction checks on the same pay date are
+        /// separate rows in iSolved and ADP. Sum them so none of those checks are dropped.
+        /// </summary>
+        private static void AddToAggregated(
+            Dictionary<(int EmployeeNumber, Company Company, DateTime PayDate), PayrollHistoryPeriod> aggregated,
+            int employeeNumber, PayrollHistoryPeriod period)
+        {
+            (int EmployeeNumber, Company Company, DateTime PayDate) key =
+                (employeeNumber, period.Company, period.PayDate.Date);
+            if (aggregated.TryGetValue(key, out PayrollHistoryPeriod? existing))
+            {
+                existing.Add(period);
+                return;
+            }
+            aggregated[key] = period;
+        }
+
+        private void StoreAggregatedPeriods(
+            Dictionary<(int EmployeeNumber, Company Company, DateTime PayDate), PayrollHistoryPeriod> aggregated)
+        {
             foreach (((int EmployeeNumber, Company Company, DateTime PayDate) key, PayrollHistoryPeriod period) in aggregated)
             {
-                AddOrReplacePeriod(key.EmployeeNumber, period, overwriteExisting: true);
+                AddPeriodIfAbsent(key.EmployeeNumber, period);
             }
         }
 
-        private void AddOrReplacePeriod(int employeeNumber, PayrollHistoryPeriod period, bool overwriteExisting)
+        private void AddPeriodIfAbsent(int employeeNumber, PayrollHistoryPeriod period)
         {
             PayrollHistoryEmployee employee = GetOrCreateEmployee(employeeNumber);
             (DateTime PayDate, Company Company) key = (period.PayDate.Date, period.Company);
-            if (employee.Periods.ContainsKey(key))
+            if (!employee.Periods.ContainsKey(key))
             {
-                if (overwriteExisting)
-                {
-                    employee.Periods[key] = period;
-                }
-                return;
+                employee.Periods[key] = period;
             }
-            employee.Periods[key] = period;
         }
 
         private void LoadWorkforceNowEmployees()
@@ -1092,6 +1111,7 @@ namespace PayrollProcessor
     {
         public bool LastSixPayPeriods { get; init; }
         public bool HousingYears { get; init; }
+        public bool AcaEligibility { get; init; }
         public DateTime RangeStart { get; init; }
         public DateTime RangeEnd { get; init; }
     }

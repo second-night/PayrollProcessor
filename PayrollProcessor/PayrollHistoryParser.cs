@@ -36,7 +36,19 @@ namespace PayrollProcessor
                     byCompany = new();
                     byDate[period.PayDate.Date] = byCompany;
                 }
-                byCompany[period.Company] = period;
+                if (byCompany.TryGetValue(period.Company, out PayrollHistoryPeriod? existing))
+                {
+                    existing.Add(period);
+                    continue;
+                }
+
+                PayrollHistoryPeriod combined = new()
+                {
+                    PayDate = period.PayDate.Date,
+                    Company = period.Company
+                };
+                combined.Add(period);
+                byCompany[period.Company] = combined;
             }
 
             Excel.Application excelApp = new()
@@ -221,6 +233,186 @@ namespace PayrollProcessor
 
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
             return path;
+        }
+
+        public static string WriteAcaEligibility(PayrollHistoryEmployee employee)
+        {
+            if (!employee.CurrentStartDate.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "This employee does not have a hire or rehire date in WfnEmployees.xlsx.");
+            }
+
+            List<AcaEligibilityPeriod> allPeriods = AcaEligibility.BuildPeriods(employee);
+            List<AcaEligibilityPeriod> qualifying = allPeriods.Where(period => period.Qualifies).ToList();
+
+            string safeName = string.Concat((employee.LastName + employee.FirstName)
+                .Where(character => char.IsLetterOrDigit(character)));
+            if (safeName == "")
+            {
+                safeName = "Employee";
+            }
+            string fileName = "AcaEligibility_" + employee.EmployeeNumber + "_" + safeName + "_"
+                + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".xlsx";
+            string path = CreateReportPath(fileName);
+
+            Excel.Application excelApp = new()
+            {
+                DisplayAlerts = false
+            };
+            Excel.Workbook? workbook = null;
+            try
+            {
+                workbook = excelApp.Workbooks.Add();
+                Excel.Worksheet qualifyingSheet = (Excel.Worksheet)workbook.Worksheets[1];
+                qualifyingSheet.Name = "Qualifying Periods";
+                while (workbook.Worksheets.Count > 1)
+                {
+                    ((Excel.Worksheet)workbook.Worksheets[2]).Delete();
+                }
+                Excel.Worksheet allSheet = (Excel.Worksheet)workbook.Worksheets.Add(After: qualifyingSheet);
+                allSheet.Name = "All 3-Month Periods";
+
+                WriteAcaSummary(qualifyingSheet, employee, allPeriods, qualifying);
+                WriteAcaPeriodTable(allSheet, allPeriods, includeOnlyQualifying: false);
+
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+                workbook.SaveAs(path);
+                workbook.Close(true);
+                workbook = null;
+            }
+            finally
+            {
+                workbook?.Close(false);
+                excelApp.Quit();
+            }
+
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            return path;
+        }
+
+        private static void WriteAcaSummary(Excel.Worksheet sheet, PayrollHistoryEmployee employee,
+            List<AcaEligibilityPeriod> allPeriods, List<AcaEligibilityPeriod> qualifying)
+        {
+            const int headerRows = 12;
+            int tableRows = Math.Max(1, qualifying.Count);
+            string[] tableHeaders =
+            {
+                "Period Start", "Period End", "Total Hours", "Monthly Average",
+                "Valley Bus LLC Hours", "Valley Bus Coaches Hours", "Estimated Coach Hours",
+                "Pay Dates", "Complete Period"
+            };
+            object[,] values = new object[headerRows + 1 + tableRows, tableHeaders.Length];
+            values[0, 0] = "ACA Eligibility";
+            values[1, 0] = "Rolling 3-month periods since latest hire (1/1-3/31, 2/1-4/30, ...) "
+                + "with a monthly average of "
+                + AcaEligibility.MonthlyHourThreshold.ToString("0", CultureInfo.InvariantCulture) + " hours or more";
+            values[3, 0] = "Employee Number";
+            values[3, 1] = employee.EmployeeNumber;
+            values[4, 0] = "Name";
+            values[4, 1] = employee.DisplayName;
+            values[5, 0] = "Latest Hire Date";
+            values[5, 1] = FormatDate(employee.CurrentStartDate);
+            values[6, 0] = "Termination Date";
+            values[6, 1] = FormatDate(employee.TerminationDate);
+            values[7, 0] = "Last Paid Date";
+            values[7, 1] = FormatDate(employee.LastPaidDate);
+            values[8, 0] = "3-Month Periods Reviewed";
+            values[8, 1] = allPeriods.Count;
+            values[9, 0] = "Qualifying Periods";
+            values[9, 1] = qualifying.Count;
+            values[11, 0] = "Qualifying 3-month periods";
+
+            for (int i = 0; i < tableHeaders.Length; i++)
+            {
+                values[headerRows, i] = tableHeaders[i];
+            }
+            if (qualifying.Count == 0)
+            {
+                values[headerRows + 1, 0] = "None";
+                values[headerRows + 1, 1] = "No 3-month period averaged "
+                    + AcaEligibility.MonthlyHourThreshold.ToString("0", CultureInfo.InvariantCulture)
+                    + " hours per month or more.";
+            }
+            else
+            {
+                FillAcaPeriodRows(values, headerRows + 1, qualifying);
+            }
+
+            Excel.Range range = sheet.Range[sheet.Cells[1, 1],
+                sheet.Cells[headerRows + 1 + tableRows, tableHeaders.Length]];
+            range.Value2 = values;
+            sheet.Range[sheet.Cells[1, 1], sheet.Cells[1, 1]].Font.Bold = true;
+            sheet.Range[sheet.Cells[headerRows, 1], sheet.Cells[headerRows, tableHeaders.Length]].Font.Bold = true;
+            if (qualifying.Count > 0)
+            {
+                sheet.Range[sheet.Cells[headerRows + 2, 3],
+                    sheet.Cells[headerRows + 1 + qualifying.Count, 7]].NumberFormat = "0.00";
+            }
+            range.Columns.AutoFit();
+        }
+
+        private static void WriteAcaPeriodTable(Excel.Worksheet sheet, List<AcaEligibilityPeriod> periods,
+            bool includeOnlyQualifying)
+        {
+            List<AcaEligibilityPeriod> rows = includeOnlyQualifying
+                ? periods.Where(period => period.Qualifies).ToList()
+                : periods;
+            string[] headers =
+            {
+                "Period Start", "Period End", "Total Hours", "Monthly Average",
+                "Valley Bus LLC Hours", "Valley Bus Coaches Hours", "Estimated Coach Hours",
+                "Pay Dates", "Complete Period", "Qualifies"
+            };
+            int dataRows = Math.Max(1, rows.Count);
+            object[,] values = new object[1 + dataRows, headers.Length];
+            for (int i = 0; i < headers.Length; i++)
+            {
+                values[0, i] = headers[i];
+            }
+            if (rows.Count == 0)
+            {
+                values[1, 0] = "None";
+            }
+            else
+            {
+                FillAcaPeriodRows(values, 1, rows, includeQualifiesColumn: true);
+            }
+
+            Excel.Range range = sheet.Range[sheet.Cells[1, 1], sheet.Cells[1 + dataRows, headers.Length]];
+            range.Value2 = values;
+            sheet.Range[sheet.Cells[1, 1], sheet.Cells[1, headers.Length]].Font.Bold = true;
+            if (rows.Count > 0)
+            {
+                sheet.Range[sheet.Cells[2, 3], sheet.Cells[1 + rows.Count, 7]].NumberFormat = "0.00";
+            }
+            range.Columns.AutoFit();
+        }
+
+        private static void FillAcaPeriodRows(object[,] values, int startRow, List<AcaEligibilityPeriod> periods,
+            bool includeQualifiesColumn = false)
+        {
+            for (int i = 0; i < periods.Count; i++)
+            {
+                AcaEligibilityPeriod period = periods[i];
+                int row = startRow + i;
+                values[row, 0] = period.Start.ToString("M/d/yyyy");
+                values[row, 1] = period.End.ToString("M/d/yyyy");
+                values[row, 2] = Round(period.TotalHours);
+                values[row, 3] = Round(period.MonthlyAverage);
+                values[row, 4] = Round(period.LlcHours);
+                values[row, 5] = Round(period.CoachesHours);
+                values[row, 6] = Round(period.EstimatedCoachHours);
+                values[row, 7] = period.PayDateCount;
+                values[row, 8] = period.IsComplete ? "Yes" : "In progress";
+                if (includeQualifiesColumn)
+                {
+                    values[row, 9] = period.Qualifies ? "Yes" : "No";
+                }
+            }
         }
 
         internal static string OutputFolder =>
