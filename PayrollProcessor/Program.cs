@@ -542,6 +542,8 @@ namespace PayrollProcessor
                         }
                     }
 
+                    SpecialEmployeeHandler.GetInstance().ApplyWeeklyCompensationFloors(emp, ExcelWorker.FirstDayWeek2);
+
                     //jeff shaw
                     if (DoJeffShawVacation && emp.IdNumber == 876 && jeffShawHours < 80)
                     {

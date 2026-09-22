@@ -113,6 +113,8 @@ namespace PayrollProcessor
             ExceptionLog += "\nOther exceptions: \n";
             SpecialEmployees.WeeklyMgExceptions.FindAll(entry => SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a weekly MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
+            SpecialEmployees.WeeklyCompensationFloorExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname has a weekly compensation floor of " + entry.Hours + " hours at route pay. If normal weekly pay is lower, MG hours are added at route pay to reach that floor.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber), SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber) > 0));
+            ExceptionLog += "\n";
             SpecialEmployees.DailyMgExceptions.FindAll(entry => SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a daily MG of " + entry.Hours + " hours.", SpecialMgNonShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
             SpecialEmployees.ShiftMgExceptionsInDollars.FindAll(entry => SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a MG of $" + entry.Dollars + " per shift.", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
@@ -124,6 +126,130 @@ namespace PayrollProcessor
             SpecialEmployees.PayRateExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives a special payrate of " + (entry.Rate).ToString() + " when they clock in as " + ((Jobs)entry.JobType).ToString() + ".", 0f, false));
             ExceptionLog += "\n\n\n\n";
             Log(ExceptionLog);
+        }
+
+        public void ApplyWeeklyCompensationFloors(Employee emp, DateTime firstDayWeek2)
+        {
+            if (emp == null || SpecialEmployees.WeeklyCompensationFloorExceptions == null || SpecialEmployees.WeeklyCompensationFloorExceptions.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var entry in SpecialEmployees.WeeklyCompensationFloorExceptions)
+            {
+                if (entry == null || entry.IdNumber != emp.IdNumber || entry.Hours < 0.01f)
+                {
+                    continue;
+                }
+
+                DateTime? effectiveDate = ParseEffectiveDate(entry.EffectiveDate);
+                Jobs floorJob = entry.JobType != 0 ? (Jobs)entry.JobType : Jobs.DRIVER_SCHOOL;
+                float routePay = emp.PayRates.GetValueOrDefault(floorJob, 0f);
+                if (routePay < 0.01f)
+                {
+                    Log("Cannot apply weekly compensation floor for " + emp.Name + " because route pay was not found.", true);
+                    continue;
+                }
+
+                for (int weekNumber = 1; weekNumber < 3; ++weekNumber)
+                {
+                    DateTime weekStart = weekNumber == 1 ? firstDayWeek2.AddDays(-7) : firstDayWeek2;
+                    DateTime weekEnd = weekStart.AddDays(6);
+                    if (effectiveDate.HasValue && weekEnd.Date < effectiveDate.Value.Date)
+                    {
+                        continue;
+                    }
+
+                    GetWeeklyPayables(emp, weekNumber, out float weeklyCompensation, out float workingHours);
+                    if (workingHours < 0.01f)
+                    {
+                        continue;
+                    }
+
+                    float floorDollars = routePay * entry.Hours;
+                    float shortfall = floorDollars - weeklyCompensation;
+                    if (shortfall < 0.01f)
+                    {
+                        continue;
+                    }
+
+                    Shift? shift = emp.FindShiftForWeek(weekNumber, floorJob, Company.VALLEY_BUS_LLC, false)
+                        ?? emp.FindShiftForWeek(weekNumber, emp.PrimaryJobType(), Company.VALLEY_BUS_LLC, false)
+                        ?? emp.FindShiftForWeek(weekNumber, floorJob, Company.VALLEY_BUS_LLC, true);
+                    if (shift == null || shift.JobType == Jobs.HOLIDAY || shift.JobType == Jobs.VACATION)
+                    {
+                        Log("Cannot apply weekly compensation floor for " + emp.Name + " because no suitable shift was found for week " + weekNumber + ".", true);
+                        continue;
+                    }
+
+                    if (shift.PayRate == null || shift.PayRate < 0.01f)
+                    {
+                        shift.PayRate = routePay;
+                    }
+
+                    float mgPayRate = shift.PayRate.Value;
+                    float mgHours = (float)Math.Round(shortfall / mgPayRate, 2);
+                    if (mgHours < 0.01f)
+                    {
+                        continue;
+                    }
+
+                    shift.MinimumGuaranteeHours += mgHours;
+                    SpecialMgNonShiftTotals[emp.IdNumber] = SpecialMgNonShiftTotals.GetValueOrDefault(emp.IdNumber, 0f) + mgHours;
+                    DelayedLog("Giving " + mgHours + " weekly compensation floor hours ($"
+                        + Math.Round(mgHours * mgPayRate, 2) + ") to " + emp.Name + " for week " + weekNumber
+                        + " (floor is " + entry.Hours + " hours at $" + routePay + "/hr = $" + Math.Round(floorDollars, 2)
+                        + "; normal pay was $" + Math.Round(weeklyCompensation, 2) + ").");
+                }
+            }
+        }
+
+        private static DateTime? ParseEffectiveDate(string? effectiveDate)
+        {
+            if (string.IsNullOrWhiteSpace(effectiveDate))
+            {
+                return null;
+            }
+            if (DateTime.TryParse(effectiveDate, out DateTime parsed))
+            {
+                return parsed.Date;
+            }
+            Log("Could not parse EffectiveDate '" + effectiveDate + "' for a weekly compensation floor exception.", true);
+            return null;
+        }
+
+        private static void GetWeeklyPayables(Employee emp, int weekNumber, out float weeklyCompensation, out float workingHours)
+        {
+            weeklyCompensation = 0f;
+            workingHours = 0f;
+            for (int company = 0; company < 2; ++company)
+            {
+                for (int shiftType = 0; shiftType < 3; ++shiftType)
+                {
+                    if (emp.ShiftTotals[company, shiftType] == null)
+                    {
+                        continue;
+                    }
+                    foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
+                    {
+                        if (!pair.TryGetValue(weekNumber, out List<Shift>? shifts) || shifts == null)
+                        {
+                            continue;
+                        }
+                        foreach (Shift shift in shifts)
+                        {
+                            if (!shift.IsValid(emp))
+                            {
+                                continue;
+                            }
+                            workingHours += shift.WorkingHours();
+                            weeklyCompensation += (shift.PayRate ?? 0f) * shift.AllHours(false)
+                                + shift.DollarAmount
+                                + shift.BonusDollars;
+                        }
+                    }
+                }
+            }
         }
 
         public void CheckForTimeFrameException(Employee employee, Shift shift)
@@ -192,6 +318,8 @@ namespace PayrollProcessor
 
         public List<SpecialHoursEntry> WeeklyMgExceptions { get; set; } = new();
 
+        public List<WeeklyCompensationFloorEntry> WeeklyCompensationFloorExceptions { get; set; } = new();
+
         public List<SpecialHoursEntry> DailyMgExceptions { get; set; } = new();
 
         public List<SpecialDollarsEntry> ShiftMgExceptionsInDollars { get; set; } = new();
@@ -232,6 +360,12 @@ namespace PayrollProcessor
     public class SpecialHoursEntry : SpecialEntry
     {
         public float Hours { get; set; }
+    }
+
+    public class WeeklyCompensationFloorEntry : SpecialHoursEntry
+    {
+        public int JobType { get; set; }
+        public string? EffectiveDate { get; set; }
     }
 
     public class SpecialDollarsEntry : SpecialEntry

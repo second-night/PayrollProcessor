@@ -2149,6 +2149,7 @@ namespace PayrollProcessor
             string amount = GetDdAccountField(account, "Amount");
             string percent = GetDdAccountField(account, "Percent");
             string sequence = GetDdAccountField(account, "Sequence");
+            string AccountType = GetDdAccountField(account, "AccountType");
             bool isFullDeposit = sequence == "0"
                 || (string.IsNullOrWhiteSpace(amount) && string.IsNullOrWhiteSpace(percent));
 
@@ -2177,8 +2178,9 @@ namespace PayrollProcessor
                 deductionAmount = amount;
             }
 
+            string deductionCodePrefix = AccountType == "S" ? "CK" : "CK";
             //adpFields["Bank Deposit Position Number"] = positionNumber.ToString();
-            adpFields["Bank Deposit Deduction Code"] = "CK" + positionNumber;
+            adpFields["Bank Deposit Deduction Code"] = deductionCodePrefix + positionNumber;
             adpFields["Bank Deposit Routing Number"] = routingDigits;
             adpFields["Bank Deposit Account Number"] = accountNumber;
             //adpFields["Bank Deposit Partial Net"] = partialNet;

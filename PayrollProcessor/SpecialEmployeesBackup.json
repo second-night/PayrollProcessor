@@ -1,5 +1,5 @@
 {
-  "JsonInstructions": "Note: When editing this document, pay attention to the format, any change in format can cause the program to fail. It may be wise to make a copy of the previous version before editing. The 'Name' and 'Notes' fields are only there for the user, they do not matter to the program itself.DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, AIDE_SCHOOL = 25, NON_CDL_DRIVER = 28",
+  "JsonInstructions": "Note: When editing this document, pay attention to the format, any change in format can cause the program to fail. It may be wise to make a copy of the previous version before editing. The 'Name' and 'Notes' fields are only there for the user, they do not matter to the program itself.DRIVER_SCHOOL = 1, DRIVER_CHARTER = 2, MECHANIC = 7, WASH_BAY = 9, WASH_BAY_OT = 10, TRAINING = 11, BODY_SHOP = 12, ADMIN = 13, CLEANING = 14, HOLIDAY = 15, VACATION = 16, COACH_PUBLIC_DRIVING = 19/*out of town yellows*/, AIDE_CHARTER = 24, AIDE_SCHOOL = 25, NON_CDL_DRIVER = 28. WeeklyCompensationFloorExceptions compare weekly pay (hours at each rate, plus dollar amounts and bonuses) to Hours * the JobType pay rate, then add MG hours at that rate if normal pay is lower.",
   "WeeklyMgExceptions" : [
     {
       "Name":"Brad Rust",
@@ -24,6 +24,17 @@
       "IdNumber": 867,
       "Hours": 30,
       "Notes":""
+    }
+  ],
+
+  "WeeklyCompensationFloorExceptions" : [
+    {
+      "Name":"Eric Buringrud",
+      "IdNumber": 872,
+      "Hours": 38,
+      "JobType": 1,
+      "EffectiveDate": "2026-09-21",
+      "Notes":"Starting the week beginning September 21, 2026, weekly pay is the greater of normal calculated pay or route pay (DRIVER_SCHOOL) multiplied by 38 hours. Route and charter rates are unchanged."
     }
   ],
   
