@@ -2400,7 +2400,22 @@ namespace PayrollProcessor
                 bool wroteAnyBankRow = false;
                 foreach (Dictionary<string, object> account in ddAccounts)
                 {
-                    Dictionary<string, string> rowFields = new(adpFields);
+                    Dictionary<string, string> rowFields;
+                    if (wroteAnyBankRow)
+                    {
+                        // Additional DD accounts: identity columns only (same as raise/update rows)
+                        rowFields = new()
+                        {
+                            ["Position ID"] = adpFields["Position ID"],
+                            ["Change Effective On"] = adpFields["Change Effective On"],
+                            ["Tax ID Type"] = adpFields["Tax ID Type"],
+                            ["Tax ID Number"] = adpFields["Tax ID Number"]
+                        };
+                    }
+                    else
+                    {
+                        rowFields = new(adpFields);
+                    }
                     if (TryAddAdpBankDepositFields(rowFields, account, positionNumber, employee))
                     {
                         dataRows.Add(rowFields);
