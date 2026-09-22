@@ -128,12 +128,9 @@ namespace PayrollProcessor
             return dollarAmountLocal;
         }
 
-        public float GetMinimumGuaranteeMax(Employee employee, out MgSource sourceOfMg, List<Shift>? shiftsInRouteTimeContext = null)
+        //public float GetMinimumGuaranteeMax(Employee employee, out MgSource sourceOfMg, List<Shift>? shiftsInRouteTimeContext = null)
+        public float GetMinimumGuaranteeMax(Employee employee, out MgSource sourceOfMg)
         {
-            if (employee.IdNumber == 2288)
-            {
-                Log("Breakpoint");
-            }
             sourceOfMg = MgSource.NONE;
             if (null != Notes && (StringSearch(Notes, "no min") || StringSearch(Notes, "nomin") || StringSearch(Notes, "no minimum") || StringSearch(Notes, "tnt") || StringSearch(Notes, "trolley") || StringSearch(Notes, "training")))
             {
@@ -148,17 +145,8 @@ namespace PayrollProcessor
                 if (IsASchoolRouteShift())
                 {
 
-                    var shiftTime = shiftsInRouteTimeContext == null ? ShiftTime : shiftsInRouteTimeContext.Sum(shift => shift.ShiftTime);
-
-                    if (shiftTime < 0.08)
-                    {
-                        Log("Why do I care if null != shiftsInRouteTimeContext here?", true);
-                        if (null != shiftsInRouteTimeContext && shiftTime < 0.08)
-                        {
-                            DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
-                            return 0f;
-                        }
-                    }
+                    //var shiftTime = shiftsInRouteTimeContext == null ? ShiftTime : shiftsInRouteTimeContext.Sum(shift => shift.ShiftTime);
+                    var shiftTime = ShiftTime;
 
                     if (!Shift.WereThereSchoolRoutesOnThisDay(ShiftLocation, Date.Day))
                     {
@@ -180,16 +168,6 @@ namespace PayrollProcessor
                         {
                             sourceOfMg = MgSource.SPECIAL_EXCEPTION;
                             return entry.Hours;
-                        }
-                    }
-
-                    if (shiftTime < 0.2)
-                    {
-                        Log("Why do I care if null != shiftsInRouteTimeContext here?", true);
-                        if (null != shiftsInRouteTimeContext && shiftTime < 0.2)
-                        {
-                            DelayedLog("Giving no minimum guarantee for shift because hours are suspciciously low for " + employee.Name + " on " + Date);
-                            return 0f;
                         }
                     }
 

@@ -22,12 +22,9 @@ namespace PayrollProcessor
             "SendToPayroll"
         };
 
-        public void ProcessAndWriteCsv(IEnumerable<Employee> employees)
+        public void ApplyNetVacationChanges(IEnumerable<Employee> employees)
         {
-            List<Dictionary<string, string>> rows = new();
-            string transactionDate = DateTime.Today.ToString("MM/dd/yyyy");
-
-            foreach (Employee emp in employees.OrderBy(e => e.IdNumber))
+            foreach (Employee emp in employees)
             {
                 if (emp.IsSalaried || emp.IsPartialEntry || EmployeeIdsToIgnore.Contains(emp.IdNumber))
                 {
@@ -52,6 +49,21 @@ namespace PayrollProcessor
                 }
 
                 emp.NetVacationChangeForPayPeriod = transactionAmount;
+                //LogVacationSummary(emp, compensatedHours, accrual, vacationTaken, transactionAmount);
+            }
+        }
+
+        public void WriteAccrualsImportCsv(IEnumerable<Employee> employees)
+        {
+            List<Dictionary<string, string>> rows = new();
+            string transactionDate = DateTime.Today.ToString("MM/dd/yyyy");
+
+            foreach (Employee emp in employees.OrderBy(e => e.IdNumber))
+            {
+                if (Math.Abs(emp.NetVacationChangeForPayPeriod) < 0.001f)
+                {
+                    continue;
+                }
 
                 rows.Add(new Dictionary<string, string>
                 {
@@ -61,12 +73,10 @@ namespace PayrollProcessor
                     ["ReasonCodes"] = "",
                     ["TransactionStartDate"] = transactionDate,
                     ["TransactionStartTime"] = "",
-                    ["TransactionAmount"] = FormatTransactionAmount(transactionAmount),
+                    ["TransactionAmount"] = FormatTransactionAmount(emp.NetVacationChangeForPayPeriod),
                     ["TransactionUnit"] = "hours",
                     ["SendToPayroll"] = ""
                 });
-
-                //LogVacationSummary(emp, compensatedHours, accrual, vacationTaken, transactionAmount);
             }
 
             string path = DefaultDirectoryPath() + "AccrualsImport.csv";

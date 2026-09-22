@@ -104,6 +104,8 @@ namespace PayrollProcessor
 
     internal sealed class PayrollHistoryCatalog
     {
+        internal static readonly DateTime AdpHistoryStartDate = new(2026, 1, 1);
+
         public Dictionary<int, PayrollHistoryEmployee> Employees { get; } = new();
         public List<string> LoadWarnings { get; } = new();
         public int IsolvedFileCount { get; private set; }
@@ -215,6 +217,68 @@ namespace PayrollProcessor
                 RangeStart = startDate,
                 RangeEnd = endDate
             });
+        }
+
+        /// <summary>
+        /// Regular biweekly pay dates in [rangeStart, currentPayDate) that should already be in
+        /// ADP. The current pay date is excluded because that payroll has not been imported yet.
+        /// </summary>
+        public string? GetMissingAdpPayrollError(DateTime rangeStart, DateTime currentPayDate)
+        {
+            if (currentPayDate.Date < AdpHistoryStartDate)
+            {
+                return null;
+            }
+
+            List<DateTime> missing = GetMissingAdpRegularPayDates(rangeStart, currentPayDate);
+            if (missing.Count == 0)
+            {
+                return null;
+            }
+
+            string dates = string.Join(", ", missing.Select(date =>
+                date.ToString("M/d/yyyy", CultureInfo.InvariantCulture)));
+            return "ADP payroll history is missing pay date(s) " + dates
+                + ". Download the latest AdpPayrollHistory.xlsx from ADP into the Payroll History folder and rerun.";
+        }
+
+        private List<DateTime> GetMissingAdpRegularPayDates(DateTime rangeStart, DateTime currentPayDate)
+        {
+            DateTime start = rangeStart.Date;
+            if (start < AdpHistoryStartDate)
+            {
+                start = AdpHistoryStartDate;
+            }
+
+            HashSet<DateTime> adpPayDates = new();
+            foreach (PayrollHistoryEmployee employee in Employees.Values)
+            {
+                foreach (PayrollHistoryPeriod period in employee.Periods.Values)
+                {
+                    if (period.PayDate.Date < start || period.PayDate.Date >= currentPayDate.Date)
+                    {
+                        continue;
+                    }
+                    if (period.Source.Contains("ADP", StringComparison.OrdinalIgnoreCase))
+                    {
+                        adpPayDates.Add(period.PayDate.Date);
+                    }
+                }
+            }
+
+            List<DateTime> missing = new();
+            for (DateTime date = currentPayDate.Date.AddDays(-PayPeriodSchedule.DaysPerPayPeriod);
+                date >= start;
+                date = date.AddDays(-PayPeriodSchedule.DaysPerPayPeriod))
+            {
+                if (!adpPayDates.Contains(date))
+                {
+                    missing.Add(date);
+                }
+            }
+
+            missing.Reverse();
+            return missing;
         }
 
         public IEnumerable<PayrollHistoryEmployee> Search(string query)
@@ -464,7 +528,7 @@ namespace PayrollProcessor
             {
                 if (file.IsAdp)
                 {
-                    return rangeEnd < new DateTime(2026, 1, 1);
+                    return rangeEnd < AdpHistoryStartDate;
                 }
 
                 return file.Year > 0 && (file.Year < rangeStart.Year || file.Year > rangeEnd.Year);
@@ -472,7 +536,7 @@ namespace PayrollProcessor
 
             if (file.IsAdp)
             {
-                return rangeEnd < new DateTime(2026, 1, 1);
+                return rangeEnd < AdpHistoryStartDate;
             }
             return file.Year > 0 && (file.Year < rangeStart.Year || file.Year > rangeEnd.Year);
         }

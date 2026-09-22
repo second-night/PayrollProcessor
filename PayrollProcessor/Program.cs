@@ -120,15 +120,17 @@ namespace PayrollProcessor
             ExcelWorker.PayrollHistory.LoadPreviousPayPeriods(ExcelWorker.FirstDayWeek2.AddDays(12));
             JobTitleMapper.EvaluateEmployees(EmployeeDictionary.Values, ExcelWorker.PayrollHistory);
             ExcelWorker.PayrollHistory.EvaluateEmployees(EmployeeDictionary.Values);
-            new VacationTracker().ProcessAndWriteCsv(EmployeeDictionary.Values);
+            VacationTracker vacationTracker = new();
+            vacationTracker.ApplyNetVacationChanges(EmployeeDictionary.Values);
             ExcelWorker.WriteEmployeeImports();
+            ExcelWorker.WriteWfnPayrollImports();
+            FinalLogging();
+            vacationTracker.WriteAccrualsImportCsv(EmployeeDictionary.Values);
             ExcelWorker.WritePayrollHistory();
             new WsiTracker().RunIfApplicable(ExcelWorker.FirstDayWeek2.AddDays(12));
-            ExcelWorker.WriteWfnPayrollImports();
             //ExcelWorker.WritePayrollImports();
             ExcelWorker.WriteBirthDates();
             ExcelWorker.WriteOverTimeReport();
-            FinalLogging();
             //Log("Processed is finished. Have a nice day!", true);
         }
 
@@ -265,8 +267,10 @@ namespace PayrollProcessor
                     Shift? shiftToUseForMg = null;
 
                     float maxMinGuarantee = 0f;
+                    float shiftTimeSum = 0f;
                     foreach (var shift in pair2.Value)
                     {
+                        shiftTimeSum += shift.ShiftTime;
                         float minGuarantee = pair2.Value.Max(shift => shift.GetMinimumGuaranteeMax(emp, out sourceOfMg));
                         if (minGuarantee > maxMinGuarantee)
                         {
@@ -279,6 +283,12 @@ namespace PayrollProcessor
                             //ali omar exception
                             shift.MinimumGuaranteeHours = Math.Max(0, 1 - shift.ShiftTime);
                         }
+                    }
+
+                    if (shiftTimeSum < 0.2)
+                    {
+                        DelayedLog("Giving no minimum guarantee for shift context because hours (" + shiftTimeSum + ") are suspciciously low for " + emp.Name + ".");
+                        continue;
                     }
 
                     if (shiftToUseForMg == null)
@@ -1013,48 +1023,6 @@ namespace PayrollProcessor
                 Log(entry.Key.ToString() + ": " + Math.Round(entry.Value, 2));
             }
 
-            //apprentice mechanics
-            //List<int> apprenticeMechanicOrder = new()
-            //{
-            //    1947,1963,1419,1946,1876,2100,1976,2282
-            //};
-            //foreach (var empEntry in EmployeeDictionary)
-            //{
-            //    if (empEntry.Value.IsAMechanicApprentice && !apprenticeMechanicOrder.Contains(empEntry.Key))
-            //    {
-            //        apprenticeMechanicOrder.Add(empEntry.Key);
-            //    }
-            //}
-            //Log("\nApprentice Mechanic Order:");
-            //foreach (var mc in apprenticeMechanicOrder)
-            //{
-            //    Log(mc.ToString());
-            //}
-            //Log("Mechanic hours:");
-            //foreach (var mc in apprenticeMechanicOrder)
-            //{
-            //    if (ApprenticeMechanicHours.ContainsKey(mc))
-            //    {
-            //        Log(Math.Round(ApprenticeMechanicHours[mc].GetValueOrDefault(Jobs.MECHANIC, 0f), 2).ToString());
-            //    }
-            //    else
-            //    {
-            //        Log("0");
-            //    }
-            //}
-            //Log("Driver hours:");
-            //foreach (var mc in apprenticeMechanicOrder)
-            //{
-            //    if (ApprenticeMechanicHours.ContainsKey(mc))
-            //    {
-            //        Log(Math.Round(ApprenticeMechanicHours[mc].GetValueOrDefault(Jobs.DRIVER_SCHOOL, 0f), 2).ToString());
-            //    }
-            //    else
-            //    {
-            //        Log("0");
-            //    }
-            //}
-
             string nonCdlDrivers = "\nNon CDL Drivers: \n\nFargo:\n";
             foreach (var employee in NonCdlDrivers)
             {
@@ -1097,6 +1065,7 @@ namespace PayrollProcessor
             };
 
             process.Start();
+            Log("Process Completed. Exit program to avoid logging history files.", true);
         }
     }
 

@@ -29,10 +29,11 @@ namespace PayrollProcessor
         {
             DateTime today = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day);
 
+            bool bShouldCheckPrimaryPayrollRunByDefault = today.DayOfWeek == DayOfWeek.Wednesday;
             bool manuallyEnterWeekTwoDate = PrintForm.InputDateTime(
                 "Would you like to manually enter the first day of week 2 (as opposed to auto-detecting the date)?",
                 "This is the primary payroll run (write payroll history records)",
-                true,
+                bShouldCheckPrimaryPayrollRunByDefault,
                 out DateTime dateTime,
                 out bool isPrimaryPayrollRun);
             IsPrimaryPayrollRun = isPrimaryPayrollRun;

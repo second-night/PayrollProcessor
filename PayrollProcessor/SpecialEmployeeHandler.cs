@@ -123,7 +123,7 @@ namespace PayrollProcessor
             ExceptionLog += "\n";
             SpecialEmployees.PayRateExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives a special payrate of " + (entry.Rate).ToString() + " when they clock in as " + ((Jobs)entry.JobType).ToString() + ".", 0f, false));
             ExceptionLog += "\n\n\n\n";
-            Log(ExceptionLog, true);
+            Log(ExceptionLog);
         }
 
         public void CheckForTimeFrameException(Employee employee, Shift shift)

@@ -109,7 +109,8 @@ namespace PayrollProcessor
         public void EvaluateEmployees(IEnumerable<Employee> employees)
         {
             List<Employee> employeeList = employees.ToList();
-            CheckPartTimeAcaEligibility(employeeList);
+            PayrollHistoryCatalog? catalog = TryLoadCatalogForStatusChecks();
+            CheckPartTimeAcaEligibility(employeeList, catalog);
             foreach (Employee employee in employeeList)
             {
                 if (employee.IdNumber == 503)
@@ -159,8 +160,39 @@ namespace PayrollProcessor
             }
         }
 
-        private void CheckPartTimeAcaEligibility(IEnumerable<Employee> employees)
+        private DateTime AcaHistoryRangeStart =>
+            new DateTime(currentPayDate.Year, currentPayDate.Month, 1)
+                .AddMonths(-(AcaEligibility.MonthsPerPeriod - 1));
+
+        private PayrollHistoryCatalog? TryLoadCatalogForStatusChecks()
         {
+            DateTime rangeStart = AcaHistoryRangeStart;
+            try
+            {
+                PayrollHistoryCatalog catalog = new();
+                catalog.LoadEmployees();
+                catalog.LoadPayrollForDateRange(rangeStart, currentPayDate);
+                string? missingAdpError = catalog.GetMissingAdpPayrollError(rangeStart, currentPayDate);
+                if (missingAdpError != null)
+                {
+                    Program.Log(missingAdpError, true);
+                }
+                return catalog;
+            }
+            catch (Exception exception)
+            {
+                Program.Log("Could not load payroll history for employment-status checks: " + exception.Message, true);
+                return null;
+            }
+        }
+
+        private void CheckPartTimeAcaEligibility(IEnumerable<Employee> employees, PayrollHistoryCatalog? catalog)
+        {
+            if (catalog == null)
+            {
+                return;
+            }
+
             List<Employee> partTimeEmployees = employees
                 .Where(employee => employee.IdNumber != 503
                     && !employee.IsTerminated
@@ -172,21 +204,7 @@ namespace PayrollProcessor
                 return;
             }
 
-            PayrollHistoryCatalog catalog;
-            try
-            {
-                catalog = new PayrollHistoryCatalog();
-                catalog.LoadEmployees();
-                DateTime rangeStart = new DateTime(currentPayDate.Year, currentPayDate.Month, 1)
-                    .AddMonths(-(AcaEligibility.MonthsPerPeriod - 1));
-                catalog.LoadPayrollForDateRange(rangeStart, currentPayDate);
-                OverlayCurrentPayPeriodHours(catalog, partTimeEmployees);
-            }
-            catch (Exception exception)
-            {
-                Program.Log("Could not load payroll history for the ACA full-time hour check: " + exception.Message, true);
-                return;
-            }
+            OverlayCurrentPayPeriodHours(catalog, partTimeEmployees);
 
             List<string> lines = new();
             foreach (Employee employee in partTimeEmployees.OrderBy(employee => employee.LastName)
