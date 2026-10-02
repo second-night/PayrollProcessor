@@ -97,17 +97,17 @@ namespace PayrollProcessor
         {
             if (cell.DataType != null && cell.DataType == CellValues.SharedString)
             {
-                if (int.TryParse(cell.InnerText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int index)
+                if (int.TryParse(cell.CellValue?.Text ?? cell.InnerText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int index)
                     && index >= 0 && index < sharedStrings.Length)
                 {
-                    return sharedStrings[index].Trim();
+                    return ResolveNumericText(sharedStrings[index]);
                 }
                 return "";
             }
 
             if (cell.DataType != null && cell.DataType == CellValues.InlineString)
             {
-                return (cell.InlineString?.Text?.Text ?? cell.InnerText ?? "").Trim();
+                return ResolveNumericText(cell.InlineString?.Text?.Text ?? cell.InnerText ?? "");
             }
 
             if (cell.DataType != null && cell.DataType == CellValues.Boolean)
@@ -115,14 +115,30 @@ namespace PayrollProcessor
                 return cell.InnerText == "1" ? "TRUE" : "FALSE";
             }
 
-            string raw = cell.CellValue?.Text ?? cell.InnerText ?? "";
+            // Prefer a cached calculated value. ADP payroll history stores amounts as
+            // ROUND(n, 2) formulas with no cached result, so evaluate those next.
+            string raw = cell.CellValue?.Text ?? "";
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                raw = cell.CellFormula?.Text ?? cell.InnerText ?? "";
+            }
             if (cell.DataType != null && cell.DataType == CellValues.Date
                 && double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double oaDate))
             {
                 return DateTime.FromOADate(oaDate).ToString("M/d/yyyy", CultureInfo.InvariantCulture);
             }
 
-            return raw.Trim();
+            return ResolveNumericText(raw);
+        }
+
+        private static string ResolveNumericText(string? value)
+        {
+            string text = (value ?? "").Trim();
+            if (PayrollHistoryValueParser.TryEvaluateRound(text, out float rounded))
+            {
+                return rounded.ToString("0.########", CultureInfo.InvariantCulture);
+            }
+            return text;
         }
 
         private static int ColumnIndex(string cellReference)
@@ -195,11 +211,17 @@ namespace PayrollProcessor
 
         public static float GetFloat(string? value)
         {
-            string text = Normalize(value).Replace("$", "").Replace(",", "");
+            string text = Normalize(value);
             if (text == "")
             {
                 return 0f;
             }
+            if (TryEvaluateRound(text, out float rounded))
+            {
+                return rounded;
+            }
+
+            text = text.Replace("$", "").Replace(",", "");
             if (float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out float number)
                 || float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out number))
             {
@@ -207,6 +229,42 @@ namespace PayrollProcessor
             }
             return 0f;
         }
+
+        /// <summary>
+        /// Excel ROUND(amount, digits) with no cell references. Midpoint rounding matches Excel
+        /// (away from zero). Returns false when the text is not that formula.
+        /// </summary>
+        public static bool TryEvaluateRound(string? value, out float number)
+        {
+            number = 0f;
+            string text = Normalize(value);
+            if (text == "")
+            {
+                return false;
+            }
+
+            Match match = RoundFormula.Match(text);
+            if (!match.Success
+                || !decimal.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal amount)
+                || !decimal.TryParse(match.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal digitsValue)
+                || digitsValue != decimal.Truncate(digitsValue))
+            {
+                return false;
+            }
+
+            int digits = (int)digitsValue;
+            if (digits < 0 || digits > 10)
+            {
+                return false;
+            }
+
+            number = (float)Math.Round(amount, digits, MidpointRounding.AwayFromZero);
+            return true;
+        }
+
+        private static readonly Regex RoundFormula = new(
+            @"^=?\s*ROUND\s*\(\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*,\s*([+-]?\d+(?:\.\d*)?)\s*\)$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         public static void ParseName(string name, out string firstName, out string middleName, out string lastName)
         {
