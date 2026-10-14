@@ -410,7 +410,7 @@ namespace PayrollProcessor
             {
                 return PayrollProcessor.RouteTimeContext.NOON;
             }
-            return Date.TimeOfDay.CompareTo(new TimeSpan(4, 00, 0)) <= 0 ? RouteTimeContext.AFTERNOON : RouteTimeContext.LATE_AFTERNOON;
+            return Date.TimeOfDay.CompareTo(new TimeSpan(16, 00, 0)) <= 0 ? RouteTimeContext.AFTERNOON : RouteTimeContext.LATE_AFTERNOON;
         }
 
         public bool IsASchoolRouteShift()

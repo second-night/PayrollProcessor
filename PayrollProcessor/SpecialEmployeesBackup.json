@@ -148,6 +148,27 @@
       "Notes":"When Pat clocks in as admin, his rate is switched to his driver rate."
     },
     {
+      "Name":"Pat Riley",
+      "IdNumber": 602,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Pat clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Roger Trulson",
+      "IdNumber": 672,
+      "OverriddenJobType": 13,
+      "OverridingJobType": 1,
+      "Notes":"When Roger clocks in as Admin, his rate is switched to his driver rate."
+    },
+    {
+      "Name":"Roger Trulson",
+      "IdNumber": 672,
+      "OverriddenJobType": 7,
+      "OverridingJobType": 1,
+      "Notes":"When Roger clocks in as Mechanic, his rate is switched to his driver rate."
+    },
+    {
       "Name":"Bob Medhus",
       "IdNumber": 1657,
       "OverriddenJobType": 7,
@@ -288,13 +309,6 @@
       "Notes":"When Kenny clocks in as Mechanic, his rate is switched to his driver rate."
     },
     {
-      "Name":"Roger Trulson",
-      "IdNumber": 672,
-      "OverriddenJobType": 7,
-      "OverridingJobType": 1,
-      "Notes":"When Roger clocks in as Mechanic, his rate is switched to his driver rate."
-    },
-    {
       "Name":"Mari Estes",
       "IdNumber": 2006,
       "OverriddenJobType": 13,
@@ -355,6 +369,20 @@
       "JobType": 1,
       "Rate": 0.20,
       "Notes":"started at 22.50 when starting was 22.30"
+    },
+    {
+      "Name":"Pat Riley",
+      "IdNumber": 602,
+      "JobType": 1,
+      "Rate": 0.50,
+      "Notes":"Given $0.50 rate increase accross the board by Brian on 9/27/2026"
+    },
+    {
+      "Name":"Roger Trulson",
+      "IdNumber": 672,
+      "JobType": 1,
+      "Rate": 0.50,
+      "Notes":"Given $0.50 rate increase accross the board by Brian on 9/27/2026"
     }
   ],
   

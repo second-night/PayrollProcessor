@@ -119,9 +119,9 @@ namespace PayrollProcessor
             manualEntriesTracker.ApplyVacationRoundUp();
             ExcelWorker.PayrollHistory.LoadPreviousPayPeriods(ExcelWorker.FirstDayWeek2.AddDays(12));
             JobTitleMapper.EvaluateEmployees(EmployeeDictionary.Values, ExcelWorker.PayrollHistory);
-            ExcelWorker.PayrollHistory.EvaluateEmployees(EmployeeDictionary.Values);
             VacationTracker vacationTracker = new();
             vacationTracker.ApplyNetVacationChanges(EmployeeDictionary.Values);
+            ExcelWorker.PayrollHistory.EvaluateEmployees(EmployeeDictionary.Values); //has to run after vacationTracker.ApplyNetVacationChanges()
             ExcelWorker.WriteEmployeeImports();
             ExcelWorker.WriteWfnPayrollImports();
             FinalLogging();

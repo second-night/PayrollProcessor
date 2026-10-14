@@ -5,6 +5,8 @@ VisualStudioVersion = 17.5.33627.172
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PayrollProcessor", "PayrollProcessor\PayrollProcessor.csproj", "{D7DBCF06-884A-4FE1-A8FB-82BF70042EA2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PayrollProcessor.Tests", "PayrollProcessor.Tests\PayrollProcessor.Tests.csproj", "{A3D6E52C-DD78-4C9C-B589-3DC6789BDF56}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{D7DBCF06-884A-4FE1-A8FB-82BF70042EA2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7DBCF06-884A-4FE1-A8FB-82BF70042EA2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D7DBCF06-884A-4FE1-A8FB-82BF70042EA2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A3D6E52C-DD78-4C9C-B589-3DC6789BDF56}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3D6E52C-DD78-4C9C-B589-3DC6789BDF56}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3D6E52C-DD78-4C9C-B589-3DC6789BDF56}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3D6E52C-DD78-4C9C-B589-3DC6789BDF56}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

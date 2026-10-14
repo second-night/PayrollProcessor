@@ -121,7 +121,7 @@ namespace PayrollProcessor
             ExceptionLog += "\n";
             SpecialEmployees.SmallMgExceptions.FindAll(entry => SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber) > 0).ForEach(entry => LogEntry(entry.IdNumber, "empname is receiving a specially reduced MG of " + entry.Hours + " hours, specifically while driving bus# " + entry.BusNumber + ".", SpecialMgShiftTotals.GetValueOrDefault(entry.IdNumber)));
             ExceptionLog += "\n";
-            SpecialEmployees.PayRateSubstitutionExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives their payrate for " + ((Jobs)entry.OverridingJobType).ToString() + " when they clock in as " + ((Jobs)entry.OverriddenJobType).ToString() + ".", 0f, false));
+            SpecialEmployees.PayRateSubstitutionExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname: " + entry.Notes + ".", 0f, false));
             ExceptionLog += "\n";
             SpecialEmployees.PayRateExceptions.ForEach(entry => LogEntry(entry.IdNumber, "empname receives a special payrate of " + (entry.Rate).ToString() + " when they clock in as " + ((Jobs)entry.JobType).ToString() + ".", 0f, false));
             ExceptionLog += "\n\n\n\n";
@@ -393,6 +393,7 @@ namespace PayrollProcessor
     {
         public int OverriddenJobType { get; set; }
         public int OverridingJobType { get; set; }
+        public float RateModifier { get; set; }
     }
 
     public class SpecialPayRateEntry : SpecialEntry //example: special cdl rate that isn't qualified for raises

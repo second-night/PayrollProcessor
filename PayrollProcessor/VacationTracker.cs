@@ -41,6 +41,20 @@ namespace PayrollProcessor
                 float accrual = compensatedHours >= MinimumCompensatedHoursForAccrual
                     ? GetAccrualRateForYearsOfService(emp.YearsOfService)
                     : 0f;
+
+                if (accrual > 0f && !emp.IsEnrolledInVacation)
+                {
+                    if (WfnEmployeesReader.IsPartTimeCategory(emp.EmploymentCategory))
+                    {
+                        emp.bShouldBeCheckedForVacation = true;
+                        continue;
+                    } 
+                    else 
+                    {
+                        Log("Vacation: " + emp.Name + " (" + emp.IdNumber + ") should probably be assigned to the vacation policy.");
+                    }
+                }
+
                 float transactionAmount = (float)Math.Round(accrual - vacationTaken, 3);
 
                 if (Math.Abs(transactionAmount) < 0.001f)

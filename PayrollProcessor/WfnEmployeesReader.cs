@@ -68,6 +68,7 @@ namespace PayrollProcessor
                     int employmentCategoryCol = FindColumn(headers, "Worker Category Description");
                     int jobTitleCodeCol = FindColumn(headers, "Job Title Code");
                     int vacationCol = FindColumn(headers, "Vacation Balance");
+                    int policyStatusCol = FindColumn(headers, "Policy Status");
                     int positionStatusCol = FindColumn(headers, "Position Status");
                     int fileNumberCol = FindColumn(headers, "File Number");
                     int primaryPositionCol = FindColumn(headers, "Primary Position");
@@ -88,6 +89,11 @@ namespace PayrollProcessor
                     {
                         Log("WfnEmployees.xlsx: could not find 'File Number' column on sheet " + sheet.Name, true);
                         continue;
+                    }
+
+                    if (policyStatusCol == -1)
+                    {
+                        Log("WfnEmployees.xlsx: could not find 'Policy Status' column on sheet " + sheet.Name, true);
                     }
 
                     for (int rowNumber = 2; rowNumber <= rows; ++rowNumber)
@@ -124,8 +130,14 @@ namespace PayrollProcessor
                             employee.LastName = lastName;
                         }
 
+                        ApplyVacationPolicy(cellData, rowNumber, policyStatusCol, employee);
                         ApplyVacation(cellData, rowNumber, vacationCol, employee);
-                        if (!IsPrimaryCompany(cellData, rowNumber, companyCodeCol, primaryPositionCol, positionStatusCol, employee))
+                        if (!TryReadCompanyPosition(cellData, rowNumber, companyCodeCol, primaryPositionCol, positionStatusCol, employee, out Company company, out bool isPrimary))
+                        {
+                            continue;
+                        }
+                        ApplyTermination(cellData, rowNumber, termDateCol, rehireDateCol, hireDateCol, positionStatusCol, company, employee, isPrimary);
+                        if (!isPrimary)
                         {
                             continue;
                         }
@@ -134,7 +146,6 @@ namespace PayrollProcessor
                         ApplyPhone(cellData, rowNumber, mobilePhoneCol, homePhoneCol, employee);
                         ApplyDateIfAbsent(cellData, rowNumber, birthDateCol, ref employee.BirthDate);
                         ApplyHireDate(cellData, rowNumber, hireDateCol, employee);
-                        ApplyTermination(cellData, rowNumber, termDateCol, rehireDateCol, positionStatusCol, employee);
                         ApplyPayRates(cellData, rowNumber, payColumns, employee);
                         ApplySalary(cellData, rowNumber, salaryCol, employee);
                         ApplyLocation(cellData, rowNumber, locationCodeCol, cityCol, employee);
@@ -175,15 +186,17 @@ namespace PayrollProcessor
             employee.IsMale = gender != "F";
         }
 
-        private static bool IsPrimaryCompany(object[,] cellData, int row, int companyCodeCol, int primaryPositionCol, int positionStatusCol, Employee employee)
+        private static bool TryReadCompanyPosition(object[,] cellData, int row, int companyCodeCol, int primaryPositionCol, int positionStatusCol, Employee employee, out Company company, out bool isPrimary)
         {
+            company = default;
+            isPrimary = false;
             if (companyCodeCol == -1 || !TryGetStringFromCell(cellData[row, companyCodeCol + 1], out string companyCode))
             {
                 Log("Couldn't get position ID for employee " + employee.Name + " (" + employee.IdNumber + ") on row " + row, true);
                 return false;
             }
 
-            Company company = companyCode.StartsWith("MMF") ? Company.VALLEY_BUS_LLC : Company.VALLEY_BUS_COACHES;
+            company = companyCode.StartsWith("MMF") ? Company.VALLEY_BUS_LLC : Company.VALLEY_BUS_COACHES;
             TryGetStringFromCell(cellData[row, positionStatusCol + 1], out string positionStatus);
             if (positionStatus == "Active")
             {
@@ -193,14 +206,14 @@ namespace PayrollProcessor
             if (primaryPositionCol == -1 || !TryGetStringFromCell(cellData[row, primaryPositionCol + 1], out string bIsPrimaryPosition))
             {
                 Log("Couldn't get primary position flag for employee " + employee.Name + " (" + employee.IdNumber + ") on row " + row, true);
-                return false;
+                return true;
             }
             if (StringSearch(bIsPrimaryPosition, "yes"))
             {
                 employee.PrimaryCompany = company;
-                return true;
+                isPrimary = true;
             }
-            return false;
+            return true;
         }
 
         private static void ApplyPhone(object[,] cellData, int row, int mobileCol, int homeCol, Employee employee)
@@ -239,7 +252,7 @@ namespace PayrollProcessor
             employee.HireDate = hireDate;
         }
 
-        private static void ApplyTermination(object[,] cellData, int row, int termCol, int rehireCol, int positionStatusCol, Employee employee)
+        private static void ApplyTermination(object[,] cellData, int row, int termCol, int rehireCol, int hireDateCol, int positionStatusCol, Company company, Employee employee, bool isPrimaryPosition)
         {
             if (termCol == -1)
             {
@@ -248,21 +261,39 @@ namespace PayrollProcessor
             }
             if (TryGetDateFromCell(cellData[row, termCol + 1], out DateTime termDate) && termDate != DateTime.MinValue)
             {
-                employee.TerminationDate = termDate;
+                DateTime hireDate = employee.HireDate;
+                if (hireDateCol != -1 && TryGetDateFromCell(cellData[row, hireDateCol + 1], out DateTime rowHireDate))
+                {
+                    hireDate = rowHireDate;
+                }
                 DateTime rehireDate = DateTime.MinValue;
                 if (rehireCol != -1)
                 {
                     TryGetDateFromCell(cellData[row, rehireCol + 1], out rehireDate);
                 }
 
-                if (employee.TerminationDate.CompareTo(employee.HireDate) >= 0 && employee.TerminationDate.CompareTo(rehireDate) >= 0)
+                if (termDate.CompareTo(hireDate) >= 0 && termDate.CompareTo(rehireDate) >= 0)
                 {
-                    employee.IsTerminated = true;
+                    employee.TerminationDateByCompany[company] = termDate;
+                    if (isPrimaryPosition)
+                    {
+                        employee.TerminationDate = termDate;
+                        employee.IsTerminated = true;
+                    }
                 }
                 else
                 {
-                    Log("Rehire date for " + employee.Name + " is less than the hire or rehire date.", true);
+                    employee.TerminationDateByCompany.Remove(company);
+                    if (isPrimaryPosition)
+                    {
+                        Log("Rehire date for " + employee.Name + " is less than the hire or rehire date.", true);
+                    }
                 }
+            }
+
+            if (!isPrimaryPosition)
+            {
+                return;
             }
 
             TryGetStringFromCell(cellData[row, positionStatusCol + 1], out string positionStatus);
@@ -355,6 +386,19 @@ namespace PayrollProcessor
             employee.JobTitleCode = jobTitleCode.Trim().ToUpperInvariant();
         }
 
+        private static void ApplyVacationPolicy(object[,] cellData, int row, int col, Employee employee)
+        {
+            if (col == -1 || !TryGetStringFromCell(cellData[row, col + 1], out string policyStatus))
+            {
+                return;
+            }
+
+            if (policyStatus == "Active")
+            {
+                employee.IsEnrolledInVacation = true;
+            }
+        }
+
         private static void ApplyVacation(object[,] cellData, int row, int col, Employee employee)
         {
             if (col == -1 || !TryGetFloatFromCell(cellData[row, col + 1], out float vacationHours))
@@ -363,7 +407,49 @@ namespace PayrollProcessor
             }
 
             EmployeesWithVacationFromWfn.Add(employee.IdNumber);
-            employee.VacationHours = Math.Max(vacationHours, employee.VacationHours);
+            if (Math.Abs(employee.VacationHours) > 0.001f)
+            {
+                if (vacationHours != employee.VacationHours)
+                {
+                    Log("Vacation hours for " + employee.Name + " (" + employee.IdNumber + ") differ between WFN and iSolved: "
+                        + employee.VacationHours + " vs. " + vacationHours, true);
+                }
+                return;
+            }
+            employee.VacationHours = vacationHours;
+        }
+
+        internal static string NormalizeEmploymentCategory(string? categoryDescription)
+        {
+            if (string.IsNullOrWhiteSpace(categoryDescription))
+            {
+                return "";
+            }
+
+            return string.Join(" ", categoryDescription
+                .Replace('-', ' ')
+                .Replace('_', ' ')
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        internal static bool IsFullTimeCategory(string? categoryDescription)
+        {
+            string category = NormalizeEmploymentCategory(categoryDescription);
+            return category.Equals("FT", StringComparison.OrdinalIgnoreCase)
+                || category.Equals("ACAFT", StringComparison.OrdinalIgnoreCase)
+                || category.Contains("Full Time", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool IsPartTimeCategory(string? categoryDescription)
+        {
+            if (IsFullTimeCategory(categoryDescription))
+            {
+                return false;
+            }
+
+            string category = NormalizeEmploymentCategory(categoryDescription);
+            return category.Equals("PT", StringComparison.OrdinalIgnoreCase)
+                || category.Contains("Part Time", StringComparison.OrdinalIgnoreCase);
         }
 
         internal static string MapEmploymentCategory(string categoryDescription)
@@ -373,17 +459,17 @@ namespace PayrollProcessor
                 return "PT";
             }
 
-            if (StringSearch(categoryDescription, "Full Time") || categoryDescription.Equals("ACAFT", StringComparison.OrdinalIgnoreCase))
+            if (IsFullTimeCategory(categoryDescription))
             {
                 return "ACAFT";
             }
 
-            if (StringSearch(categoryDescription, "Part Time") || categoryDescription.Equals("PT", StringComparison.OrdinalIgnoreCase))
+            if (IsPartTimeCategory(categoryDescription))
             {
                 return "PT";
             }
 
-            return categoryDescription;
+            return categoryDescription.Trim();
         }
 
         internal static bool TryParseYearsOfService(object? cellData, out int yearsOfService)

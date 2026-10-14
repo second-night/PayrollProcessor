@@ -5,6 +5,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using System;
 using System.Data;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using static PayrollProcessor.ExcelWorker;
@@ -24,6 +25,7 @@ namespace PayrollProcessor
         public static bool IsPrimaryPayrollRun { get; set; }
         public EmployeePayrollHistory PayrollHistory { get; } = new();
         HashSet<string> FieldsToInputEvenIfTheEmployeeWasAlreadyInPayroll = new() { "EmployeeNumber", "EmploymentCategory", "SSN" };
+        readonly HashSet<int> LoggedDirectDepositInstructionErrors = new();
 
         public ExcelWorker()
         {
@@ -601,7 +603,8 @@ namespace PayrollProcessor
                                     importedEmployee.LatestAccountIndex = 1;
                                     break;
                                 case "Account 2 - Deposit Instructions":
-                                    if (StringSearch(cellString, "Entire Net"))
+                                    importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["DepositInstructions"] = cellString;
+                                    if (ClassifyDirectDepositInstruction(cellString) == DirectDepositInstructionKind.EntireNet)
                                     {
                                         importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Sequence"] = "0";
                                         importedEmployee.DDAccounts[importedEmployee.LatestAccountIndex]["Amount"] = "";
@@ -1361,12 +1364,15 @@ namespace PayrollProcessor
                             float vacationHours = emp.VacationHours + emp.NetVacationChangeForPayPeriod;
                             if (vacationHours != 0f && !bEmployeeHasShownVacation)
                             {
-                                bEmployeeHasShownVacation = true;
                                 Company com = emp.IdNumber == 1734 || emp.IdNumber == 123 ? Company.VALLEY_BUS_COACHES : Company.VALLEY_BUS_LLC;
-                                Dictionary<string, string> row = MakeBaseWfnRow(emp, com, batchId);
-                                row["memo amount"] = vacationHours.ToString();
-                                row["memo code"] = "VBL";
-                                rows.Add(row);
+                                if (com == (Company) company)
+                                {
+                                    bEmployeeHasShownVacation = true;
+                                    Dictionary<string, string> row = MakeBaseWfnRow(emp, com, batchId);
+                                    row["Memo Amount"] = vacationHours.ToString();
+                                    row["Memo Code"] = "VBL";
+                                    rows.Add(row);
+                                }
                             }
 
                             foreach (var pair in emp.ShiftTotals[company, shiftType].Values)
@@ -1914,10 +1920,10 @@ namespace PayrollProcessor
         private static float RoundWfnMoneyUp(float value)
         {
             float rounded = (float)(Math.Ceiling(value * 100f) / 100f);
-            if (rounded != value)
-            {
-                Log("salary rounded up from " + value + " to " + rounded);
-            }
+            //if (rounded != value)
+            //{
+            //    Log("salary rounded up from " + value + " to " + rounded);
+            //}
             return rounded;
         }
 
@@ -2125,11 +2131,163 @@ namespace PayrollProcessor
             return account.TryGetValue(fieldName, out object? value) && value != null ? value.ToString()?.Trim() ?? "" : "";
         }
 
+        // WorkBright labels: "Entire Net Pay", "Specific Dollar Amount" (partial net dollars),
+        // and "Net Amount" (partial net percentage, stored in "% Net Amount").
+        internal enum DirectDepositInstructionKind
+        {
+            Missing,
+            EntireNet,
+            PartialNet,
+            PartialNetPercentage,
+            Unrecognized
+        }
+
+        internal static DirectDepositInstructionKind ClassifyDirectDepositInstruction(string? instruction)
+        {
+            if (string.IsNullOrWhiteSpace(instruction))
+            {
+                return DirectDepositInstructionKind.Missing;
+            }
+            if (StringSearch(instruction, "Entire Net") || StringSearch(instruction, "Full Net"))
+            {
+                return DirectDepositInstructionKind.EntireNet;
+            }
+            if (StringSearch(instruction, "percent") || StringSearch(instruction, "Net Amount"))
+            {
+                return DirectDepositInstructionKind.PartialNetPercentage;
+            }
+            if (StringSearch(instruction, "Specific Dollar") || StringSearch(instruction, "Partial Net") || StringSearch(instruction, "Dollar"))
+            {
+                return DirectDepositInstructionKind.PartialNet;
+            }
+            return DirectDepositInstructionKind.Unrecognized;
+        }
+
+        internal static bool TryParseDirectDepositNumber(string? raw, out decimal value)
+        {
+            value = 0;
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return false;
+            }
+            string cleaned = raw.Trim().Replace("$", "").Replace("%", "").Replace(",", "").Trim();
+            return decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out value)
+                || decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.CurrentCulture, out value);
+        }
+
+        private static string FormatDirectDepositNumber(decimal value)
+        {
+            return value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        private static string DisplayDepositValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "blank" : value.Trim();
+        }
+
+        internal static void ApplyDirectDepositInstruction(Dictionary<string, object> account)
+        {
+            switch (ClassifyDirectDepositInstruction(GetDdAccountField(account, "DepositInstructions")))
+            {
+                case DirectDepositInstructionKind.EntireNet:
+                    account["Sequence"] = "0";
+                    account["Amount"] = "";
+                    account["Percent"] = "";
+                    break;
+                case DirectDepositInstructionKind.PartialNet:
+                    account["Sequence"] = "1";
+                    account["Percent"] = "";
+                    break;
+                case DirectDepositInstructionKind.PartialNetPercentage:
+                    account["Sequence"] = "1";
+                    account["Amount"] = "";
+                    break;
+            }
+        }
+
+        internal static List<string> GetDirectDepositInstructionErrors(IReadOnlyList<Dictionary<string, object>> accounts)
+        {
+            List<string> errors = new();
+            bool sawDepositAccount = false;
+            bool hasEntireNet = false;
+            for (int i = 0; i < accounts.Count; i++)
+            {
+                Dictionary<string, object> account = accounts[i];
+                if (string.IsNullOrWhiteSpace(GetDdAccountField(account, "AccountNumber"))
+                    && string.IsNullOrWhiteSpace(GetDdAccountField(account, "RoutingNumber")))
+                {
+                    continue;
+                }
+
+                sawDepositAccount = true;
+                string label = "Account " + (i + 1);
+                string instruction = GetDdAccountField(account, "DepositInstructions");
+                switch (ClassifyDirectDepositInstruction(instruction))
+                {
+                    case DirectDepositInstructionKind.EntireNet:
+                        hasEntireNet = true;
+                        break;
+                    case DirectDepositInstructionKind.PartialNet:
+                        if (!TryParseDirectDepositNumber(GetDdAccountField(account, "Amount"), out decimal dollars) || dollars <= 0)
+                        {
+                            errors.Add(label + " is set to a partial net (Specific Dollar Amount) but $ Specific Deposit Amount is not a number ("
+                                + DisplayDepositValue(GetDdAccountField(account, "Amount")) + ").");
+                        }
+                        break;
+                    case DirectDepositInstructionKind.PartialNetPercentage:
+                        if (!TryParseDirectDepositNumber(GetDdAccountField(account, "Percent"), out decimal percent) || percent <= 0 || percent > 100)
+                        {
+                            errors.Add(label + " is set to a partial net percentage (Net Amount) but % Net Amount is not a percentage ("
+                                + DisplayDepositValue(GetDdAccountField(account, "Percent")) + ").");
+                        }
+                        break;
+                    case DirectDepositInstructionKind.Missing:
+                        errors.Add(label + " is missing deposit instructions.");
+                        break;
+                    default:
+                        errors.Add(label + " has unrecognized deposit instructions \"" + instruction + "\".");
+                        break;
+                }
+            }
+
+            if (sawDepositAccount && !hasEntireNet)
+            {
+                errors.Add("At least one account must be set to Entire Net Pay so the full net amount is deposited.");
+            }
+            return errors;
+        }
+
+        private void PrepareDirectDepositImport(Employee employee, ImportedEmployee importedEmployee)
+        {
+            foreach (Dictionary<string, object> account in importedEmployee.DDAccounts)
+            {
+                if (!string.IsNullOrWhiteSpace(GetDdAccountField(account, "AccountNumber"))
+                    || !string.IsNullOrWhiteSpace(GetDdAccountField(account, "RoutingNumber")))
+                {
+                    ApplyDirectDepositInstruction(account);
+                }
+            }
+
+            if (!LoggedDirectDepositInstructionErrors.Add(employee.IdNumber))
+            {
+                return;
+            }
+
+            List<string> errors = GetDirectDepositInstructionErrors(importedEmployee.DDAccounts);
+            if (errors.Count == 0)
+            {
+                return;
+            }
+
+            Log("Direct deposit for " + employee.Name + " (" + employee.IdNumber + ") is not set up correctly:\n- "
+                + string.Join("\n- ", errors), true);
+        }
+
         /// <summary>
         /// Builds ADP bank-deposit columns for one DD account.
         /// Returns false (and logs) when the account must be discarded (e.g. routing number is not 9 digits).
         /// </summary>
-        private static bool TryAddAdpBankDepositFields(Dictionary<string, string> adpFields, Dictionary<string, object> account, int positionNumber, Employee employee)
+        internal static bool TryAddAdpBankDepositFields(Dictionary<string, string> adpFields, Dictionary<string, object> account, int positionNumber, Employee employee)
         {
             string routingNumber = GetDdAccountField(account, "RoutingNumber");
             string routingDigits = new string(routingNumber.Where(char.IsDigit).ToArray());
@@ -2148,34 +2306,37 @@ namespace PayrollProcessor
 
             string amount = GetDdAccountField(account, "Amount");
             string percent = GetDdAccountField(account, "Percent");
-            string sequence = GetDdAccountField(account, "Sequence");
             string AccountType = GetDdAccountField(account, "AccountType");
-            bool isFullDeposit = sequence == "0"
-                || (string.IsNullOrWhiteSpace(amount) && string.IsNullOrWhiteSpace(percent));
+            DirectDepositInstructionKind instructionKind = ClassifyDirectDepositInstruction(GetDdAccountField(account, "DepositInstructions"));
 
             string percentNet = "";
             string deductionAmount = "";
-            string partialNet = "";
             string fullDepositFlag = "N";
 
-            if (isFullDeposit)
+            switch (instructionKind)
             {
-                fullDepositFlag = "Y";
-            }
-            else if (!string.IsNullOrWhiteSpace(percent) && float.TryParse(percent, out float percentValue))
-            {
-                if (percentValue >= 100f)
-                {
+                case DirectDepositInstructionKind.EntireNet:
                     fullDepositFlag = "Y";
-                }
-                else
-                {
-                    percentNet = percent;
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(amount))
-            {
-                deductionAmount = amount;
+                    break;
+                case DirectDepositInstructionKind.PartialNet:
+                    if (TryParseDirectDepositNumber(amount, out decimal dollars) && dollars > 0)
+                    {
+                        deductionAmount = FormatDirectDepositNumber(dollars);
+                    }
+                    break;
+                case DirectDepositInstructionKind.PartialNetPercentage:
+                    if (TryParseDirectDepositNumber(percent, out decimal percentValue) && percentValue > 0 && percentValue <= 100)
+                    {
+                        if (percentValue >= 100)
+                        {
+                            fullDepositFlag = "Y";
+                        }
+                        else
+                        {
+                            percentNet = FormatDirectDepositNumber(percentValue);
+                        }
+                    }
+                    break;
             }
 
             string deductionCodePrefix = AccountType == "S" ? "CK" : "CK";
@@ -2183,11 +2344,10 @@ namespace PayrollProcessor
             adpFields["Bank Deposit Deduction Code"] = deductionCodePrefix + positionNumber;
             adpFields["Bank Deposit Routing Number"] = routingDigits;
             adpFields["Bank Deposit Account Number"] = accountNumber;
-            //adpFields["Bank Deposit Partial Net"] = partialNet;
             adpFields["Bank Full Deposit Flag"] = fullDepositFlag;
             adpFields["Bank Deposit Deduction Amount"] = deductionAmount;
             adpFields["Bank Deposit Prenote Code"] = "O";
-            adpFields["Bank Deposit Prenote Date"] = DateTime.Today.ToShortDateString();
+            adpFields["Bank Deposit Prenote Date"] = DateTime.Today.AddDays(-16).ToShortDateString();
             adpFields["Bank Deposit Percent Net"] = percentNet;
             return true;
         }
@@ -2399,6 +2559,8 @@ namespace PayrollProcessor
                     continue;
                 }
 
+                PrepareDirectDepositImport(employee, importedEmployee);
+
                 int positionNumber = 1;
                 bool wroteAnyBankRow = false;
                 foreach (Dictionary<string, object> account in ddAccounts)
@@ -2514,7 +2676,8 @@ namespace PayrollProcessor
                             ["Tax ID Number"] = taxId,
                             ["Employee Status"] = "A",
                             ["Rehire Date"] = changeEffectiveOn,
-                            ["Rehire Reason"] = "CURR"
+                            ["Rehire Reason"] = "CURR",
+                            ["FLSA OVERTIME"] = "Y"
                         });
                     }
                 }
@@ -2571,6 +2734,7 @@ namespace PayrollProcessor
                 {
                     if (employeeEntry.Value.ImportFields.Count > 0)
                     {
+                        PrepareDirectDepositImport(employee, employeeEntry.Value);
                         foreach (var accountInfo in employeeEntry.Value.DDAccounts)
                         {
                             if (accountInfo.Count > 0)
@@ -3163,12 +3327,6 @@ namespace PayrollProcessor
                 case 1:
                 case 20:
                     return Jobs.DRIVER_SCHOOL;
-                case 18:
-                case 21:
-                    DelayedLog("Warning: Jobcode " + code + " is being used.");
-                    goto case 2;
-                case 2:
-                    return Jobs.DRIVER_LOCAL_SCHOOL_CHARTERS;
                 case 23:
                 case 25:
                     return Jobs.AIDE_SCHOOL;

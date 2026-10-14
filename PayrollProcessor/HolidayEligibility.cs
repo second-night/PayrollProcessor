@@ -14,7 +14,6 @@ namespace PayrollProcessor
     {
         private const float RequiredHours = 360f;
         private const float HolidayHoursToAward = 8f;
-        private const int DaysFromPayDateToPeriodStart = 19;
 
         public void ApplyIfNeeded(DateTime firstDayWeek2)
         {
@@ -40,7 +39,7 @@ namespace PayrollProcessor
                 .ToList();
             PayrollHistoryCatalog catalog = LoadPayrollHistory(lastSixFiles, firstDayWeek2, currentPayDate);
             DateTime hiredWithinStart = lastSixFiles.Count > 0
-                ? lastSixFiles.Min(file => file.PayDate.Date).AddDays(-DaysFromPayDateToPeriodStart)
+                ? lastSixFiles.Min(file => file.PayDate.Date).AddDays(-PayPeriodSchedule.DaysFromPayDateToWorkPeriodStart)
                 : firstDayWeek2.Date.AddDays(-7 - (PayPeriodSchedule.RegularPayPeriodCount * PayPeriodSchedule.DaysPerPayPeriod));
             DateTime hoursRangeStart = lastSixFiles.Count > 0
                 ? lastSixFiles.Min(file => file.PayDate.Date)
@@ -59,11 +58,11 @@ namespace PayrollProcessor
 
                 float compensatedHours = GetCompensatedHours(employee.IdNumber, catalog, hoursRangeStart,
                     hoursRangeEnd, currentPayDate);
-                bool hiredRecentlyAsFullTime = IsFullTime(employee)
+                bool hiredRecentlyAsFullTime = WfnEmployeesReader.IsFullTimeCategory(employee.EmploymentCategory)
                     && employee.HireDate.Date >= hiredWithinStart.Date;
                 if (compensatedHours < RequiredHours && !hiredRecentlyAsFullTime)
                 {
-                    if (IsFullTime(employee))
+                    if (WfnEmployeesReader.IsFullTimeCategory(employee.EmploymentCategory))
                     {
                         Log("Holiday pay: " + employee.Name + " (" + employee.IdNumber
                             + ") is full-time but does not meet the "
@@ -154,13 +153,6 @@ namespace PayrollProcessor
                 ClockOut = new TimeSpan(16, 0, 0)
             };
             employee.Shifts.Add(holidayShift);
-        }
-
-        private static bool IsFullTime(Employee employee)
-        {
-            string category = employee.EmploymentCategory?.Trim() ?? "";
-            return category.Equals("FT", StringComparison.OrdinalIgnoreCase)
-                || category.Equals("ACAFT", StringComparison.OrdinalIgnoreCase);
         }
 
         private static List<(DateTime Date, string Name)> HolidaysInRange(DateTime periodStart, DateTime periodEnd)

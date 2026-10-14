@@ -42,11 +42,17 @@ namespace PayrollProcessor
         public DateTime BirthDate;
         public bool IsTerminated;
         public DateTime TerminationDate;
+        /// <summary>
+        /// Termination date still in effect for each company position in WfnEmployees.
+        /// </summary>
+        public Dictionary<Company, DateTime> TerminationDateByCompany = new();
         public bool WasReportedForPartialEntry;
         public DateTime DateOfDirectDepositUpdateInWorkBright;
         public bool needsDDImported;
         public float VacationHours;
+        public bool IsEnrolledInVacation;
         public List<ManualEntry> ManualEntries = new();
+        public bool bShouldBeCheckedForVacation;
         public Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[,] ShiftTotals = new Dictionary<string/*job code*/, Dictionary<int/*week num*/, List<Shift>>>[2/*company*/, 3/*0-has hours,1-has dollars,2-has both*/];
         public float NetVacationChangeForPayPeriod;
 
@@ -142,6 +148,19 @@ namespace PayrollProcessor
             return bIsActive;
         }
 
+        public void DiscardPayPeriodHours()
+        {
+            Shifts.Clear();
+            ShiftTotals = new Dictionary<string, Dictionary<int, List<Shift>>>[2, 3];
+            OverTimeHours = new float[2, 3];
+            ManualEntriesTracker.GetInstance().GetEntries()
+                .RemoveAll(entry => entry.EmployeeNumber == IdNumber || entry.Employee == this);
+            ManualEntries.Clear();
+            HadHoursInTimesheets = false;
+            HadManualEntry = false;
+            NetVacationChangeForPayPeriod = 0f;
+        }
+
 
         private static Dictionary<Employee, List<Jobs>> PayrateMessages = new();
         public float GetPayRateForShift(Shift shift)
@@ -179,7 +198,7 @@ namespace PayrollProcessor
                         float payRate = GetPayRateForShift(tempShift);
 
                         //weird exception due to sped rate pay bump
-                        if (shift.ShiftTime > 2.5f && shift.IsASpedBusShift() && !shift.IsAGrandForksShift && (Jobs)entry.OverridingJobType == Jobs.DRIVER_SCHOOL && !shift.IsASummerRoute())
+                        if (shift.ShiftTime > 2.5f && shift.IsASpedBusShift() && !shift.IsAGrandForksShift && (Jobs)entry.OverridingJobType == Jobs.DRIVER_SCHOOL && !shift.IsASummerRoute() && entry.RateModifier < 0.01f)
                         {
                             float payBumpTime = shift.ShiftTime - (shift.ShiftTime > 6f ? 3f : 1.5f); //try to figure out if they drove 1 shift or 2
                             float weightedRate1 = (shift.ShiftTime - payBumpTime) * (payRate - FARGO_SPED_CDL_DRIVER_RATE_BUMP);
@@ -192,6 +211,7 @@ namespace PayrollProcessor
                         {
                             Log("Check payrate substitution for " + Name + " because payrate for " + ((Jobs)entry.OverridingJobType).ToString() + " is lower than expected.", true);
                         }
+                        payRate += entry.RateModifier;
                         return Math.Max(PayRates[(Jobs)entry.OverridingJobType], payRate);
                     }
                     else if ((Jobs)entry.OverridingJobType == Jobs.NON_CDL_DRIVER)

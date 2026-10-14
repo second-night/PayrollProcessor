@@ -459,6 +459,7 @@ namespace PayrollProcessor
         /// Special / off-cycle payrolls do not write PayrollHistory_*.csv, so coach trip days
         /// are not stored. If gross / hours exceeds the employee's top hourly rate, the extra
         /// implied hours (gross / top rate − recorded hours) are treated as estimated coach hours.
+        /// A flat coach check has pay and no hours, so the whole gross is converted at the top rate.
         /// </summary>
         private void ApplySpecialPayrollEstimatedCoachHours()
         {

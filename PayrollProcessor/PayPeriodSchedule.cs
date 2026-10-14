@@ -9,6 +9,17 @@ namespace PayrollProcessor
         public const int RegularPayPeriodCount = 6;
         public const int DaysPerPayPeriod = 14;
         public const int WeeksPerPayPeriod = 2;
+        public const int DaysFromPayDateToWorkPeriodStart = 19;
+        public const int DaysFromPayDateToWorkPeriodEnd = 6;
+
+        /// <summary>
+        /// Work days paid on a regular biweekly check: 14 days ending 6 days before the pay date.
+        /// </summary>
+        public static (DateTime Start, DateTime End) WorkPeriodForPayDate(DateTime payDate)
+        {
+            DateTime date = payDate.Date;
+            return (date.AddDays(-DaysFromPayDateToWorkPeriodStart), date.AddDays(-DaysFromPayDateToWorkPeriodEnd));
+        }
 
         public static List<DateTime> HistoryFilePayDates() =>
             EmployeePayrollHistory.EnumerateHistoryFiles()
